@@ -23,17 +23,19 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-//go:embed schema.sql web/*
+//go:embed *.sql web/*
 var assets embed.FS
 
 type App struct {
-	db         *pgxpool.Pool
-	universeMu sync.Mutex
-	universe   *Galaxy
-	secure     bool
-	origin     string
-	mu         sync.Mutex
-	attempts   map[string]attempt
+	db           *pgxpool.Pool
+	universeMu   sync.Mutex
+	universe     *Galaxy
+	stationMu    sync.Mutex
+	stationCount int
+	secure       bool
+	origin       string
+	mu           sync.Mutex
+	attempts     map[string]attempt
 }
 type attempt struct {
 	count int
@@ -88,8 +90,8 @@ func (a *App) bootstrap(ctx context.Context) error {
 	if name == "" && pass == "" {
 		return nil
 	}
-	if !validName(name) || len(pass) < 12 || len(pass) > 72 {
-		return errors.New("admin username must be 3–24 ASCII letters/digits/_/-; password 12–72 bytes")
+	if !validName(name) || len(pass) < 1 || len(pass) > 72 {
+		return errors.New("admin username must be 3–24 ASCII letters/digits/_/-; password 1–72 bytes")
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.DefaultCost)
 	if err != nil {
@@ -118,6 +120,7 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("POST /api/logout", a.logout)
 	m.HandleFunc("GET /api/state", a.state)
 	m.HandleFunc("GET /api/fleet", a.fleet)
+	a.routes033(m)
 	m.HandleFunc("GET /api/gameplay", a.gameplay)
 	m.HandleFunc("GET /api/admin/gameplay", a.gameplay)
 	m.HandleFunc("POST /api/admin/gameplay", a.gameplay)
@@ -140,7 +143,7 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("GET /api/admin/users", a.userPages)
 	web, _ := fs.Sub(assets, "web")
 	m.Handle("GET /", http.FileServer(http.FS(web)))
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return gzipAPI(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
@@ -171,7 +174,7 @@ func (a *App) routes() http.Handler {
 			}
 		}
 		m.ServeHTTP(w, r)
-	})
+	}))
 }
 func reply(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -239,8 +242,8 @@ func (a *App) register(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &in) {
 		return
 	}
-	if !validName(in.Username) || !utf8.ValidString(in.Password) || len(in.Password) < 12 || len(in.Password) > 72 {
-		fail(w, 400, "Имя: 3–24 латинских символа, цифры, _ или -. Пароль: 12–72 байта.")
+	if !validName(in.Username) || !utf8.ValidString(in.Password) || len(in.Password) < 1 || len(in.Password) > 72 {
+		fail(w, 400, "Имя: 3–24 латинских символа, цифры, _ или -. Пароль: 1–72 байта.")
 		return
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost)
@@ -380,13 +383,27 @@ func (a *App) sell(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	tx, err := a.db.Begin(r.Context())
+	if err != nil {
+		a.internal(w, err)
+		return
+	}
+	defer tx.Rollback(context.Background())
+	if err = reason(r.Context(), tx, "training_sale"); err != nil {
+		a.internal(w, err)
+		return
+	}
 	var amount int64
-	err := a.db.QueryRow(r.Context(), `UPDATE users SET credits=credits+ore*5,ore=0 WHERE id=$1 AND ore>0 RETURNING credits`, u.ID).Scan(&amount)
+	err = tx.QueryRow(r.Context(), `UPDATE users SET credits=credits+ore*5,ore=0 WHERE id=$1 AND ore>0 RETURNING credits`, u.ID).Scan(&amount)
 	if errors.Is(err, pgx.ErrNoRows) {
 		fail(w, 409, "Нет руды для продажи")
 		return
 	}
 	if err != nil {
+		a.internal(w, err)
+		return
+	}
+	if err = tx.Commit(r.Context()); err != nil {
 		a.internal(w, err)
 		return
 	}
@@ -437,6 +454,9 @@ func (a *App) simulate(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
+			if err := a.activities(ctx); err != nil && ctx.Err() == nil {
+				log.Printf("activities: %v", err)
+			}
 			if err := a.tick(ctx); err != nil && ctx.Err() == nil {
 				log.Printf("simulation: %v", err)
 			}
@@ -450,6 +470,9 @@ func (a *App) advanceTick(ctx context.Context, force bool, actor ...int64) error
 		return err
 	}
 	defer tx.Rollback(context.Background())
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(784218)`); err != nil {
+		return err
+	}
 	var tick int64
 	var seconds int
 	err = tx.QueryRow(ctx, `UPDATE world w SET tick=tick+1,pulses=pulses+g.date_step,last_tick=now() FROM game_settings g WHERE w.id=1 AND g.id=1 AND ($1 OR last_tick<=now()-make_interval(secs=>g.tick_seconds)) RETURNING tick,g.tick_seconds`, force).Scan(&tick, &seconds)
@@ -463,6 +486,9 @@ func (a *App) advanceTick(ctx context.Context, force bool, actor ...int64) error
 		return err
 	}
 	if force {
+		if _, err = tx.Exec(ctx, `UPDATE research_jobs SET next_at=next_at-make_interval(secs=>$1) WHERE NOT paused`, seconds); err != nil {
+			return err
+		}
 		if _, err = tx.Exec(ctx, `UPDATE ships SET arrival=arrival-make_interval(secs=>$1),departure=departure-make_interval(secs=>$1),local_arrival=local_arrival-make_interval(secs=>$1),local_started=local_started-make_interval(secs=>$1) WHERE arrival IS NOT NULL OR local_arrival IS NOT NULL`, seconds); err != nil {
 			return err
 		}

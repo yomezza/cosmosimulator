@@ -13,14 +13,18 @@ import (
 )
 
 type Gameplay struct {
-	TickSeconds  int       `json:"tick_seconds"`
-	DateStep     int       `json:"date_step"`
-	Common       int       `json:"quota_common"`
-	RareMin      int       `json:"rare_min"`
-	RareMax      int       `json:"rare_max"`
-	ResetSeconds int       `json:"reset_seconds"`
-	Epoch        time.Time `json:"epoch"`
-	Generation   int64     `json:"generation"`
+	TickSeconds      int       `json:"tick_seconds"`
+	DateStep         int       `json:"date_step"`
+	Common           int       `json:"quota_common"`
+	RareMin          int       `json:"rare_min"`
+	RareMax          int       `json:"rare_max"`
+	ResetSeconds     int       `json:"reset_seconds"`
+	Epoch            time.Time `json:"epoch"`
+	Generation       int64     `json:"generation"`
+	ScanSeconds      int       `json:"scan_seconds"`
+	CompanyCost      int64     `json:"company_cost"`
+	RescueCost       int       `json:"rescue_cost"`
+	ReservationHours int       `json:"reservation_hours"`
 }
 type querier interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
@@ -28,7 +32,7 @@ type querier interface {
 
 func readGameplay(ctx context.Context, q querier) (Gameplay, error) {
 	var g Gameplay
-	err := q.QueryRow(ctx, `SELECT tick_seconds,date_step,quota_common,rare_min,rare_max,reset_seconds,quota_epoch,generation FROM game_settings WHERE id=1`).Scan(&g.TickSeconds, &g.DateStep, &g.Common, &g.RareMin, &g.RareMax, &g.ResetSeconds, &g.Epoch, &g.Generation)
+	err := q.QueryRow(ctx, `SELECT tick_seconds,date_step,quota_common,rare_min,rare_max,reset_seconds,quota_epoch,generation,scan_seconds,company_cost,rescue_cost,reservation_hours FROM game_settings WHERE id=1`).Scan(&g.TickSeconds, &g.DateStep, &g.Common, &g.RareMin, &g.RareMax, &g.ResetSeconds, &g.Epoch, &g.Generation, &g.ScanSeconds, &g.CompanyCost, &g.RescueCost, &g.ReservationHours)
 	return g, err
 }
 func edemDate(pulses int64) string {
@@ -45,18 +49,26 @@ func (a *App) gameplay(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Method == "POST" {
 		var in struct {
-			TickSeconds  int  `json:"tick_seconds"`
-			DateStep     int  `json:"date_step"`
-			Common       int  `json:"quota_common"`
-			RareMin      int  `json:"rare_min"`
-			RareMax      int  `json:"rare_max"`
-			ResetSeconds int  `json:"reset_seconds"`
-			Reset        bool `json:"reset_now"`
+			TickSeconds      int    `json:"tick_seconds"`
+			DateStep         int    `json:"date_step"`
+			Common           int    `json:"quota_common"`
+			RareMin          int    `json:"rare_min"`
+			RareMax          int    `json:"rare_max"`
+			ResetSeconds     int    `json:"reset_seconds"`
+			Reset            bool   `json:"reset_now"`
+			ScanSeconds      *int   `json:"scan_seconds"`
+			CompanyCost      *int64 `json:"company_cost"`
+			RescueCost       *int   `json:"rescue_cost"`
+			ReservationHours *int   `json:"reservation_hours"`
 		}
 		if !decode(w, r, &in) {
 			return
 		}
 		if in.TickSeconds < 1 || in.TickSeconds > 3600 || in.DateStep < 1 || in.DateStep > 10000 || in.Common < 3 || in.Common > 1000000 || in.RareMin < 3 || in.RareMax < in.RareMin || in.RareMax > in.Common || in.ResetSeconds < 60 || in.ResetSeconds > 604800 {
+			fail(w, 400, "Некорректные настройки игрового процесса")
+			return
+		}
+		if (in.ScanSeconds != nil && (*in.ScanSeconds < 1 || *in.ScanSeconds > 3600)) || (in.CompanyCost != nil && (*in.CompanyCost < 0 || *in.CompanyCost > 1000000000)) || (in.RescueCost != nil && (*in.RescueCost < 0 || *in.RescueCost > 1000000)) || (in.ReservationHours != nil && (*in.ReservationHours < 1 || *in.ReservationHours > 720)) {
 			fail(w, 400, "Некорректные настройки игрового процесса")
 			return
 		}
@@ -71,6 +83,10 @@ func (a *App) gameplay(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if _, err = tx.Exec(r.Context(), `UPDATE game_settings SET scan_seconds=COALESCE($1,scan_seconds),company_cost=COALESCE($2,company_cost),rescue_cost=COALESCE($3,rescue_cost),reservation_hours=COALESCE($4,reservation_hours) WHERE id=1`, in.ScanSeconds, in.CompanyCost, in.RescueCost, in.ReservationHours); err != nil {
+			a.internal(w, err)
+			return
+		}
 		raw, _ := json.Marshal(in)
 		if _, err = tx.Exec(r.Context(), `INSERT INTO admin_log(actor,action,data) VALUES($1,'gameplay',$2)`, u.ID, raw); err != nil {
 			a.internal(w, err)
@@ -148,7 +164,7 @@ func ensureQuota(ctx context.Context, tx pgx.Tx, g Gameplay, star, object int, r
 	q.Remaining = q.Capacity - used
 	return q, nil
 }
-func reserveExtraction(ctx context.Context, tx pgx.Tx, star, object int, res string) (int, time.Time, error) {
+func reserveExtraction(ctx context.Context, tx pgx.Tx, star, object int, res string, limit ...int) (int, time.Time, error) {
 	g, err := readGameplay(ctx, tx)
 	if err != nil {
 		return 0, time.Time{}, err
@@ -166,7 +182,11 @@ func reserveExtraction(ctx context.Context, tx pgx.Tx, star, object int, res str
 		}
 		remaining = min(remaining, rare.Remaining)
 	}
-	count := min(3, remaining)
+	batch := 3
+	if len(limit) > 0 {
+		batch = limit[0]
+	}
+	count := min(batch, remaining)
 	if count <= 0 {
 		return 0, common.Start, nil
 	}
@@ -189,6 +209,8 @@ func quotaView(ctx context.Context, tx pgx.Tx, s Star, sites []Site) ([]Site, er
 		if err != nil {
 			return nil, err
 		}
+		sites[i].Quality = quality(s.ID, sites[i].Planet)
+		sites[i].Concentration = concentration(s.ID, sites[i].Planet)
 		sites[i].SharedQuota = &common
 		sites[i].Quotas = map[string]Quota{}
 		for _, res := range sites[i].Resources {

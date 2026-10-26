@@ -26,6 +26,10 @@ type Ship struct {
 	LocalMode    *string        `json:"local_mode"`
 	LocalStarted *time.Time     `json:"local_started"`
 	LocalArrival *time.Time     `json:"local_arrival"`
+	Extractor    string         `json:"extractor"`
+	ReservedFuel int            `json:"reserved_fuel"`
+	Active       bool           `json:"active"`
+	Waypoints    []int          `json:"waypoints"`
 }
 type Offer struct {
 	Resource string `json:"resource"`
@@ -39,7 +43,7 @@ func marketStock(star Star) map[string]int {
 	for _, r := range resources {
 		stock[r.ID] = 30
 	}
-	for _, r := range regions {
+	for _, r := range allRegions() {
 		if r.ID == star.Region {
 			stock[r.Specialty] = 100
 		}
@@ -51,7 +55,7 @@ func offers(star Star, stock map[string]int) []Offer {
 	out := []Offer{}
 	for _, r := range resources {
 		price := r.Price
-		for _, reg := range regions {
+		for _, reg := range allRegions() {
 			if reg.ID == star.Region && reg.Specialty == r.ID {
 				price = price * 2 / 3
 			}
@@ -72,31 +76,17 @@ func cargoSize(c map[string]int) int {
 	return n
 }
 func ensureShip(ctx context.Context, tx pgx.Tx, id int64) (Ship, error) {
-	var s Ship
-	_, err := tx.Exec(ctx, `INSERT INTO ships(user_id) VALUES($1) ON CONFLICT DO NOTHING`, id)
-	if err != nil {
-		return s, err
+	if _, err := tx.Exec(ctx, `INSERT INTO ships(user_id,active) VALUES($1,TRUE) ON CONFLICT DO NOTHING`, id); err != nil {
+		return Ship{}, err
 	}
-	arrivalTag, err := tx.Exec(ctx, `UPDATE ships SET star=destination,destination=NULL,arrival=NULL,object_id='entry',position_mode='approach',departure=NULL,travel_path='[]' WHERE user_id=$1 AND arrival<=now()`, id)
-	if err != nil {
-		return s, err
+	if err := settleShips(ctx, tx, id); err != nil {
+		return Ship{}, err
 	}
-	localTag, localErr := tx.Exec(ctx, `UPDATE ships SET object_id=local_target,position_mode=local_mode,local_target=NULL,local_mode=NULL,local_started=NULL,local_arrival=NULL WHERE user_id=$1 AND local_arrival<=now()`, id)
-	if localErr != nil {
-		return s, localErr
+	var sid int64
+	if err := tx.QueryRow(ctx, `SELECT id FROM ships WHERE user_id=$1 AND active`, id).Scan(&sid); err != nil {
+		return Ship{}, err
 	}
-	var raw, path []byte
-	err = tx.QueryRow(ctx, `SELECT star,destination,arrival,fuel,cargo,id,name,object_id,position_mode,departure,travel_path,local_target,local_mode,local_started,local_arrival FROM ships WHERE user_id=$1 FOR UPDATE`, id).Scan(&s.Star, &s.Destination, &s.Arrival, &s.Fuel, &raw, &s.ID, &s.Name, &s.ObjectID, &s.PositionMode, &s.Departure, &path, &s.LocalTarget, &s.LocalMode, &s.LocalStarted, &s.LocalArrival)
-	if err == nil {
-		err = json.Unmarshal(raw, &s.Cargo)
-		if err == nil {
-			err = json.Unmarshal(path, &s.Path)
-		}
-	}
-	if err == nil && (arrivalTag.RowsAffected() > 0 || localTag.RowsAffected() > 0) {
-		err = recordEvent(ctx, tx, id, "arrival", map[string]any{"star": s.Star, "object": s.ObjectID})
-	}
-	return s, err
+	return readShip(ctx, tx, sid)
 }
 func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 	u, ok := a.user(w, r)
@@ -115,6 +105,12 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback(context.Background())
+	if r.Method == "POST" {
+		if _, err = tx.Exec(r.Context(), `SELECT pg_advisory_xact_lock(784218)`); err != nil {
+			a.internal(w, err)
+			return
+		}
+	}
 	// All mutations for one player serialize, including parallel browser requests.
 	if err = tx.QueryRow(ctx, `SELECT credits FROM users WHERE id=$1 FOR UPDATE`, u.ID).Scan(&u.Credits); err != nil {
 		a.internal(w, err)
@@ -127,6 +123,10 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 	}
 	var raw []byte
 	star := g.Stars[ship.Star-1]
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(784219,$1)`, ship.Star); err != nil {
+		a.internal(w, err)
+		return
+	}
 	stock := marketStock(star)
 	raw, _ = json.Marshal(stock)
 	if _, err = tx.Exec(ctx, `INSERT INTO local_markets(star,stock) VALUES($1,$2) ON CONFLICT DO NOTHING`, ship.Star, raw); err != nil {
@@ -144,7 +144,7 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 	}
 	var job *MiningJob
 	var active MiningJob
-	err = tx.QueryRow(ctx, `SELECT resource,quantity,finish_tick,started_at,planet FROM mining_jobs WHERE user_id=$1`, u.ID).Scan(&active.Resource, &active.Quantity, &active.FinishTick, &active.StartedAt, &active.Planet)
+	err = tx.QueryRow(ctx, `SELECT resource,quantity,finish_tick,started_at,planet FROM mining_jobs WHERE ship_id=$1`, ship.ID).Scan(&active.Resource, &active.Quantity, &active.FinishTick, &active.StartedAt, &active.Planet)
 	if err == nil {
 		job = &active
 	} else if !errors.Is(err, pgx.ErrNoRows) {
@@ -168,15 +168,20 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Method == "POST" {
 		var in struct {
-			Action   string `json:"action"`
-			To       int    `json:"to"`
-			Resource string `json:"resource"`
-			Quantity int    `json:"quantity"`
-			Planet   int    `json:"planet"`
-			Target   string `json:"target"`
-			Mode     string `json:"mode"`
+			Action        string `json:"action"`
+			To            int    `json:"to"`
+			Resource      string `json:"resource"`
+			Quantity      int    `json:"quantity"`
+			Planet        int    `json:"planet"`
+			Target        string `json:"target"`
+			Mode          string `json:"mode"`
+			ExpectedPrice *int   `json:"expected_price"`
 		}
 		if !decode(w, r, &in) {
+			return
+		}
+		if err = reason(ctx, tx, in.Action); err != nil {
+			a.internal(w, err)
 			return
 		}
 		problem := ""
@@ -185,12 +190,21 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 		} else {
 			switch in.Action {
 			case "move":
+				if researchBusy(ctx, tx, ship.ID) {
+					problem = "Сначала приостановите исследование"
+					break
+				}
 				if job != nil {
 					problem = "Дождитесь завершения добычи"
 					break
 				}
 				var target *Site
-				for _, site := range systemSites(star) {
+				sitesForMove, e := addCustomSites(ctx, tx, star, systemSites(star))
+				if e != nil {
+					err = e
+					break
+				}
+				for _, site := range sitesForMove {
 					if site.ID == in.Target {
 						copy := site
 						target = &copy
@@ -208,7 +222,7 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 					problem = "Манёвр недоступен для объекта"
 					break
 				}
-				if ship.Fuel < 1 {
+				if ship.Fuel-ship.ReservedFuel < 1 {
 					problem = "Недостаточно топлива"
 					break
 				}
@@ -237,24 +251,23 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 					problem = "Нет активной добычи"
 					break
 				}
-				if _, err = tx.Exec(ctx, `UPDATE resource_quotas q SET used=GREATEST(used-j.quantity,0) FROM mining_jobs j WHERE j.user_id=$1 AND q.star=j.star AND q.object=j.planet AND q.resource IN ('*',j.resource) AND q.window_start=j.quota_start`, u.ID); err == nil {
-					_, err = tx.Exec(ctx, `DELETE FROM mining_jobs WHERE user_id=$1`, u.ID)
+				if _, err = tx.Exec(ctx, `UPDATE resource_quotas q SET used=GREATEST(used-j.quantity,0) FROM mining_jobs j WHERE j.ship_id=$1 AND q.star=j.star AND q.object=j.planet AND q.resource IN ('*',j.resource) AND q.window_start=j.quota_start`, ship.ID); err == nil {
+					_, err = tx.Exec(ctx, `DELETE FROM mining_jobs WHERE ship_id=$1`, ship.ID)
 				}
 				job = nil
 			case "scan":
-				if !surveyed {
-					if u.Credits < 10 {
-						problem = "Недостаточно кредитов"
-					} else {
-						u.Credits -= 10
-						if _, err = tx.Exec(ctx, `UPDATE users SET xp=xp+10 WHERE id=$1`, u.ID); err != nil {
-							break
-						}
-						_, err = tx.Exec(ctx, `INSERT INTO surveys(user_id,star) VALUES($1,$2)`, u.ID, ship.Star)
-						surveyed = true
-					}
+				err = startResearch(ctx, tx, u.ID, &ship, star, g)
+				if err != nil {
+					problem = err.Error()
+					err = nil
+				} else {
+					err = tx.QueryRow(ctx, `SELECT credits FROM users WHERE id=$1`, u.ID).Scan(&u.Credits)
 				}
 			case "travel":
+				if researchBusy(ctx, tx, ship.ID) {
+					problem = "Сначала приостановите исследование"
+					break
+				}
 				if job != nil {
 					problem = "Дождитесь завершения добычи"
 					break
@@ -262,7 +275,7 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 				path := g.path(ship.Star, in.To)
 				if len(path) < 2 {
 					problem = "Нет допустимого маршрута"
-				} else if ship.Fuel < (len(path)-1)*2 {
+				} else if ship.Fuel-ship.ReservedFuel < (len(path)-1)*2 {
 					problem = "Недостаточно топлива"
 				} else {
 					ship.Fuel -= (len(path) - 1) * 2
@@ -286,6 +299,10 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 			case "buy", "sell":
+				if !stationAllows(ctx, tx, ship.Star, ship.ObjectID, in.Resource) {
+					problem = "Станция не торгует этой категорией"
+					break
+				}
 				if !hasStation(ship.Star) || !docked(ship) {
 					problem = "Для торговли требуется стыковка с портом"
 					break
@@ -297,7 +314,17 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 				var offer Offer
 				for _, o := range offers(star, stock) {
 					if o.Resource == in.Resource {
-						offer = o
+						offer = feeOffer(o, portFee(ctx, tx, u.ID, ship.Star, ship.ObjectID))
+					}
+				}
+				if in.ExpectedPrice != nil {
+					price := offer.Buy
+					if in.Action == "sell" {
+						price = offer.Sell
+					}
+					if *in.ExpectedPrice != price {
+						problem = "Цена изменилась. Проверьте предложение ещё раз"
+						break
 					}
 				}
 				q := in.Quantity
@@ -328,6 +355,9 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 						u.Credits += cost
 						wallet -= cost
 					}
+				}
+				if problem == "" {
+					_, err = tx.Exec(ctx, `INSERT INTO reputation(user_id,company_id,points) SELECT $1,founder,1 FROM stations WHERE star=$2 AND object_id=$3 AND founder IS NOT NULL ON CONFLICT(user_id,company_id) DO UPDATE SET points=reputation.points+1`, u.ID, ship.Star, ship.ObjectID)
 				}
 			case "mine":
 				if job != nil {
@@ -362,7 +392,11 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 					problem = "Трюм заполнен"
 					break
 				}
-				count, start, extractErr := reserveExtraction(ctx, tx, ship.Star, in.Planet, in.Resource)
+				if !extractorAccepts(ship.Extractor, in.Resource) {
+					problem = "Установите подходящий добытчик"
+					break
+				}
+				count, start, extractErr := reserveExtraction(ctx, tx, ship.Star, in.Planet, in.Resource, extractorYield(ship.Extractor, ship.Star, in.Planet))
 				err = extractErr
 				if err != nil {
 					break
@@ -375,7 +409,7 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 					problem = "Лимит добычи исчерпан"
 					break
 				}
-				_, err = tx.Exec(ctx, `INSERT INTO mining_jobs(user_id,star,planet,resource,quantity,finish_tick,quota_start) VALUES($1,$2,$3,$4,$5,$6,$7)`, u.ID, ship.Star, in.Planet, in.Resource, count, worldTick+1, start)
+				_, err = tx.Exec(ctx, `INSERT INTO mining_jobs(user_id,star,planet,resource,quantity,finish_tick,quota_start,ship_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, u.ID, ship.Star, in.Planet, in.Resource, count, worldTick+1, start, ship.ID)
 				if err == nil {
 					job = &MiningJob{Resource: in.Resource, Quantity: count, FinishTick: worldTick + 1, StartedAt: time.Now(), Planet: in.Planet}
 				}
@@ -411,7 +445,11 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	sites := systemSites(star)
+	sites, siteErr := addCustomSites(ctx, tx, star, systemSites(star))
+	if siteErr != nil {
+		a.internal(w, siteErr)
+		return
+	}
 	if surveyed {
 		sites, err = quotaView(ctx, tx, star, sites)
 		if err != nil {
@@ -435,10 +473,17 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	marketOffers := offers(star, stock)
+	filtered := []Offer{}
+	for _, o := range marketOffers {
+		if stationAllows(ctx, a.db, ship.Star, ship.ObjectID, o.Resource) {
+			filtered = append(filtered, feeOffer(o, portFee(ctx, a.db, u.ID, ship.Star, ship.ObjectID)))
+		}
+	}
+	marketOffers = filtered
 	if !hasStation(ship.Star) {
 		marketOffers = []Offer{}
 	}
-	reply(w, 200, map[string]any{"server_time": time.Now(), "job": job, "world_tick": worldTick, "station": hasStation(ship.Star), "docked": docked(ship), "sites": sites, "ship": ship, "system": star, "region": regionName(star.Region), "surveyed": surveyed, "credits": u.Credits, "resources": resourceCatalog(), "offers": marketOffers, "market_credits": wallet, "capacity": 60})
+	reply(w, 200, map[string]any{"server_time": time.Now(), "job": job, "world_tick": worldTick, "station": hasStation(ship.Star), "docked": docked(ship), "sites": sites, "ship": ship, "system": star, "region": regionName(star.Region), "surveyed": surveyed, "credits": u.Credits, "resources": resourceCatalog(), "offers": marketOffers, "market_credits": wallet, "capacity": 60, "research": researchView(ctx, a.db, u.ID)})
 }
 
 // The legacy prototype ore mine is separate. Bots trade only finite cargo against
@@ -507,7 +552,7 @@ func tradeBots(ctx context.Context, tx pgx.Tx) error {
 		for _, q := range []struct {
 			sql  string
 			args []any
-		}{{`UPDATE ships SET cargo=$2 WHERE user_id=$1`, []any{id, cargo}}, {`UPDATE users SET credits=$2 WHERE id=$1`, []any{id, credits}}, {`UPDATE local_markets SET credits=$1,stock=$2 WHERE star=1`, []any{wallet, raw}}} {
+		}{{`UPDATE ships SET cargo=$2 WHERE user_id=$1 AND active`, []any{id, cargo}}, {`UPDATE users SET credits=$2 WHERE id=$1`, []any{id, credits}}, {`UPDATE local_markets SET credits=$1,stock=$2 WHERE star=1`, []any{wallet, raw}}} {
 			if _, err = tx.Exec(ctx, q.sql, q.args...); err != nil {
 				return fmt.Errorf("bot trade: %w", err)
 			}

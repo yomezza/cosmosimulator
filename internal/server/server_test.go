@@ -69,7 +69,7 @@ func TestIntegration(t *testing.T) {
 	assert(request("GET", "/api/state", "", nil), 401)
 	assert(request("GET", "/api/galaxy", "", nil), 401)
 	assert(request("GET", "/api/route?from=1&to=5", "", nil), 401)
-	assert(request("POST", "/api/register", `{"username":"pilot","password":"short"}`, nil), 400)
+	assert(request("POST", "/api/register", `{"username":"pilot","password":""}`, nil), 400)
 	w := request("POST", "/api/register", `{"username":"pilot","password":"a-long-test-password"}`, nil)
 	assert(w, 200)
 	cookies := w.Result().Cookies()

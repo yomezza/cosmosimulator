@@ -90,6 +90,7 @@ func TestTerminal(t *testing.T) {
 		t.Fatal("starter membership", err)
 	}
 	post(pilot, "/api/companies", `{"action":"create","name":"First Guild","tag":"FGD","flag":"◈","color":"#123456"}`, 409)
+	_, _ = db.Exec(ctx, `UPDATE users SET credits=2000000 WHERE id=ANY($1::bigint[])`, []int64{pid, oid})
 	post(pilot, "/api/companies", `{"action":"leave"}`, 200)
 	post(pilot, "/api/companies", `{"action":"create","name":"First Guild","tag":"TOOLONG","flag":"◈","color":"#123456"}`, 409)
 	post(pilot, "/api/companies", `{"action":"create","name":"First Guild","tag":"FGD","flag":"◈","color":"#123456"}`, 200)
@@ -101,7 +102,10 @@ func TestTerminal(t *testing.T) {
 	post(other, "/api/companies", fmt.Sprintf(`{"action":"join","id":%d}`, company), 409)
 	post(other, "/api/companies", `{"action":"leave"}`, 200)
 	post(other, "/api/companies", `{"action":"create","name":"Second Guild","tag":"FGD","flag":"◈","color":"#123456"}`, 409)
-	post(other, "/api/companies", fmt.Sprintf(`{"action":"join","id":%d}`, company), 200)
+	post(other, "/api/workbench", fmt.Sprintf(`{"action":"apply","id":%d}`, company), 200)
+	var appID int64
+	_ = db.QueryRow(ctx, `SELECT id FROM company_requests WHERE user_id=$1`, oid).Scan(&appID)
+	post(pilot, "/api/workbench", fmt.Sprintf(`{"action":"request_accept","id":%d}`, appID), 200)
 	for _, scope := range []string{"all", "system", "region"} {
 		w = request(pilot, "GET", "/api/companies?scope="+scope, "")
 		check(w, 200)
@@ -125,31 +129,10 @@ func TestTerminal(t *testing.T) {
 		t.Fatal(err)
 	}
 	again.Close()
-	// Remote system contacts show planets/belts/stations without leaking deposit data.
-	w = request(pilot, "GET", "/api/system?id=3", "")
-	check(w, 200)
-	var system struct {
-		Sites []Site `json:"sites"`
-	}
-	if err = json.Unmarshal(w.Body.Bytes(), &system); err != nil {
-		t.Fatal(err)
-	}
-	belt := false
-	for _, s := range system.Sites {
-		if s.Kind == "Орбитальная станция" {
-			t.Fatal("station in unstationed system")
-		}
-		if s.Kind == "Пояс астероидов" {
-			belt = true
-		}
-		if len(s.Resources) > 0 || s.Details != nil && len(s.Details.Resources) > 0 {
-			t.Fatal("survey resource leak")
-		}
-	}
-	if !belt {
-		t.Fatal("asteroids missing")
-	}
+	// Unknown system maps are now private until a survey or data purchase.
+	check(request(pilot, "GET", "/api/system?id=3", ""), 403)
 	post(pilot, "/api/expedition", `{"action":"scan"}`, 200)
+	finishResearchForTest(t, a)
 	if _, err = db.Exec(ctx, `UPDATE ships SET object_id='asteroids',position_mode='approach' WHERE user_id=$1`, pid); err != nil {
 		t.Fatal(err)
 	}

@@ -90,6 +90,7 @@ func TestExpedition(t *testing.T) {
 	}
 	post(`{"action":"mine","planet":1,"resource":"orichalcum"}`, 409)
 	post(`{"action":"scan"}`, 200)
+	finishResearchForTest(t, a)
 	scanned := get()
 	if scanned.Credits != 990 || len(scanned.System.Planets) < 3 {
 		t.Fatal("survey failed")

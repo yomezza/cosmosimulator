@@ -78,6 +78,13 @@ func openDatabase(ctx context.Context, dsn, schema string) (*pgxpool.Pool, error
 	if _, err = tx.Exec(ctx, string(sql)); err != nil {
 		return nil, fmt.Errorf("initialize DB_SCHEMA %q (USAGE and CREATE on the schema are required): %w", schema, err)
 	}
+	upgrade, e := assets.ReadFile("schema033.sql")
+	if e != nil {
+		return nil, e
+	}
+	if _, e = tx.Exec(ctx, string(upgrade)); e != nil {
+		return nil, fmt.Errorf("upgrade 0.3.3: %w", e)
+	}
 	var galaxyExists bool
 	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM galaxies WHERE name='Edem')`).Scan(&galaxyExists); err != nil {
 		return nil, err

@@ -95,6 +95,7 @@ func TestGameplay032(t *testing.T) {
 	}
 	for _, p := range []*http.Cookie{one, two} {
 		post(p, "/api/expedition", `{"action":"scan"}`, 200)
+		finishResearchForTest(t, a)
 		post(p, "/api/expedition", `{"action":"move","target":"asteroids","mode":"approach"}`, 200)
 		post(p, "/api/expedition", `{"action":"mine","planet":101,"resource":"iron"}`, 409)
 	}

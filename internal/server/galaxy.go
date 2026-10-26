@@ -11,6 +11,7 @@ import (
 )
 
 type Star struct {
+	Galaxy     string   `json:"galaxy,omitempty"`
 	ID         int      `json:"id"`
 	Name       string   `json:"name"`
 	X          float64  `json:"x"`
@@ -139,7 +140,7 @@ func (a *App) galaxy(w http.ResponseWriter, r *http.Request) {
 		for i := range public.Stars {
 			public.Stars[i].Planets = nil
 		}
-		reply(w, 200, public)
+		reply(w, 200, map[string]any{"name": public.Name, "seed": public.Seed, "version": public.Version, "stars": public.Stars, "regions": public.Regions, "lanes": public.Lanes, "black_hole": map[string]any{"x": 0, "y": 0, "systems": coreSystems(g)}})
 		return
 	}
 	from, e1 := strconv.Atoi(r.URL.Query().Get("from"))

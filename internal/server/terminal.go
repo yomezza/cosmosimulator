@@ -17,18 +17,20 @@ import (
 )
 
 type Site struct {
-	ID          string           `json:"id"`
-	Name        string           `json:"name"`
-	Kind        string           `json:"kind"`
-	Orbit       float64          `json:"orbit"`
-	Resources   []string         `json:"resources"`
-	Planet      int              `json:"planet"`
-	Details     *Planet          `json:"details,omitempty"`
-	Quotas      map[string]Quota `json:"quotas,omitempty"`
-	SharedQuota *Quota           `json:"shared_quota,omitempty"`
+	ID            string           `json:"id"`
+	Name          string           `json:"name"`
+	Kind          string           `json:"kind"`
+	Orbit         float64          `json:"orbit"`
+	Resources     []string         `json:"resources"`
+	Planet        int              `json:"planet"`
+	Quality       string           `json:"quality"`
+	Concentration int              `json:"concentration"`
+	Details       *Planet          `json:"details,omitempty"`
+	Quotas        map[string]Quota `json:"quotas,omitempty"`
+	SharedQuota   *Quota           `json:"shared_quota,omitempty"`
 }
 
-func hasStation(id int) bool { return id%3 != 0 || id == 1 || id == 5 }
+func hasStation(id int) bool { return id%3 != 0 || id == 1 || id == 5 || originalCore[id] }
 func systemSites(s Star) []Site {
 	sites := []Site{}
 	scale := math.Sqrt(math.Max(s.Luminosity, .001))
@@ -71,8 +73,15 @@ func (a *App) systemView(w http.ResponseWriter, r *http.Request) {
 		a.internal(w, err)
 		return
 	}
-	// Distant objects are visible as unverified orbital contacts; deposits need a local survey.
-	sites := systemSites(s)
+	if !scanned {
+		fail(w, 403, "Сначала исследуйте систему или купите разведданные")
+		return
+	}
+	sites, siteErr := addCustomSites(r.Context(), a.db, s, systemSites(s))
+	if siteErr != nil {
+		a.internal(w, siteErr)
+		return
+	}
 	if !scanned {
 		for i := range sites {
 			sites[i].Resources = nil
@@ -88,6 +97,16 @@ func (a *App) systemView(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		defer tx.Rollback(context.Background())
+		if r.Method == "POST" {
+			if _, err = tx.Exec(r.Context(), `SELECT pg_advisory_xact_lock(784218)`); err != nil {
+				a.internal(w, err)
+				return
+			}
+		}
+		if _, err = tx.Exec(r.Context(), `SELECT pg_advisory_xact_lock(784219,$1)`, id); err != nil {
+			a.internal(w, err)
+			return
+		}
 		sites, err = quotaView(r.Context(), tx, s, sites)
 		if err != nil {
 			a.internal(w, err)
@@ -110,25 +129,40 @@ func (a *App) profile(w http.ResponseWriter, r *http.Request) {
 	var company *int64
 	var name *string
 	var tag, color, flag *string
-	err := a.db.QueryRow(r.Context(), `SELECT u.level,u.xp,u.company_id,c.name,c.tag,c.color,c.flag FROM users u LEFT JOIN companies c ON c.id=u.company_id WHERE u.id=$1`, u.ID).Scan(&level, &xp, &company, &name, &tag, &color, &flag)
+	var flagDesign []byte
+	err := a.db.QueryRow(r.Context(), `SELECT u.level,u.xp,u.company_id,c.name,c.tag,c.color,c.flag,COALESCE(c.flag_design,'{}'::jsonb) FROM users u LEFT JOIN companies c ON c.id=u.company_id WHERE u.id=$1`, u.ID).Scan(&level, &xp, &company, &name, &tag, &color, &flag, &flagDesign)
 	if err != nil {
 		a.internal(w, err)
 		return
 	}
-	reply(w, 200, map[string]any{"user": u, "level": level, "xp": xp, "required_xp": level * 100, "upgrade_cost": level * 100, "company_id": company, "company": name, "company_tag": tag, "company_color": color, "company_flag": flag})
+	reply(w, 200, map[string]any{"user": u, "level": level, "xp": xp, "required_xp": level * 100, "upgrade_cost": level * 100, "company_id": company, "company": name, "company_tag": tag, "company_color": color, "company_flag": flag, "company_flag_design": json.RawMessage(flagDesign)})
 }
 func (a *App) upgrade(w http.ResponseWriter, r *http.Request) {
 	u, ok := a.user(w, r)
 	if !ok {
 		return
 	}
-	tag, err := a.db.Exec(r.Context(), `WITH changed AS(UPDATE users SET xp=xp-level*100,credits=credits-level*100,level=level+1 WHERE id=$1 AND level<100 AND xp>=level*100 AND credits>=level*100 RETURNING id,level) INSERT INTO game_events(user_id,kind,data) SELECT id,'level_up',jsonb_build_object('level',level) FROM changed`, u.ID)
+	tx, err := a.db.Begin(r.Context())
+	if err != nil {
+		a.internal(w, err)
+		return
+	}
+	defer tx.Rollback(context.Background())
+	if err = reason(r.Context(), tx, "level_up"); err != nil {
+		a.internal(w, err)
+		return
+	}
+	tag, err := tx.Exec(r.Context(), `WITH changed AS(UPDATE users SET xp=xp-level*100,credits=credits-level*100,level=level+1 WHERE id=$1 AND level<100 AND xp>=level*100 AND credits>=level*100 RETURNING id,level) INSERT INTO game_events(user_id,kind,data) SELECT id,'level_up',jsonb_build_object('level',level) FROM changed`, u.ID)
 	if err != nil {
 		a.internal(w, err)
 		return
 	}
 	if tag.RowsAffected() == 0 {
 		fail(w, 409, "Недостаточно опыта или кредитов")
+		return
+	}
+	if err = tx.Commit(r.Context()); err != nil {
+		a.internal(w, err)
 		return
 	}
 	reply(w, 200, map[string]bool{"ok": true})
@@ -143,6 +177,10 @@ func (a *App) adminTick(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := a.advanceTick(r.Context(), true, u.ID); err != nil {
+		a.internal(w, err)
+		return
+	}
+	if err := a.activities(r.Context()); err != nil {
 		a.internal(w, err)
 		return
 	}
@@ -176,8 +214,8 @@ func (a *App) editUser(w http.ResponseWriter, r *http.Request) {
 	var hash []byte
 	var err error
 	if in.Password != "" {
-		if len(in.Password) < 12 || len(in.Password) > 72 {
-			fail(w, 400, "Пароль: 12–72 байта")
+		if len(in.Password) < 1 || len(in.Password) > 72 {
+			fail(w, 400, "Пароль: 1–72 байта")
 			return
 		}
 		hash, err = bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost)
@@ -192,6 +230,16 @@ func (a *App) editUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback(context.Background())
+	if err = reason(r.Context(), tx, "admin_adjustment"); err != nil {
+		a.internal(w, err)
+		return
+	}
+	if r.Method == "POST" {
+		if _, err = tx.Exec(r.Context(), `SELECT pg_advisory_xact_lock(784218)`); err != nil {
+			a.internal(w, err)
+			return
+		}
+	}
 	if _, err = tx.Exec(r.Context(), `SELECT pg_advisory_xact_lock(784217)`); err != nil {
 		a.internal(w, err)
 		return
@@ -260,14 +308,17 @@ func (a *App) editUser(w http.ResponseWriter, r *http.Request) {
 }
 
 type Company struct {
-	ID      int64  `json:"id"`
-	Name    string `json:"name"`
-	Tag     string `json:"tag"`
-	Color   string `json:"color"`
-	Flag    string `json:"flag"`
-	Owner   *int64 `json:"owner"`
-	Starter bool   `json:"starter"`
-	Members int    `json:"members"`
+	ID         int64           `json:"id"`
+	Name       string          `json:"name"`
+	Tag        string          `json:"tag"`
+	Color      string          `json:"color"`
+	Flag       string          `json:"flag"`
+	Owner      *int64          `json:"owner"`
+	Starter    bool            `json:"starter"`
+	Members    int             `json:"members"`
+	Founder    bool            `json:"founder"`
+	Credits    int64           `json:"-"`
+	FlagDesign json.RawMessage `json:"flag_design"`
 }
 
 func validCompanyTag(s string) bool {
@@ -292,7 +343,7 @@ func (a *App) companyList(w http.ResponseWriter, r *http.Request) {
 	}
 	scope := r.URL.Query().Get("scope")
 	var star int
-	err := a.db.QueryRow(r.Context(), `SELECT COALESCE((SELECT CASE WHEN arrival<=now() THEN destination ELSE star END FROM ships WHERE user_id=$1),1)`, u.ID).Scan(&star)
+	err := a.db.QueryRow(r.Context(), `SELECT COALESCE((SELECT CASE WHEN arrival<=now() THEN destination ELSE star END FROM ships WHERE user_id=$1 AND active),1)`, u.ID).Scan(&star)
 	if err != nil {
 		a.internal(w, err)
 		return
@@ -302,7 +353,7 @@ func (a *App) companyList(w http.ResponseWriter, r *http.Request) {
 		a.internal(w, err)
 		return
 	}
-	rows, err := a.db.Query(r.Context(), `SELECT c.id,c.name,c.tag,c.color,c.flag,c.owner_id,c.starter,count(u.id)::int FROM companies c LEFT JOIN users u ON u.company_id=c.id GROUP BY c.id ORDER BY c.starter DESC,c.id LIMIT 500`)
+	rows, err := a.db.Query(r.Context(), `SELECT c.id,c.name,c.tag,c.color,c.flag,c.owner_id,c.starter,count(u.id)::int,c.founder,c.credits,c.flag_design FROM companies c LEFT JOIN users u ON u.company_id=c.id GROUP BY c.id ORDER BY c.starter DESC,c.id LIMIT 500`)
 	if err != nil {
 		a.internal(w, err)
 		return
@@ -310,7 +361,7 @@ func (a *App) companyList(w http.ResponseWriter, r *http.Request) {
 	list := []Company{}
 	for rows.Next() {
 		var c Company
-		if err = rows.Scan(&c.ID, &c.Name, &c.Tag, &c.Color, &c.Flag, &c.Owner, &c.Starter, &c.Members); err != nil {
+		if err = rows.Scan(&c.ID, &c.Name, &c.Tag, &c.Color, &c.Flag, &c.Owner, &c.Starter, &c.Members, &c.Founder, &c.Credits, &c.FlagDesign); err != nil {
 			rows.Close()
 			a.internal(w, err)
 			return
@@ -339,6 +390,12 @@ func (a *App) companyList(w http.ResponseWriter, r *http.Request) {
 			if err = a.db.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM users u LEFT JOIN ships s ON s.user_id=u.id WHERE u.company_id=$1 AND COALESCE(CASE WHEN s.arrival<=now() THEN s.destination ELSE s.star END,1)=ANY($2::int[]) AND (s.destination IS NULL OR s.arrival<=now()))`, c.ID, stars).Scan(&exists); err != nil {
 				a.internal(w, err)
 				return
+			}
+			if c.Founder && !exists {
+				if err = a.db.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM stations WHERE founder=$1 AND star=ANY($2::int[]))`, c.ID, stars).Scan(&exists); err != nil {
+					a.internal(w, err)
+					return
+				}
 			}
 			if exists {
 				filtered = append(filtered, c)
@@ -370,8 +427,18 @@ func (a *App) companyAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback(context.Background())
+	if r.Method == "POST" {
+		if _, err = tx.Exec(r.Context(), `SELECT pg_advisory_xact_lock(784218)`); err != nil {
+			a.internal(w, err)
+			return
+		}
+	}
 	var current *int64
 	if err = tx.QueryRow(r.Context(), `SELECT company_id FROM users WHERE id=$1 FOR UPDATE`, u.ID).Scan(&current); err != nil {
+		a.internal(w, err)
+		return
+	}
+	if err = reason(r.Context(), tx, "company_"+in.Action); err != nil {
 		a.internal(w, err)
 		return
 	}
@@ -388,14 +455,23 @@ func (a *App) companyAction(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 		}
-		_, err = tx.Exec(r.Context(), `UPDATE users SET company_id=NULL WHERE id=$1`, u.ID)
+		_, err = tx.Exec(r.Context(), `UPDATE users SET company_id=NULL,company_role=NULL WHERE id=$1`, u.ID)
 	case "join":
 		if current != nil {
 			problem = "Сначала выйдите из текущей компании"
 			break
 		}
 		var id int64
-		err = tx.QueryRow(r.Context(), `SELECT id FROM companies WHERE id=$1 FOR KEY SHARE`, in.ID).Scan(&id)
+		var starter, founder bool
+		err = tx.QueryRow(r.Context(), `SELECT id,starter,founder FROM companies WHERE id=$1 FOR KEY SHARE`, in.ID).Scan(&id, &starter, &founder)
+		if err == nil && !starter {
+			problem = "Подайте заявку на вступление"
+			break
+		}
+		if err == nil && founder {
+			problem = "Эта корпорация не принимает участников"
+			break
+		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			err = nil
 			problem = "Компания не найдена"
@@ -405,6 +481,15 @@ func (a *App) companyAction(w http.ResponseWriter, r *http.Request) {
 			_, err = tx.Exec(r.Context(), `UPDATE users SET company_id=$2 WHERE id=$1`, u.ID, id)
 		}
 	case "create":
+		settings, e := readGameplay(r.Context(), tx)
+		if e != nil {
+			err = e
+			break
+		}
+		if e = debit(r.Context(), tx, u.ID, settings.CompanyCost); e != nil {
+			problem = e.Error()
+			break
+		}
 		if current != nil {
 			problem = "Сначала выйдите из текущей компании"
 			break
@@ -496,7 +581,7 @@ func (a *App) globalMarket(w http.ResponseWriter, r *http.Request) {
 				ports = append(ports, map[string]any{"star": s.ID, "credits": int64(5000), "offers": offers(s, marketStock(s))})
 			}
 		}
-		rows, err = a.db.Query(r.Context(), `SELECT id,star,resource,quantity,cost,status FROM reservations WHERE user_id=$1 ORDER BY (status='reserved') DESC,id DESC LIMIT 200`, u.ID)
+		rows, err = a.db.Query(r.Context(), `SELECT id,star,resource,quantity,cost,status,expires_at FROM reservations WHERE user_id=$1 ORDER BY (status='reserved') DESC,id DESC LIMIT 200`, u.ID)
 		if err != nil {
 			a.internal(w, err)
 			return
@@ -507,11 +592,12 @@ func (a *App) globalMarket(w http.ResponseWriter, r *http.Request) {
 			var id, cost int64
 			var star, q int
 			var resource, status string
-			if err = rows.Scan(&id, &star, &resource, &q, &cost, &status); err != nil {
+			var expires time.Time
+			if err = rows.Scan(&id, &star, &resource, &q, &cost, &status, &expires); err != nil {
 				a.internal(w, err)
 				return
 			}
-			reservations = append(reservations, map[string]any{"id": id, "star": star, "resource": resource, "quantity": q, "cost": cost, "status": status})
+			reservations = append(reservations, map[string]any{"id": id, "star": star, "resource": resource, "quantity": q, "cost": cost, "status": status, "expires_at": expires})
 		}
 		if rows.Err() != nil {
 			a.internal(w, rows.Err())
@@ -521,11 +607,12 @@ func (a *App) globalMarket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		Action   string `json:"action"`
-		Star     int    `json:"star"`
-		Resource string `json:"resource"`
-		Quantity int    `json:"quantity"`
-		ID       int64  `json:"id"`
+		Action        string `json:"action"`
+		Star          int    `json:"star"`
+		Resource      string `json:"resource"`
+		Quantity      int    `json:"quantity"`
+		ID            int64  `json:"id"`
+		ExpectedPrice *int   `json:"expected_price"`
 	}
 	if !decode(w, r, &in) {
 		return
@@ -541,6 +628,12 @@ func (a *App) globalMarket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback(context.Background())
+	if r.Method == "POST" {
+		if _, err = tx.Exec(r.Context(), `SELECT pg_advisory_xact_lock(784218)`); err != nil {
+			a.internal(w, err)
+			return
+		}
+	}
 	var credits int64
 	if err = tx.QueryRow(r.Context(), `SELECT credits FROM users WHERE id=$1 FOR UPDATE`, u.ID).Scan(&credits); err != nil {
 		a.internal(w, err)
@@ -548,6 +641,10 @@ func (a *App) globalMarket(w http.ResponseWriter, r *http.Request) {
 	}
 	ship, err := ensureShip(r.Context(), tx, u.ID)
 	if err != nil {
+		a.internal(w, err)
+		return
+	}
+	if err = reason(r.Context(), tx, "reservation_"+in.Action); err != nil {
 		a.internal(w, err)
 		return
 	}
@@ -595,6 +692,10 @@ func (a *App) globalMarket(w http.ResponseWriter, r *http.Request) {
 				cost = int64(q * o.Buy)
 			}
 		}
+		if in.ExpectedPrice != nil && cost != int64(q**in.ExpectedPrice) {
+			fail(w, 409, "Цена изменилась. Проверьте предложение ещё раз")
+			return
+		}
 		if stock[res] < q {
 			problem = "Нет товара на рынке"
 		} else if credits < cost {
@@ -603,7 +704,7 @@ func (a *App) globalMarket(w http.ResponseWriter, r *http.Request) {
 			stock[res] -= q
 			raw, _ = json.Marshal(stock)
 			if _, err = tx.Exec(r.Context(), `UPDATE local_markets SET stock=$2 WHERE star=$1`, star, raw); err == nil {
-				err = tx.QueryRow(r.Context(), `INSERT INTO reservations(user_id,star,resource,quantity,cost) VALUES($1,$2,$3,$4,$5) RETURNING id`, u.ID, star, res, q, cost).Scan(&reservationID)
+				err = tx.QueryRow(r.Context(), `INSERT INTO reservations(user_id,star,resource,quantity,cost,expires_at) VALUES($1,$2,$3,$4,$5,now()+make_interval(hours=>(SELECT reservation_hours FROM game_settings WHERE id=1))) RETURNING id`, u.ID, star, res, q, cost).Scan(&reservationID)
 			}
 			credits -= cost
 		}
@@ -622,7 +723,7 @@ func (a *App) globalMarket(w http.ResponseWriter, r *http.Request) {
 			problem = "Бронь уже обработана"
 		} else if in.Action == "collect" {
 			var pending int
-			if err = tx.QueryRow(r.Context(), `SELECT COALESCE(sum(quantity),0) FROM mining_jobs WHERE user_id=$1`, u.ID).Scan(&pending); err != nil {
+			if err = tx.QueryRow(r.Context(), `SELECT COALESCE(sum(quantity),0) FROM mining_jobs WHERE ship_id=$1`, ship.ID).Scan(&pending); err != nil {
 				a.internal(w, err)
 				return
 			}
@@ -633,7 +734,7 @@ func (a *App) globalMarket(w http.ResponseWriter, r *http.Request) {
 			} else {
 				ship.Cargo[res] += q
 				raw, _ := json.Marshal(ship.Cargo)
-				if _, err = tx.Exec(r.Context(), `UPDATE ships SET cargo=$2 WHERE user_id=$1`, u.ID, raw); err == nil {
+				if _, err = tx.Exec(r.Context(), `UPDATE ships SET cargo=$2 WHERE user_id=$1 AND active`, u.ID, raw); err == nil {
 					_, err = tx.Exec(r.Context(), `UPDATE local_markets SET credits=credits+$2 WHERE star=$1`, star, cost)
 				}
 				if err == nil {
@@ -682,19 +783,20 @@ type MiningJob struct {
 }
 
 func completeMining(ctx context.Context, tx pgx.Tx, tick int64) error {
-	rows, err := tx.Query(ctx, `SELECT user_id,resource,quantity FROM mining_jobs WHERE finish_tick<=$1 ORDER BY user_id`, tick)
+	rows, err := tx.Query(ctx, `SELECT user_id,ship_id,resource,quantity FROM mining_jobs WHERE finish_tick<=$1 ORDER BY user_id`, tick)
 	if err != nil {
 		return err
 	}
 	type result struct {
 		id       int64
+		ship     int64
 		resource string
 		q        int
 	}
 	jobs := []result{}
 	for rows.Next() {
 		var j result
-		if err = rows.Scan(&j.id, &j.resource, &j.q); err != nil {
+		if err = rows.Scan(&j.id, &j.ship, &j.resource, &j.q); err != nil {
 			rows.Close()
 			return err
 		}
@@ -706,16 +808,16 @@ func completeMining(ctx context.Context, tx pgx.Tx, tick int64) error {
 		return err
 	}
 	for _, j := range jobs {
-		if err = recordEvent(ctx, tx, j.id, "mining_complete", map[string]any{"resource": j.resource, "quantity": j.q}); err != nil {
+		if err = recordEvent(ctx, tx, j.id, "mining_complete", map[string]any{"resource": j.resource, "quantity": j.q, "ship": j.ship}); err != nil {
 			return err
 		}
-		if _, err = tx.Exec(ctx, `UPDATE ships SET cargo=jsonb_set(cargo,ARRAY[$2::text],to_jsonb(COALESCE((cargo->>$2)::int,0)+$3)) WHERE user_id=$1`, j.id, j.resource, j.q); err != nil {
+		if _, err = tx.Exec(ctx, `UPDATE ships SET cargo=jsonb_set(cargo,ARRAY[$2::text],to_jsonb(COALESCE((cargo->>$2)::int,0)+$3)) WHERE id=$1`, j.ship, j.resource, j.q); err != nil {
 			return err
 		}
 		if _, err = tx.Exec(ctx, `UPDATE users SET xp=xp+5 WHERE id=$1`, j.id); err != nil {
 			return err
 		}
-		if _, err = tx.Exec(ctx, `DELETE FROM mining_jobs WHERE user_id=$1`, j.id); err != nil {
+		if _, err = tx.Exec(ctx, `DELETE FROM mining_jobs WHERE ship_id=$1`, j.ship); err != nil {
 			return err
 		}
 	}
