@@ -87,7 +87,11 @@
   "Нет руды для продажи": "No ore to sell",
   "Требуется роль администратора": "Administrator role required",
   "Внутренняя ошибка сервера": "Internal server error",
-  "ЭДЕМ · ПРОЦЕДУРНАЯ ГАЛАКТИКА · v0.2.0": "EDEM · PROCEDURAL GALAXY · v0.2.0",
+  "ЭДЕМ · ПРОЦЕДУРНАЯ ГАЛАКТИКА · v0.2.1": "EDEM · PROCEDURAL GALAXY · v0.2.1",
   "Связанных областей": "Connected regions",
-  "Изолированных систем": "Isolated systems"
+  "Изолированных систем": "Isolated systems",
+  "Галактическая карта": "Galactic map",
+  "Закрыть": "Close",
+  "Планировщик маршрута": "Route planner",
+  "Перемещайте окно за заголовок. Стрелки на клавиатуре перемещают выбранный заголовок.": "Drag the title bar to move the window. Arrow keys move the focused title bar."
 }

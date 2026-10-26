@@ -14,11 +14,11 @@ function authMode(value) {
  const input=$('auth-form').elements.password;input.autocomplete=mode==='login'?'current-password':'new-password';input.minLength=mode==='login'?1:12;
  $('password-hint').textContent=mode==='login'?t("Используйте данные вашей компании."):t("Пароль: от 12 до 72 байт. Имя: латиница, цифры, _ и -.");$('auth-error').textContent='';
 }
-function showAuth(){signedIn=false;$('auth').hidden=false;$('game').hidden=true;}
+function showAuth(){signedIn=false;window.closeGalaxy?.(false);$('open-galaxy').hidden=true;$('auth').hidden=false;$('game').hidden=true;}
 function cell(row,value){const td=document.createElement('td');td.textContent=value;row.append(td);}
 async function refresh(){
  if(pending)return;pending=true;
- try{const s=await api('state');signedIn=true;window.loadGalaxy?.();$('auth').hidden=true;$('game').hidden=false;$('company-name').textContent=s.user.username;$('role').textContent=s.user.role==='admin'?t("АДМИНИСТРАТОР"):t("ИГРОК");$('admin').hidden=s.user.role!=='admin';
+ try{const s=await api('state');signedIn=true;$('open-galaxy').hidden=false;$('auth').hidden=true;$('game').hidden=false;$('company-name').textContent=s.user.username;$('role').textContent=s.user.role==='admin'?t("АДМИНИСТРАТОР"):t("ИГРОК");$('admin').hidden=s.user.role!=='admin';
  for(const key of ['credits','ore'])$(key).textContent=s.user[key].toLocaleString(I18n.language);$('tick').textContent=String(s.tick);$('sell').disabled=s.user.ore===0;
  $('companies').replaceChildren();for(const company of s.companies){const tr=document.createElement('tr');cell(tr,company.username);cell(tr,company.bot?t("АВТОНОМНАЯ"):t("ИГРОК"));cell(tr,company.credits.toLocaleString(I18n.language));cell(tr,company.ore.toLocaleString(I18n.language));$('companies').append(tr);}
  $('connection').textContent=t("Данные обновлены: ")+new Date().toLocaleTimeString(I18n.language)+t(" · Мир развивается, пока работает сервер.");

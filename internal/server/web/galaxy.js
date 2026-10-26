@@ -3,6 +3,18 @@
 let galaxy,loading=false,route=[],zoom=1,pan={x:0,y:0},pointer,selected=1,requestID=0;
 const canvas=document.getElementById('galaxy-map'),ctx=canvas.getContext('2d');
 const tr=s=>I18n.t(s),el=id=>document.getElementById(id);
+const moduleWindow=el('galaxy-window'),handle=el('galaxy-window-handle'),opener=el('open-galaxy');
+let windowDrag;
+function moveWindow(x,y){const rect=moduleWindow.getBoundingClientRect();moduleWindow.style.left=Math.max(8,Math.min(x,innerWidth-rect.width-8))+'px';moduleWindow.style.top=Math.max(8,Math.min(y,innerHeight-rect.height-64))+'px';}
+window.closeGalaxy=(restoreFocus=true)=>{if(!moduleWindow.open)return;moduleWindow.close();windowDrag=null;opener.setAttribute('aria-expanded','false');if(restoreFocus&&!opener.hidden)opener.focus();};
+opener.onclick=()=>{if(moduleWindow.open){handle.focus();return;}moduleWindow.show();opener.setAttribute('aria-expanded','true');const rect=moduleWindow.getBoundingClientRect();moveWindow(rect.x,rect.y);window.loadGalaxy();handle.focus();};
+el('galaxy-window-close').onclick=()=>window.closeGalaxy();
+moduleWindow.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();window.closeGalaxy();}});
+handle.addEventListener('pointerdown',e=>{if(e.target.closest('button')||e.button!==0)return;const rect=moduleWindow.getBoundingClientRect();windowDrag={x:e.clientX-rect.x,y:e.clientY-rect.y};handle.setPointerCapture(e.pointerId);handle.focus();});
+handle.addEventListener('pointermove',e=>{if(windowDrag)moveWindow(e.clientX-windowDrag.x,e.clientY-windowDrag.y);});
+for(const event of ['pointerup','pointercancel','lostpointercapture'])handle.addEventListener(event,()=>{windowDrag=null;});
+handle.addEventListener('keydown',e=>{if(e.target!==handle)return;const offsets={ArrowLeft:[-20,0],ArrowRight:[20,0],ArrowUp:[0,-20],ArrowDown:[0,20]};if(!offsets[e.key])return;e.preventDefault();const rect=moduleWindow.getBoundingClientRect(),[x,y]=offsets[e.key];moveWindow(rect.x+x,rect.y+y);});
+window.addEventListener('resize',()=>{if(moduleWindow.open){const rect=moduleWindow.getBoundingClientRect();moveWindow(rect.x,rect.y);}});
 function projection(s){return {x:canvas.clientWidth/2+pan.x+s.x*scale(),y:canvas.clientHeight/2+pan.y+s.y*scale()};}
 function scale(){return Math.min(canvas.clientWidth,canvas.clientHeight)/2500*zoom;}
 function draw(){if(!galaxy)return;const ratio=devicePixelRatio||1,w=canvas.clientWidth,h=canvas.clientHeight;if(!w||!h)return;canvas.width=w*ratio;canvas.height=h*ratio;ctx.setTransform(ratio,0,0,ratio,0,0);ctx.clearRect(0,0,w,h);

@@ -1,4 +1,4 @@
-# Cosmosimulator · 0.2.0
+# Cosmosimulator · 0.2.1
 
 Легковесная браузерная экономическая песочница. Go + PostgreSQL, HTML/CSS/JavaScript без npm, сторонних шрифтов и CDN. Интерфейс встроен в один исполняемый файл.
 
@@ -13,7 +13,7 @@
 
 ## Быстрый запуск в Windows
 
-Требуется PostgreSQL 17 (либо совместимая версия) и доступ к существующей базе. Go для готового `.exe` не нужен. Сборка x64: `downloads/cosmosimulator-windows-amd64.exe`.
+Требуется PostgreSQL 17 (либо совместимая версия) и доступ к существующей базе. Go для готового `.exe` не нужен. Сборка x64: `downloads/cosmosimulator-v0.2.1-windows-amd64.exe`.
 
 Отдельная база не требуется: укажите существующую базу в `DATABASE_URL` и схему игры в `DB_SCHEMA`.
 Если схема отсутствует, служба создаст её автоматически (нужно право `CREATE` на базу).
@@ -34,7 +34,7 @@ $env:DB_SCHEMA = 'cosmosimulator'
 $env:HTTP_ADDR = '127.0.0.1:8080'
 $env:ADMIN_USERNAME = 'operator'
 $env:ADMIN_PASSWORD = 'YOUR_UNIQUE_ADMIN_PASSWORD_12_OR_MORE_BYTES'
-.\downloads\cosmosimulator-windows-amd64.exe
+.\downloads\cosmosimulator-v0.2.1-windows-amd64.exe
 ```
 
 Откройте `http://localhost:8080` в браузере. Остановка: Ctrl+C. Для других устройств задайте `HTTP_ADDR=0.0.0.0:8080` и настройте Windows Firewall. Не открывайте HTTP с паролями в интернет: используйте HTTPS reverse proxy, `COOKIE_SECURE=true`, `PUBLIC_ORIGIN=https://your-domain` и TLS к удалённой БД (`sslmode=verify-full`). `sslmode=disable` выше предназначен для локальной базы.
@@ -49,10 +49,10 @@ $env:ADMIN_PASSWORD = 'YOUR_UNIQUE_ADMIN_PASSWORD_12_OR_MORE_BYTES'
 
 ## Windows-служба
 
-Исполняемый файл поддерживает Windows Service Control Manager, имя службы `Cosmosimulator`. Сначала проверьте обычный запуск и создайте администратора. Затем скопируйте `.exe` в постоянный каталог, например `C:\Cosmosimulator`. В PowerShell администратора:
+Исполняемый файл поддерживает Windows Service Control Manager, имя службы `Cosmosimulator`. Сначала проверьте обычный запуск и создайте администратора. Затем скопируйте выбранную версию `.exe` в постоянный каталог, например `C:\Cosmosimulator`, под постоянным именем `cosmosimulator.exe` (архив в `downloads` сохраняет имя с версией). В PowerShell администратора:
 
 ```powershell
-sc.exe create Cosmosimulator binPath= 'C:\Cosmosimulator\cosmosimulator-windows-amd64.exe' start= auto
+sc.exe create Cosmosimulator binPath= 'C:\Cosmosimulator\cosmosimulator.exe' start= auto
 # Переменные именно для службы; подставьте свою строку подключения.
 New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Cosmosimulator' -Name Environment -PropertyType MultiString -Value @('DATABASE_URL=postgres://cosmos:YOUR_URL_ENCODED_PASSWORD@127.0.0.1:5432/existing_database?sslmode=disable','DB_SCHEMA=cosmosimulator','HTTP_ADDR=127.0.0.1:8080') -Force
 sc.exe start Cosmosimulator
@@ -83,16 +83,16 @@ TEST_DATABASE_URL='postgres://cosmos:password@127.0.0.1:5432/cosmosimulator_test
 Windows x64, из Linux:
 
 ```sh
-CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o downloads/cosmosimulator-windows-amd64.exe ./cmd/cosmosimulator
-sha256sum downloads/cosmosimulator-windows-amd64.exe > downloads/SHA256SUMS
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o downloads/cosmosimulator-v0.2.1-windows-amd64.exe ./cmd/cosmosimulator
+sha256sum downloads/*.exe > downloads/SHA256SUMS
 ```
 
 Windows PowerShell:
 
 ```powershell
 $env:CGO_ENABLED='0'; $env:GOOS='windows'; $env:GOARCH='amd64'
-go build -trimpath -ldflags='-s -w' -o downloads/cosmosimulator-windows-amd64.exe ./cmd/cosmosimulator
-Get-FileHash .\downloads\cosmosimulator-windows-amd64.exe -Algorithm SHA256
+go build -trimpath -ldflags='-s -w' -o downloads/cosmosimulator-v0.2.1-windows-amd64.exe ./cmd/cosmosimulator
+Get-FileHash .\downloads\cosmosimulator-v0.2.1-windows-amd64.exe -Algorithm SHA256
 ```
 
 ## Границы первого прототипа
@@ -112,3 +112,9 @@ API (требуется авторизация): `GET /api/galaxy`, `GET /api/ro
 ## Языки
 
 «Настройки / Settings» в верхней панели позволяют выбрать русский или английский язык. Выбор сохраняется в браузере (`localStorage`) и применяется без перезагрузки, включая сообщения ошибок, карту и числа. Переводы находятся в `internal/server/web/ru.json` и `en.json`; модуль `i18n.js` управляет загрузкой словарей и переключением языка. Ключи — исходные русские строки, значения каждого файла — переводы соответствующего языка. Для нового языка добавьте словарь с теми же ключами, его код в список поддерживаемых языков модуля и пункт выбора в HTML. Названия компаний и стабильные идентификаторы систем не переводятся.
+
+## Окно галактической карты
+
+После входа нажмите «Галактическая карта» в футере. Откроется отдельное окно: карта слева, панель построения маршрута справа. Перемещайте окно за заголовок мышью или касанием; выбранный клавиатурой заголовок можно двигать стрелками. Закрытие — кнопкой «Закрыть» или Escape. Повторное открытие сохраняет масштаб, положение окна и выбранный маршрут до перезагрузки страницы. Можно пользоваться основной панелью компании, оставив карту открытой. На узких экранах панель маршрута располагается под картой, содержимое окна прокручивается.
+
+Каждая Windows-сборка сохраняется в `downloads` с версией в имени: `cosmosimulator-v0.2.1-windows-amd64.exe`. Предыдущие версии не перезаписываются. Восстановлены архивные сборки v0.1.0, v0.1.1, v0.1.2 и v0.2.0 из соответствующих Git-тегов; прежний файл без номера версии оставлен для совместимости. `SHA256SUMS` содержит суммы всех сохранённых `.exe`. В GitHub Release прикладывается файл соответствующей версии.
