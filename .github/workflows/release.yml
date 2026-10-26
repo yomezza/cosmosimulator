@@ -1,0 +1,32 @@
+name: Publish release
+on:
+  push:
+    tags:
+      - 'v*'
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify release files
+        run: |
+          set -euo pipefail
+          sha256sum -c downloads/SHA256SUMS
+          test -f "release-notes/$RELEASE_TAG.md"
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+      - name: Publish Windows executable and checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE_TAG" \
+            downloads/cosmosimulator-windows-amd64.exe \
+            downloads/SHA256SUMS \
+            --verify-tag \
+            --title "Cosmosimulator $RELEASE_TAG" \
+            --notes-file "release-notes/$RELEASE_TAG.md"
