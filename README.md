@@ -1,4 +1,4 @@
-# Cosmosimulator · 0.1.0
+# Cosmosimulator · 0.1.1
 
 Легковесная браузерная экономическая песочница. Go + PostgreSQL, HTML/CSS/JavaScript без npm, сторонних шрифтов и CDN. Интерфейс встроен в один исполняемый файл.
 
@@ -13,19 +13,24 @@
 
 ## Быстрый запуск в Windows
 
-Требуется PostgreSQL 17 (либо совместимая версия) и отдельная база. Go для готового `.exe` не нужен. Сборка x64: `downloads/cosmosimulator-windows-amd64.exe`.
+Требуется PostgreSQL 17 (либо совместимая версия) и доступ к существующей базе. Go для готового `.exe` не нужен. Сборка x64: `downloads/cosmosimulator-windows-amd64.exe`.
 
-Создайте пользователя и базу через psql от администратора PostgreSQL:
+Отдельная база не требуется: укажите существующую базу в `DATABASE_URL` и схему игры в `DB_SCHEMA`.
+Если схема отсутствует, служба создаст её автоматически (нужно право `CREATE` на базу).
+Можно заранее создать схему от имени администратора PostgreSQL и передать её пользователю службы:
 
 ```sql
-CREATE ROLE cosmos LOGIN PASSWORD 'YOUR_UNIQUE_DATABASE_PASSWORD';
-CREATE DATABASE cosmosimulator OWNER cosmos;
+-- Выполняется в уже существующей базе; роль cosmos должна существовать.
+CREATE SCHEMA cosmosimulator AUTHORIZATION cosmos;
 ```
+
+Для существующей схемы пользователь службы должен иметь `USAGE` и `CREATE` на схему, а также права на её существующие игровые таблицы и последовательности. Рекомендуется, чтобы роль службы владела отдельной схемой игры. Не используйте схему с чужими таблицами `users`, `sessions`, `world`.
 
 PowerShell, из каталога репозитория:
 
 ```powershell
-$env:DATABASE_URL = 'postgres://cosmos:YOUR_URL_ENCODED_PASSWORD@127.0.0.1:5432/cosmosimulator?sslmode=disable'
+$env:DATABASE_URL = 'postgres://cosmos:YOUR_URL_ENCODED_PASSWORD@127.0.0.1:5432/existing_database?sslmode=disable'
+$env:DB_SCHEMA = 'cosmosimulator'
 $env:HTTP_ADDR = '127.0.0.1:8080'
 $env:ADMIN_USERNAME = 'operator'
 $env:ADMIN_PASSWORD = 'YOUR_UNIQUE_ADMIN_PASSWORD_12_OR_MORE_BYTES'
@@ -36,6 +41,10 @@ $env:ADMIN_PASSWORD = 'YOUR_UNIQUE_ADMIN_PASSWORD_12_OR_MORE_BYTES'
 
 Имя аккаунта: 3–24 символа ASCII (буквы, цифры, `_`, `-`), регистр учитывается. Пароль: 12–72 байта UTF-8. Администратор создаётся только при явно заданных `ADMIN_USERNAME` и `ADMIN_PASSWORD`. Существующий пароль не перезаписывается, игрок не повышается до администратора. После первого запуска удалите эти две переменные: `Remove-Item Env:ADMIN_USERNAME, Env:ADMIN_PASSWORD`.
 
+`DB_SCHEMA` задаёт одно точное имя схемы, а не список схем. По умолчанию используется `public` — старые установки продолжают работать. Схема применяется ко всем соединениям пула, включая новые подключения; обращения к таблицам не переходят автоматически в `public`. Имена с пробелами и кавычками поддерживаются, максимальная длина — 63 байта; системные схемы запрещены.
+
+Чтобы сменить схему уже установленной Windows-службы, добавьте `DB_SCHEMA=cosmosimulator` в её параметр реестра `Environment` (сохранив `DATABASE_URL` и остальные настройки), затем перезапустите службу. Переключение схемы не переносит старые данные: другая схема — отдельное игровое состояние. Если хотите сохранить прежний мир, оставьте прежнюю схему или отдельно перенесите данные.
+
 `.env.example` — справочник. Файлы `.env` автоматически **не загружаются**. Не коммитьте пароли и строки подключения.
 
 ## Windows-служба
@@ -45,7 +54,7 @@ $env:ADMIN_PASSWORD = 'YOUR_UNIQUE_ADMIN_PASSWORD_12_OR_MORE_BYTES'
 ```powershell
 sc.exe create Cosmosimulator binPath= 'C:\Cosmosimulator\cosmosimulator-windows-amd64.exe' start= auto
 # Переменные именно для службы; подставьте свою строку подключения.
-New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Cosmosimulator' -Name Environment -PropertyType MultiString -Value @('DATABASE_URL=postgres://cosmos:YOUR_URL_ENCODED_PASSWORD@127.0.0.1:5432/cosmosimulator?sslmode=disable','HTTP_ADDR=127.0.0.1:8080') -Force
+New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Cosmosimulator' -Name Environment -PropertyType MultiString -Value @('DATABASE_URL=postgres://cosmos:YOUR_URL_ENCODED_PASSWORD@127.0.0.1:5432/existing_database?sslmode=disable','DB_SCHEMA=cosmosimulator','HTTP_ADDR=127.0.0.1:8080') -Force
 sc.exe start Cosmosimulator
 sc.exe query Cosmosimulator
 ```
@@ -60,16 +69,16 @@ Go 1.26 или новее, PostgreSQL 17. Из корня проекта:
 go mod download
 go test ./...
 go vet ./...
-DATABASE_URL='postgres://cosmos:password@127.0.0.1:5432/cosmosimulator?sslmode=disable' go run ./cmd/cosmosimulator
+DB_SCHEMA=cosmosimulator DATABASE_URL='postgres://cosmos:password@127.0.0.1:5432/existing_database?sslmode=disable' go run ./cmd/cosmosimulator
 ```
 
-Для интеграционного теста создайте **отдельную одноразовую** базу `cosmosimulator_test`. Тест очищает в ней таблицы `users`, `sessions`, `world`; имя базы обязательно должно заканчиваться `_test`.
+Для интеграционного теста создайте **отдельную одноразовую** базу `cosmosimulator_test`. Тесты создают в ней временные схемы и удаляют их после проверки; имя базы обязательно должно заканчиваться `_test`. Нужны права создания схем.
 
 ```sh
 TEST_DATABASE_URL='postgres://cosmos:password@127.0.0.1:5432/cosmosimulator_test?sslmode=disable' go test -race -count=1 -v ./...
 ```
 
-Без `TEST_DATABASE_URL` интеграционный тест пропускается. Он проверяет регистрацию, валидацию, вход/выход, запрет повышения роли, доступ администратора, защиту Origin, добычу, поведение ботов и продажу руды. `GET /api/health` проверяет соединение с БД.
+Без `TEST_DATABASE_URL` интеграционный тест пропускается. Он проверяет регистрацию, валидацию, вход/выход, запрет повышения роли, доступ администратора, защиту Origin, добычу, поведение ботов и продажу руды. Дополнительные тесты проверяют изоляцию двух схем в одной базе, разные соединения пула, безопасную обработку имени схемы и повторный запуск. `GET /api/health` проверяет соединение с БД.
 
 Windows x64, из Linux:
 

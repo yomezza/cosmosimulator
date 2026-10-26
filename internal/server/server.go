@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"io/fs"
 	"log"
@@ -52,31 +51,13 @@ func Run(ctx context.Context) error {
 	if dsn == "" {
 		return errors.New("set DATABASE_URL to a PostgreSQL connection string")
 	}
-	db, err := pgxpool.New(ctx, dsn)
+	check, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	db, err := openDatabase(check, dsn, os.Getenv("DB_SCHEMA"))
 	if err != nil {
 		return err
 	}
 	defer db.Close()
-	check, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-	if err = db.Ping(check); err != nil {
-		return fmt.Errorf("PostgreSQL: %w", err)
-	}
-	tx, err := db.Begin(check)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(context.Background())
-	if _, err = tx.Exec(check, "SELECT pg_advisory_xact_lock(784216)"); err != nil {
-		return err
-	}
-	schema, _ := assets.ReadFile("schema.sql")
-	if _, err = tx.Exec(check, string(schema)); err != nil {
-		return err
-	}
-	if err = tx.Commit(check); err != nil {
-		return err
-	}
 	a := &App{db: db, secure: os.Getenv("COOKIE_SECURE") == "true", origin: strings.TrimRight(os.Getenv("PUBLIC_ORIGIN"), "/"), attempts: make(map[string]attempt)}
 	if err = a.bootstrap(ctx); err != nil {
 		return err

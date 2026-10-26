@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -29,22 +30,21 @@ func TestIntegration(t *testing.T) {
 		t.Skip("TEST_DATABASE_URL must point to a disposable PostgreSQL database")
 	}
 	ctx := context.Background()
-	db, err := pgxpool.New(ctx, dsn)
+	admin, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer admin.Close()
+	if !strings.HasSuffix(admin.Config().ConnConfig.Database, "_test") {
+		t.Fatal("test database name must end in _test")
+	}
+	schema := "gameplay_" + time.Now().Format("20060102150405.000000000")
+	defer admin.Exec(ctx, "DROP SCHEMA IF EXISTS "+pgx.Identifier{schema}.Sanitize()+" CASCADE")
+	db, err := openDatabase(ctx, dsn, schema)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	// The documented test URL must identify a dedicated disposable database.
-	if !strings.HasSuffix(db.Config().ConnConfig.Database, "_test") {
-		t.Fatal("test database name must end in _test")
-	}
-	if _, err = db.Exec(ctx, `DROP TABLE IF EXISTS sessions,users,world CASCADE`); err != nil {
-		t.Fatal(err)
-	}
-	schema, _ := assets.ReadFile("schema.sql")
-	if _, err = db.Exec(ctx, string(schema)); err != nil {
-		t.Fatal(err)
-	}
 	a := &App{db: db, attempts: make(map[string]attempt)}
 	h := a.routes()
 	request := func(method, path, body string, cookie *http.Cookie) *httptest.ResponseRecorder {
