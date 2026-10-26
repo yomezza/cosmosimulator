@@ -1,0 +1,25 @@
+CREATE TABLE IF NOT EXISTS users (
+ id BIGSERIAL PRIMARY KEY,
+ username TEXT NOT NULL UNIQUE,
+ password_hash TEXT NOT NULL,
+ role TEXT NOT NULL DEFAULT 'player' CHECK (role IN ('player','admin')),
+ is_bot BOOLEAN NOT NULL DEFAULT FALSE,
+ credits BIGINT NOT NULL DEFAULT 1000,
+ ore BIGINT NOT NULL DEFAULT 0,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS sessions (
+ token_hash TEXT PRIMARY KEY,
+ user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ expires_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS sessions_expiry ON sessions(expires_at);
+CREATE TABLE IF NOT EXISTS world (
+ id INTEGER PRIMARY KEY CHECK (id = 1),
+ tick BIGINT NOT NULL DEFAULT 0,
+ last_tick TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+INSERT INTO world(id) VALUES (1) ON CONFLICT DO NOTHING;
+INSERT INTO users(username,password_hash,is_bot) VALUES
+ ('Helios Mining','',TRUE),('Kepler Logistics','',TRUE),('Orion Works','',TRUE)
+ ON CONFLICT DO NOTHING;

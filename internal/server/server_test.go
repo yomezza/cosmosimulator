@@ -1,0 +1,150 @@
+package server
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+func TestValidName(t *testing.T) {
+	for _, v := range []struct {
+		s  string
+		ok bool
+	}{{"pioneer_01", true}, {"ab", false}, {"admin<script>", false}, {"space name", false}, {"бот", false}} {
+		if validName(v.s) != v.ok {
+			t.Errorf("validName(%q)", v.s)
+		}
+	}
+}
+func TestIntegration(t *testing.T) {
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("TEST_DATABASE_URL must point to a disposable PostgreSQL database")
+	}
+	ctx := context.Background()
+	db, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	// The documented test URL must identify a dedicated disposable database.
+	if !strings.HasSuffix(db.Config().ConnConfig.Database, "_test") {
+		t.Fatal("test database name must end in _test")
+	}
+	if _, err = db.Exec(ctx, `DROP TABLE IF EXISTS sessions,users,world CASCADE`); err != nil {
+		t.Fatal(err)
+	}
+	schema, _ := assets.ReadFile("schema.sql")
+	if _, err = db.Exec(ctx, string(schema)); err != nil {
+		t.Fatal(err)
+	}
+	a := &App{db: db, attempts: make(map[string]attempt)}
+	h := a.routes()
+	request := func(method, path, body string, cookie *http.Cookie) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, path, strings.NewReader(body))
+		r.RemoteAddr = "127.0.0.1:1000"
+		if method == "POST" {
+			r.Header.Set("Content-Type", "application/json")
+		}
+		if cookie != nil {
+			r.AddCookie(cookie)
+		}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w
+	}
+	assert := func(w *httptest.ResponseRecorder, status int) {
+		t.Helper()
+		if w.Code != status {
+			t.Fatalf("status %d != %d: %s", w.Code, status, w.Body.String())
+		}
+	}
+	assert(request("GET", "/api/state", "", nil), 401)
+	assert(request("POST", "/api/register", `{"username":"pilot","password":"short"}`, nil), 400)
+	w := request("POST", "/api/register", `{"username":"pilot","password":"a-long-test-password"}`, nil)
+	assert(w, 200)
+	cookies := w.Result().Cookies()
+	if len(cookies) != 1 || !cookies[0].HttpOnly {
+		t.Fatal("secure session cookie missing")
+	}
+	cookie := cookies[0]
+	assert(request("POST", "/api/register", `{"username":"pilot","password":"a-long-test-password"}`, nil), 409)
+	assert(request("POST", "/api/login", `{"username":"pilot","password":"wrong"}`, nil), 401)
+	assert(request("POST", "/api/login", `{"username":"pilot","password":"a-long-test-password"}`, nil), 200)
+	assert(request("GET", "/api/admin/users", "", cookie), 403)
+	assert(request("POST", "/api/register", `{"username":"hacker","password":"a-long-test-password","role":"admin"}`, nil), 400)
+	assert(request("POST", "/api/sell", `{}`, cookie), 409)
+	for i := 0; i < 3; i++ {
+		if _, err = db.Exec(ctx, `UPDATE world SET last_tick=now()-interval '11 seconds'`); err != nil {
+			t.Fatal(err)
+		}
+		if err = a.tick(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err = a.tick(ctx); err != nil {
+		t.Fatal(err)
+	}
+	w = request("GET", "/api/state", "", cookie)
+	assert(w, 200)
+	var state struct {
+		User      User   `json:"user"`
+		Tick      int64  `json:"tick"`
+		Companies []User `json:"companies"`
+	}
+	if err = json.Unmarshal(w.Body.Bytes(), &state); err != nil {
+		t.Fatal(err)
+	}
+	if state.Tick != 3 || state.User.Ore != 3 || state.User.Credits != 1000 {
+		t.Fatalf("unexpected state: %+v", state)
+	}
+	bots := 0
+	for _, u := range state.Companies {
+		if u.Bot {
+			bots++
+			if u.Credits != 1030 || u.Ore != 0 {
+				t.Fatalf("bot did not sell: %+v", u)
+			}
+		}
+	}
+	if bots != 3 {
+		t.Fatalf("bots: %d", bots)
+	}
+	assert(request("POST", "/api/sell", `{}`, cookie), 200)
+	assert(request("POST", "/api/sell", `{}`, cookie), 409)
+	w = request("GET", "/api/state", "", cookie)
+	assert(w, 200)
+	_ = json.Unmarshal(w.Body.Bytes(), &state)
+	if state.User.Credits != 1015 || state.User.Ore != 0 {
+		t.Fatal("incorrect sale")
+	}
+	r := httptest.NewRequest("POST", "/api/sell", strings.NewReader(`{}`))
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("Origin", "https://evil.example")
+	r.AddCookie(cookie)
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	assert(w, 403)
+	t.Setenv("ADMIN_USERNAME", "operator")
+	t.Setenv("ADMIN_PASSWORD", "operator-long-test-password")
+	if err = a.bootstrap(ctx); err != nil {
+		t.Fatal(err)
+	}
+	w = request("POST", "/api/login", `{"username":"operator","password":"operator-long-test-password"}`, nil)
+	assert(w, 200)
+	assert(request("GET", "/api/admin/users", "", w.Result().Cookies()[0]), 200)
+	assert(request("POST", "/api/logout", `{}`, cookie), 200)
+	assert(request("GET", "/api/state", "", cookie), 401)
+	if _, err = db.Exec(ctx, `UPDATE sessions SET expires_at=$1`, time.Now().Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	assert(request("GET", "/api/health", "", nil), 200)
+	assert(request("GET", "/", "", nil), 200)
+}
