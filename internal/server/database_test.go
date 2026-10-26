@@ -25,7 +25,7 @@ func TestDatabaseConfig(t *testing.T) {
 			t.Fatalf("schema was not treated as one quoted identifier: %q", schema)
 		}
 	}
-	for _, schema := range []string{strings.Repeat("x", 64), strings.Repeat("я", 32), "a\x00b", "pg_catalog", "pg_temp", "PG_other", "information_schema", string([]byte{255})} {
+	for _, schema := range []string{strings.Repeat("x", 64), strings.Repeat("я", 32), "a\x00b", "$user", "pg_catalog", "pg_temp", "PG_other", "information_schema", string([]byte{255})} {
 		if _, _, err := databaseConfig("postgres://localhost/example", schema); err == nil {
 			t.Errorf("accepted invalid schema: %q", schema)
 		}

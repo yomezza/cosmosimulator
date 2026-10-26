@@ -14,10 +14,11 @@ func databaseConfig(dsn, schema string) (*pgxpool.Config, string, error) {
 	if schema == "" {
 		schema = "public"
 	}
+	// PostgreSQL expands "$user" in search_path even when quoted.
 	// PostgreSQL truncates identifiers beyond 63 bytes. Reject them rather than
 	// accidentally using another application's schema. A schema is one identifier,
 	// never a comma-separated search path or a SQL expression.
-	if !utf8.ValidString(schema) || len(schema) > 63 || strings.ContainsRune(schema, 0) || schema == "information_schema" || strings.HasPrefix(strings.ToLower(schema), "pg_") {
+	if !utf8.ValidString(schema) || len(schema) > 63 || strings.ContainsRune(schema, 0) || schema == "$user" || schema == "information_schema" || strings.HasPrefix(strings.ToLower(schema), "pg_") {
 		return nil, "", fmt.Errorf("DB_SCHEMA must be a valid PostgreSQL schema name (1–63 bytes), not a system schema")
 	}
 	config, err := pgxpool.ParseConfig(dsn)
