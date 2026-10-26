@@ -21,6 +21,7 @@ async function refresh(){
  try{const s=await api('state');signedIn=true;$('open-galaxy').hidden=false;$('auth').hidden=true;$('game').hidden=false;$('company-name').textContent=s.user.username;$('role').textContent=s.user.role==='admin'?t("АДМИНИСТРАТОР"):t("ИГРОК");$('admin').hidden=s.user.role!=='admin';
  for(const key of ['credits','ore'])$(key).textContent=s.user[key].toLocaleString(I18n.language);$('tick').textContent=String(s.tick);$('sell').disabled=s.user.ore===0;
  $('companies').replaceChildren();for(const company of s.companies){const tr=document.createElement('tr');cell(tr,company.username);cell(tr,company.bot?t("АВТОНОМНАЯ"):t("ИГРОК"));cell(tr,company.credits.toLocaleString(I18n.language));cell(tr,company.ore.toLocaleString(I18n.language));$('companies').append(tr);}
+ window.refreshExpedition?.();
  $('connection').textContent=t("Данные обновлены: ")+new Date().toLocaleTimeString(I18n.language)+t(" · Мир развивается, пока работает сервер.");
  }catch(e){if(e.status===401)showAuth();else if(signedIn)$('connection').textContent=e.message;else $('auth-error').textContent=t("Нет соединения с сервером: ")+e.message;}finally{pending=false;}
 }

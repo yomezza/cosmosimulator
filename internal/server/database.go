@@ -90,6 +90,25 @@ func openDatabase(ctx context.Context, dsn, schema string) (*pgxpool.Pool, error
 			return nil, err
 		}
 	}
+	var raw []byte
+	if err = tx.QueryRow(ctx, `SELECT data FROM galaxies WHERE name='Edem'`).Scan(&raw); err != nil {
+		return nil, err
+	}
+	var existing Galaxy
+	if err = json.Unmarshal(raw, &existing); err != nil {
+		return nil, err
+	}
+	if existing.Version < 2 {
+		enrichGalaxy(&existing)
+		existing.Regions = regions
+		raw, err = json.Marshal(existing)
+		if err != nil {
+			return nil, err
+		}
+		if _, err = tx.Exec(ctx, `UPDATE galaxies SET data=$1 WHERE name='Edem'`, raw); err != nil {
+			return nil, err
+		}
+	}
 	if err = tx.Commit(ctx); err != nil {
 		return nil, err
 	}

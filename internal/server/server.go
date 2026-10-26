@@ -27,11 +27,13 @@ import (
 var assets embed.FS
 
 type App struct {
-	db       *pgxpool.Pool
-	secure   bool
-	origin   string
-	mu       sync.Mutex
-	attempts map[string]attempt
+	db         *pgxpool.Pool
+	universeMu sync.Mutex
+	universe   *Galaxy
+	secure     bool
+	origin     string
+	mu         sync.Mutex
+	attempts   map[string]attempt
 }
 type attempt struct {
 	count int
@@ -118,6 +120,8 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("GET /api/galaxy", a.galaxy)
 	m.HandleFunc("GET /api/route", a.galaxy)
 	m.HandleFunc("POST /api/sell", a.sell)
+	m.HandleFunc("GET /api/expedition", a.expedition)
+	m.HandleFunc("POST /api/expedition", a.expedition)
 	m.HandleFunc("GET /api/admin/users", a.adminUsers)
 	web, _ := fs.Sub(assets, "web")
 	m.Handle("GET /", http.FileServer(http.FS(web)))
@@ -425,11 +429,11 @@ func (a *App) tick(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if _, err = tx.Exec(ctx, `UPDATE users SET ore=ore+CASE WHEN is_bot THEN 2 ELSE 1 END`); err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE users SET ore=ore+1 WHERE NOT is_bot`); err != nil {
 		return err
 	}
 	if tick%3 == 0 {
-		if _, err = tx.Exec(ctx, `UPDATE users SET credits=credits+ore*5,ore=0 WHERE is_bot`); err != nil {
+		if err = tradeBots(ctx, tx); err != nil {
 			return err
 		}
 	}

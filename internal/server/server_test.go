@@ -132,10 +132,14 @@ func TestIntegration(t *testing.T) {
 	for _, u := range state.Companies {
 		if u.Bot {
 			bots++
-			if u.Credits != 1030 || u.Ore != 0 {
-				t.Fatalf("bot did not sell: %+v", u)
+			if u.Credits >= 1000 || u.Credits < 0 || u.Ore != 0 {
+				t.Fatalf("bot budget was not debited: %+v", u)
 			}
 		}
+	}
+	var money int64
+	if err = db.QueryRow(ctx, `SELECT (SELECT sum(credits) FROM users WHERE is_bot)+(SELECT credits FROM local_markets WHERE star=1)`).Scan(&money); err != nil || money != 8000 {
+		t.Fatal("bot trade created or destroyed currency", money, err)
 	}
 	if bots != 3 {
 		t.Fatalf("bots: %d", bots)

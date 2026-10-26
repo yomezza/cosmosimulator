@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -10,23 +11,27 @@ import (
 )
 
 type Star struct {
-	ID     int     `json:"id"`
-	Name   string  `json:"name"`
-	X      float64 `json:"x"`
-	Y      float64 `json:"y"`
-	Region int     `json:"region"`
-	Class  string  `json:"class"`
+	ID         int      `json:"id"`
+	Name       string   `json:"name"`
+	X          float64  `json:"x"`
+	Y          float64  `json:"y"`
+	Region     int      `json:"region"`
+	Class      string   `json:"class"`
+	Mass       float64  `json:"mass"`
+	Luminosity float64  `json:"luminosity"`
+	Planets    []Planet `json:"planets,omitempty"`
 }
 type Lane struct {
 	From int `json:"from"`
 	To   int `json:"to"`
 }
 type Galaxy struct {
-	Name    string `json:"name"`
-	Seed    int64  `json:"seed"`
-	Version int    `json:"version"`
-	Stars   []Star `json:"stars"`
-	Lanes   []Lane `json:"lanes"`
+	Name    string   `json:"name"`
+	Seed    int64    `json:"seed"`
+	Version int      `json:"version"`
+	Stars   []Star   `json:"stars"`
+	Regions []Region `json:"regions"`
+	Lanes   []Lane   `json:"lanes"`
 }
 
 // Stable IDs and a private seeded RNG keep world generation independent of ticks.
@@ -34,7 +39,7 @@ type Galaxy struct {
 func generateGalaxy(count int, seed int64) Galaxy {
 	g := Galaxy{Name: "Edem", Seed: seed, Version: 1, Stars: make([]Star, 0, count), Lanes: []Lane{}}
 	rng := rand.New(rand.NewSource(seed))
-	classes := []string{"O", "B", "A", "F", "G", "K", "M"}
+	classes := []string{"M", "M", "M", "M", "M", "M", "M", "M", "M", "M", "M", "M", "K", "K", "K", "K", "G", "G", "F", "A"}
 	isolated := count / 50
 	for i := 0; i < count; i++ {
 		region := i % 4
@@ -80,6 +85,8 @@ func generateGalaxy(count int, seed int64) Galaxy {
 			}
 		}
 	}
+	g.Regions = regions
+	enrichGalaxy(&g)
 	return g
 }
 func (g Galaxy) path(from, to int) []int {
@@ -120,26 +127,43 @@ func (a *App) galaxy(w http.ResponseWriter, r *http.Request) {
 	if _, ok := a.user(w, r); !ok {
 		return
 	}
-	var data []byte
-	if err := a.db.QueryRow(r.Context(), `SELECT data FROM galaxies WHERE name='Edem'`).Scan(&data); err != nil {
+	g, err := a.loadUniverse(r.Context())
+	if err != nil {
 		a.internal(w, err)
 		return
 	}
 	if r.URL.Path == "/api/galaxy" {
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(data)
+		public := *g
+		public.Stars = append([]Star(nil), g.Stars...)
+		for i := range public.Stars {
+			public.Stars[i].Planets = nil
+		}
+		reply(w, 200, public)
 		return
 	}
 	from, e1 := strconv.Atoi(r.URL.Query().Get("from"))
 	to, e2 := strconv.Atoi(r.URL.Query().Get("to"))
-	var g Galaxy
-	if err := json.Unmarshal(data, &g); err != nil {
-		a.internal(w, err)
-		return
-	}
 	if e1 != nil || e2 != nil || from < 1 || to < 1 || from > len(g.Stars) || to > len(g.Stars) {
 		fail(w, 400, "Некорректная система")
 		return
 	}
 	reply(w, 200, map[string]any{"path": g.path(from, to)})
+}
+
+func (a *App) loadUniverse(ctx context.Context) (*Galaxy, error) {
+	a.universeMu.Lock()
+	defer a.universeMu.Unlock()
+	if a.universe != nil {
+		return a.universe, nil
+	}
+	var raw []byte
+	if err := a.db.QueryRow(ctx, `SELECT data FROM galaxies WHERE name='Edem'`).Scan(&raw); err != nil {
+		return nil, err
+	}
+	var g Galaxy
+	if err := json.Unmarshal(raw, &g); err != nil {
+		return nil, err
+	}
+	a.universe = &g
+	return &g, nil
 }
