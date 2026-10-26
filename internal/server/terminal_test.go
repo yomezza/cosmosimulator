@@ -150,7 +150,10 @@ func TestTerminal(t *testing.T) {
 		t.Fatal("asteroids missing")
 	}
 	post(pilot, "/api/expedition", `{"action":"scan"}`, 200)
-	post(pilot, "/api/expedition", `{"action":"mine","planet":101,"resource":"orichalcum"}`, 200)
+	if _, err = db.Exec(ctx, `UPDATE ships SET object_id='asteroids',position_mode='approach' WHERE user_id=$1`, pid); err != nil {
+		t.Fatal(err)
+	}
+	post(pilot, "/api/expedition", `{"action":"mine","planet":101,"resource":"iron"}`, 200)
 	post(pilot, "/api/expedition", `{"action":"travel","to":5}`, 409)
 	var before int64
 	if err = db.QueryRow(ctx, `SELECT tick FROM world WHERE id=1`).Scan(&before); err != nil {
@@ -176,7 +179,7 @@ func TestTerminal(t *testing.T) {
 	}
 	var inventory map[string]int
 	_ = json.Unmarshal(cargo, &inventory)
-	if inventory["orichalcum"] != 3 {
+	if inventory["iron"] != 3 {
 		t.Fatal("mining not delivered on tick")
 	}
 	_ = db.QueryRow(ctx, `SELECT xp FROM users WHERE id=$1`, pid).Scan(&xp)
@@ -199,6 +202,8 @@ func TestTerminal(t *testing.T) {
 	post(pilot, "/api/market/global", fmt.Sprintf(`{"action":"collect","id":%d}`, rid), 409)
 	post(other, "/api/market/global", fmt.Sprintf(`{"action":"cancel","id":%d}`, rid), 404)
 	post(pilot, "/api/expedition", `{"action":"travel","to":5}`, 200)
+	post(admin, "/api/admin/tick", `{}`, 200)
+	post(pilot, "/api/expedition", `{"action":"move","target":"station","mode":"docked"}`, 200)
 	post(admin, "/api/admin/tick", `{}`, 200)
 	codes := make(chan int, 2)
 	var wg sync.WaitGroup

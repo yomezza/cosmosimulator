@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
@@ -98,14 +99,47 @@ func openDatabase(ctx context.Context, dsn, schema string) (*pgxpool.Pool, error
 	if err = json.Unmarshal(raw, &existing); err != nil {
 		return nil, err
 	}
-	if existing.Version < 2 {
+	if existing.Version < 3 {
 		enrichGalaxy(&existing)
+		upgradeGeology(&existing)
 		existing.Regions = regions
 		raw, err = json.Marshal(existing)
 		if err != nil {
 			return nil, err
 		}
 		if _, err = tx.Exec(ctx, `UPDATE galaxies SET data=$1 WHERE name='Edem'`, raw); err != nil {
+			return nil, err
+		}
+	}
+	// Complete metadata for a v0.3.1 flight without changing its route or ETA.
+	rows, err := tx.Query(ctx, `SELECT user_id,star,destination,arrival FROM ships WHERE destination IS NOT NULL AND jsonb_array_length(travel_path)<2`)
+	if err != nil {
+		return nil, err
+	}
+	type oldFlight struct {
+		id       int64
+		star, to int
+		arrival  time.Time
+	}
+	flights := []oldFlight{}
+	for rows.Next() {
+		var f oldFlight
+		if err = rows.Scan(&f.id, &f.star, &f.to, &f.arrival); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		flights = append(flights, f)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	for _, f := range flights {
+		path := existing.path(f.star, f.to)
+		raw, _ := json.Marshal(path)
+		departure := f.arrival.Add(-time.Duration(max(0, len(path)-1)) * 5 * time.Second)
+		if _, err = tx.Exec(ctx, `UPDATE ships SET travel_path=$2,departure=$3 WHERE user_id=$1`, f.id, raw, departure); err != nil {
 			return nil, err
 		}
 	}

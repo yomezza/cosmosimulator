@@ -87,6 +87,7 @@ func generateGalaxy(count int, seed int64) Galaxy {
 	}
 	g.Regions = regions
 	enrichGalaxy(&g)
+	upgradeGeology(&g)
 	return g
 }
 func (g Galaxy) path(from, to int) []int {

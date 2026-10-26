@@ -117,6 +117,12 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("POST /api/login", a.login)
 	m.HandleFunc("POST /api/logout", a.logout)
 	m.HandleFunc("GET /api/state", a.state)
+	m.HandleFunc("GET /api/fleet", a.fleet)
+	m.HandleFunc("GET /api/gameplay", a.gameplay)
+	m.HandleFunc("GET /api/admin/gameplay", a.gameplay)
+	m.HandleFunc("POST /api/admin/gameplay", a.gameplay)
+	m.HandleFunc("GET /api/events", a.events)
+	m.HandleFunc("GET /api/admin/log", a.events)
 	m.HandleFunc("GET /api/system", a.systemView)
 	m.HandleFunc("GET /api/profile", a.profile)
 	m.HandleFunc("POST /api/profile/upgrade", a.upgrade)
@@ -131,7 +137,7 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("POST /api/sell", a.sell)
 	m.HandleFunc("GET /api/expedition", a.expedition)
 	m.HandleFunc("POST /api/expedition", a.expedition)
-	m.HandleFunc("GET /api/admin/users", a.adminUsers)
+	m.HandleFunc("GET /api/admin/users", a.userPages)
 	web, _ := fs.Sub(assets, "web")
 	m.Handle("GET /", http.FileServer(http.FS(web)))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -357,7 +363,17 @@ func (a *App) state(w http.ResponseWriter, r *http.Request) {
 		a.internal(w, rows.Err())
 		return
 	}
-	reply(w, 200, map[string]any{"user": u, "tick": tick, "last_tick": last, "companies": list, "tick_seconds": 10, "ore_price": 5})
+	settings, err := readGameplay(r.Context(), a.db)
+	if err != nil {
+		a.internal(w, err)
+		return
+	}
+	var pulses int64
+	if err = a.db.QueryRow(r.Context(), `SELECT pulses FROM world WHERE id=1`).Scan(&pulses); err != nil {
+		a.internal(w, err)
+		return
+	}
+	reply(w, 200, map[string]any{"date": edemDate(pulses), "pulses": pulses, "tick_seconds": settings.TickSeconds, "user": u, "tick": tick, "last_tick": last, "companies": list, "ore_price": 5})
 }
 func (a *App) sell(w http.ResponseWriter, r *http.Request) {
 	u, ok := a.user(w, r)
@@ -428,14 +444,15 @@ func (a *App) simulate(ctx context.Context) {
 	}
 }
 func (a *App) tick(ctx context.Context) error { return a.advanceTick(ctx, false) }
-func (a *App) advanceTick(ctx context.Context, force bool) error {
+func (a *App) advanceTick(ctx context.Context, force bool, actor ...int64) error {
 	tx, err := a.db.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(context.Background())
 	var tick int64
-	err = tx.QueryRow(ctx, `UPDATE world SET tick=tick+1,last_tick=now() WHERE id=1 AND ($1 OR last_tick<=now()-interval '10 seconds') RETURNING tick`, force).Scan(&tick)
+	var seconds int
+	err = tx.QueryRow(ctx, `UPDATE world w SET tick=tick+1,pulses=pulses+g.date_step,last_tick=now() FROM game_settings g WHERE w.id=1 AND g.id=1 AND ($1 OR last_tick<=now()-make_interval(secs=>g.tick_seconds)) RETURNING tick,g.tick_seconds`, force).Scan(&tick, &seconds)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
@@ -446,7 +463,7 @@ func (a *App) advanceTick(ctx context.Context, force bool) error {
 		return err
 	}
 	if force {
-		if _, err = tx.Exec(ctx, `UPDATE ships SET arrival=arrival-interval '10 seconds' WHERE arrival IS NOT NULL`); err != nil {
+		if _, err = tx.Exec(ctx, `UPDATE ships SET arrival=arrival-make_interval(secs=>$1),departure=departure-make_interval(secs=>$1),local_arrival=local_arrival-make_interval(secs=>$1),local_started=local_started-make_interval(secs=>$1) WHERE arrival IS NOT NULL OR local_arrival IS NOT NULL`, seconds); err != nil {
 			return err
 		}
 	}
@@ -460,6 +477,12 @@ func (a *App) advanceTick(ctx context.Context, force bool) error {
 	}
 	if _, err = tx.Exec(ctx, `DELETE FROM sessions WHERE expires_at<=now()`); err != nil {
 		return err
+	}
+	if force && len(actor) > 0 {
+		raw, _ := json.Marshal(map[string]any{"tick": tick})
+		if _, err = tx.Exec(ctx, `INSERT INTO admin_log(actor,action,data) VALUES($1,'tick',$2)`, actor[0], raw); err != nil {
+			return err
+		}
 	}
 	return tx.Commit(ctx)
 }

@@ -17,30 +17,36 @@ import (
 )
 
 type Site struct {
-	ID        string   `json:"id"`
-	Name      string   `json:"name"`
-	Kind      string   `json:"kind"`
-	Orbit     float64  `json:"orbit"`
-	Resources []string `json:"resources"`
-	Planet    int      `json:"planet"`
-	Details   *Planet  `json:"details,omitempty"`
+	ID          string           `json:"id"`
+	Name        string           `json:"name"`
+	Kind        string           `json:"kind"`
+	Orbit       float64          `json:"orbit"`
+	Resources   []string         `json:"resources"`
+	Planet      int              `json:"planet"`
+	Details     *Planet          `json:"details,omitempty"`
+	Quotas      map[string]Quota `json:"quotas,omitempty"`
+	SharedQuota *Quota           `json:"shared_quota,omitempty"`
 }
 
 func hasStation(id int) bool { return id%3 != 0 || id == 1 || id == 5 }
 func systemSites(s Star) []Site {
 	sites := []Site{}
-	// Place minor-body belts relative to stellar irradiation, not at a fixed
-	// distance where an ice field could evaporate around a luminous star.
-	orbitScale := math.Sqrt(math.Max(s.Luminosity, .001))
+	scale := math.Sqrt(math.Max(s.Luminosity, .001))
 	for _, p := range s.Planets {
-		sites = append(sites, Site{fmt.Sprintf("planet-%d", p.ID), p.Name, p.Kind, p.AU, p.Resources, p.ID, &p})
+		sites = append(sites, Site{ID: fmt.Sprintf("planet-%d", p.ID), Name: p.Name, Kind: p.Kind, Orbit: p.AU, Resources: p.Resources, Planet: p.ID, Details: &p})
 	}
-	sites = append(sites, Site{"asteroids", s.Name + " · A", "Пояс астероидов", 2.3 * orbitScale, []string{"orichalcum", "vajra"}, 101, nil})
+	sites = append(sites, Site{ID: "asteroids", Name: s.Name + " · A", Kind: "Пояс астероидов", Orbit: 2.3 * scale, Resources: variedResources(s.ID, 101, "Пояс астероидов"), Planet: 101})
 	if s.ID%2 == 0 {
-		sites = append(sites, Site{"ice", s.Name + " · I", "Ледяное поле", 6.5 * orbitScale, []string{"agni", "azoth"}, 102, nil})
+		sites = append(sites, Site{ID: "ice", Name: s.Name + " · I", Kind: "Ледяное поле", Orbit: 6.5 * scale, Resources: variedResources(s.ID, 102, "Ледяное поле"), Planet: 102})
 	}
 	if hasStation(s.ID) {
-		sites = append(sites, Site{"station", s.Name + " · PORT", "Орбитальная станция", 1.2 * orbitScale, nil, 0, nil})
+		for i := 0; i < 1+s.ID%3; i++ {
+			id := "station"
+			if i > 0 {
+				id = fmt.Sprintf("station-%d", i+1)
+			}
+			sites = append(sites, Site{ID: id, Name: fmt.Sprintf("%s · PORT %d", s.Name, i+1), Kind: "Орбитальная станция", Orbit: (1.2 + float64(i)*.8) * scale})
+		}
 	}
 	return sites
 }
@@ -75,6 +81,23 @@ func (a *App) systemView(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	if scanned {
+		tx, err := a.db.Begin(r.Context())
+		if err != nil {
+			a.internal(w, err)
+			return
+		}
+		defer tx.Rollback(context.Background())
+		sites, err = quotaView(r.Context(), tx, s, sites)
+		if err != nil {
+			a.internal(w, err)
+			return
+		}
+		if err = tx.Commit(r.Context()); err != nil {
+			a.internal(w, err)
+			return
+		}
+	}
 	s.Planets = nil
 	reply(w, 200, map[string]any{"star": s, "region": regionName(s.Region), "surveyed": scanned, "sites": sites})
 }
@@ -86,19 +109,20 @@ func (a *App) profile(w http.ResponseWriter, r *http.Request) {
 	var level, xp int
 	var company *int64
 	var name *string
-	err := a.db.QueryRow(r.Context(), `SELECT u.level,u.xp,u.company_id,c.name FROM users u LEFT JOIN companies c ON c.id=u.company_id WHERE u.id=$1`, u.ID).Scan(&level, &xp, &company, &name)
+	var tag, color, flag *string
+	err := a.db.QueryRow(r.Context(), `SELECT u.level,u.xp,u.company_id,c.name,c.tag,c.color,c.flag FROM users u LEFT JOIN companies c ON c.id=u.company_id WHERE u.id=$1`, u.ID).Scan(&level, &xp, &company, &name, &tag, &color, &flag)
 	if err != nil {
 		a.internal(w, err)
 		return
 	}
-	reply(w, 200, map[string]any{"user": u, "level": level, "xp": xp, "required_xp": level * 100, "upgrade_cost": level * 100, "company_id": company, "company": name})
+	reply(w, 200, map[string]any{"user": u, "level": level, "xp": xp, "required_xp": level * 100, "upgrade_cost": level * 100, "company_id": company, "company": name, "company_tag": tag, "company_color": color, "company_flag": flag})
 }
 func (a *App) upgrade(w http.ResponseWriter, r *http.Request) {
 	u, ok := a.user(w, r)
 	if !ok {
 		return
 	}
-	tag, err := a.db.Exec(r.Context(), `UPDATE users SET xp=xp-level*100,credits=credits-level*100,level=level+1 WHERE id=$1 AND level<100 AND xp>=level*100 AND credits>=level*100`, u.ID)
+	tag, err := a.db.Exec(r.Context(), `WITH changed AS(UPDATE users SET xp=xp-level*100,credits=credits-level*100,level=level+1 WHERE id=$1 AND level<100 AND xp>=level*100 AND credits>=level*100 RETURNING id,level) INSERT INTO game_events(user_id,kind,data) SELECT id,'level_up',jsonb_build_object('level',level) FROM changed`, u.ID)
 	if err != nil {
 		a.internal(w, err)
 		return
@@ -118,7 +142,7 @@ func (a *App) adminTick(w http.ResponseWriter, r *http.Request) {
 		fail(w, 403, "Требуется роль администратора")
 		return
 	}
-	if err := a.advanceTick(r.Context(), true); err != nil {
+	if err := a.advanceTick(r.Context(), true, u.ID); err != nil {
 		a.internal(w, err)
 		return
 	}
@@ -222,6 +246,11 @@ func (a *App) editUser(w http.ResponseWriter, r *http.Request) {
 			a.internal(w, err)
 			return
 		}
+	}
+	audit, _ := json.Marshal(map[string]any{"user": in.ID, "role": in.Role, "credits": in.Credits, "level": in.Level, "xp": in.XP, "password_reset": len(hash) > 0})
+	if _, err = tx.Exec(r.Context(), `INSERT INTO admin_log(actor,action,data) VALUES($1,'user_edit',$2)`, u.ID, audit); err != nil {
+		a.internal(w, err)
+		return
 	}
 	if err = tx.Commit(r.Context()); err != nil {
 		a.internal(w, err)
@@ -522,6 +551,7 @@ func (a *App) globalMarket(w http.ResponseWriter, r *http.Request) {
 		a.internal(w, err)
 		return
 	}
+	reservationID := in.ID
 	var cost int64
 	var star, q int
 	var res string
@@ -573,7 +603,7 @@ func (a *App) globalMarket(w http.ResponseWriter, r *http.Request) {
 			stock[res] -= q
 			raw, _ = json.Marshal(stock)
 			if _, err = tx.Exec(r.Context(), `UPDATE local_markets SET stock=$2 WHERE star=$1`, star, raw); err == nil {
-				_, err = tx.Exec(r.Context(), `INSERT INTO reservations(user_id,star,resource,quantity,cost) VALUES($1,$2,$3,$4,$5)`, u.ID, star, res, q, cost)
+				err = tx.QueryRow(r.Context(), `INSERT INTO reservations(user_id,star,resource,quantity,cost) VALUES($1,$2,$3,$4,$5) RETURNING id`, u.ID, star, res, q, cost).Scan(&reservationID)
 			}
 			credits -= cost
 		}
@@ -596,7 +626,7 @@ func (a *App) globalMarket(w http.ResponseWriter, r *http.Request) {
 				a.internal(w, err)
 				return
 			}
-			if ship.Destination != nil || ship.Star != star {
+			if !docked(ship) || ship.Star != star {
 				problem = "Прибудьте на станцию получения"
 			} else if cargoSize(ship.Cargo)+pending+q > 60 {
 				problem = "Трюм заполнен"
@@ -629,6 +659,10 @@ func (a *App) globalMarket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err = tx.Exec(r.Context(), `UPDATE users SET credits=$2 WHERE id=$1`, u.ID, credits); err != nil {
+		a.internal(w, err)
+		return
+	}
+	if err = recordEvent(r.Context(), tx, u.ID, "reservation_"+in.Action, map[string]any{"reservation": reservationID, "star": star, "resource": res, "quantity": q, "cost": cost}); err != nil {
 		a.internal(w, err)
 		return
 	}
@@ -672,6 +706,9 @@ func completeMining(ctx context.Context, tx pgx.Tx, tick int64) error {
 		return err
 	}
 	for _, j := range jobs {
+		if err = recordEvent(ctx, tx, j.id, "mining_complete", map[string]any{"resource": j.resource, "quantity": j.q}); err != nil {
+			return err
+		}
 		if _, err = tx.Exec(ctx, `UPDATE ships SET cargo=jsonb_set(cargo,ARRAY[$2::text],to_jsonb(COALESCE((cargo->>$2)::int,0)+$3)) WHERE user_id=$1`, j.id, j.resource, j.q); err != nil {
 			return err
 		}

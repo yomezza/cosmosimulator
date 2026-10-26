@@ -11,11 +11,21 @@ import (
 )
 
 type Ship struct {
-	Star        int            `json:"star"`
-	Destination *int           `json:"destination"`
-	Arrival     *time.Time     `json:"arrival"`
-	Fuel        int            `json:"fuel"`
-	Cargo       map[string]int `json:"cargo"`
+	Star         int            `json:"star"`
+	Destination  *int           `json:"destination"`
+	Arrival      *time.Time     `json:"arrival"`
+	Fuel         int            `json:"fuel"`
+	Cargo        map[string]int `json:"cargo"`
+	ID           int64          `json:"id"`
+	Name         string         `json:"name"`
+	ObjectID     string         `json:"object_id"`
+	PositionMode string         `json:"position_mode"`
+	Departure    *time.Time     `json:"departure"`
+	Path         []int          `json:"path"`
+	LocalTarget  *string        `json:"local_target"`
+	LocalMode    *string        `json:"local_mode"`
+	LocalStarted *time.Time     `json:"local_started"`
+	LocalArrival *time.Time     `json:"local_arrival"`
 }
 type Offer struct {
 	Resource string `json:"resource"`
@@ -67,14 +77,24 @@ func ensureShip(ctx context.Context, tx pgx.Tx, id int64) (Ship, error) {
 	if err != nil {
 		return s, err
 	}
-	_, err = tx.Exec(ctx, `UPDATE ships SET star=destination,destination=NULL,arrival=NULL WHERE user_id=$1 AND arrival<=now()`, id)
+	arrivalTag, err := tx.Exec(ctx, `UPDATE ships SET star=destination,destination=NULL,arrival=NULL,object_id='entry',position_mode='approach',departure=NULL,travel_path='[]' WHERE user_id=$1 AND arrival<=now()`, id)
 	if err != nil {
 		return s, err
 	}
-	var raw []byte
-	err = tx.QueryRow(ctx, `SELECT star,destination,arrival,fuel,cargo FROM ships WHERE user_id=$1 FOR UPDATE`, id).Scan(&s.Star, &s.Destination, &s.Arrival, &s.Fuel, &raw)
+	localTag, localErr := tx.Exec(ctx, `UPDATE ships SET object_id=local_target,position_mode=local_mode,local_target=NULL,local_mode=NULL,local_started=NULL,local_arrival=NULL WHERE user_id=$1 AND local_arrival<=now()`, id)
+	if localErr != nil {
+		return s, localErr
+	}
+	var raw, path []byte
+	err = tx.QueryRow(ctx, `SELECT star,destination,arrival,fuel,cargo,id,name,object_id,position_mode,departure,travel_path,local_target,local_mode,local_started,local_arrival FROM ships WHERE user_id=$1 FOR UPDATE`, id).Scan(&s.Star, &s.Destination, &s.Arrival, &s.Fuel, &raw, &s.ID, &s.Name, &s.ObjectID, &s.PositionMode, &s.Departure, &path, &s.LocalTarget, &s.LocalMode, &s.LocalStarted, &s.LocalArrival)
 	if err == nil {
 		err = json.Unmarshal(raw, &s.Cargo)
+		if err == nil {
+			err = json.Unmarshal(path, &s.Path)
+		}
+	}
+	if err == nil && (arrivalTag.RowsAffected() > 0 || localTag.RowsAffected() > 0) {
+		err = recordEvent(ctx, tx, id, "arrival", map[string]any{"star": s.Star, "object": s.ObjectID})
 	}
 	return s, err
 }
@@ -153,15 +173,74 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 			Resource string `json:"resource"`
 			Quantity int    `json:"quantity"`
 			Planet   int    `json:"planet"`
+			Target   string `json:"target"`
+			Mode     string `json:"mode"`
 		}
 		if !decode(w, r, &in) {
 			return
 		}
 		problem := ""
-		if ship.Destination != nil {
+		if ship.Destination != nil || ship.LocalTarget != nil {
 			problem = "Корабль в пути"
 		} else {
 			switch in.Action {
+			case "move":
+				if job != nil {
+					problem = "Дождитесь завершения добычи"
+					break
+				}
+				var target *Site
+				for _, site := range systemSites(star) {
+					if site.ID == in.Target {
+						copy := site
+						target = &copy
+					}
+				}
+				if target == nil {
+					problem = "Объект не найден"
+					break
+				}
+				if in.Mode != "approach" && in.Mode != "orbit" && in.Mode != "docked" {
+					problem = "Некорректный манёвр"
+					break
+				}
+				if in.Mode == "docked" && target.Kind != "Орбитальная станция" || in.Mode == "orbit" && target.Details == nil {
+					problem = "Манёвр недоступен для объекта"
+					break
+				}
+				if ship.Fuel < 1 {
+					problem = "Недостаточно топлива"
+					break
+				}
+				if nearObject(ship, target.ID) && ship.PositionMode == in.Mode {
+					problem = "Корабль уже на месте"
+					break
+				}
+				duration := 5 * time.Second
+				now := time.Now()
+				arrival := now.Add(duration)
+				ship.LocalTarget = &in.Target
+				ship.LocalMode = &in.Mode
+				ship.LocalStarted = &now
+				ship.LocalArrival = &arrival
+				ship.Fuel--
+			case "cancel_mine":
+				if _, err = tx.Exec(ctx, `SELECT resource FROM resource_quotas WHERE star=$1 AND object=$2 AND resource='*' FOR UPDATE`, ship.Star, func() int {
+					if job != nil {
+						return job.Planet
+					}
+					return 0
+				}()); err != nil {
+					break
+				}
+				if job == nil {
+					problem = "Нет активной добычи"
+					break
+				}
+				if _, err = tx.Exec(ctx, `UPDATE resource_quotas q SET used=GREATEST(used-j.quantity,0) FROM mining_jobs j WHERE j.user_id=$1 AND q.star=j.star AND q.object=j.planet AND q.resource IN ('*',j.resource) AND q.window_start=j.quota_start`, u.ID); err == nil {
+					_, err = tx.Exec(ctx, `DELETE FROM mining_jobs WHERE user_id=$1`, u.ID)
+				}
+				job = nil
 			case "scan":
 				if !surveyed {
 					if u.Credits < 10 {
@@ -189,6 +268,9 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 					ship.Fuel -= (len(path) - 1) * 2
 					arrival := time.Now().Add(time.Duration(len(path)-1) * 5 * time.Second)
 					ship.Arrival = &arrival
+					now := time.Now()
+					ship.Departure = &now
+					ship.Path = path
 					ship.Destination = &in.To
 				}
 			case "refuel":
@@ -204,8 +286,8 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 			case "buy", "sell":
-				if !hasStation(ship.Star) {
-					problem = "В системе нет станции"
+				if !hasStation(ship.Star) || !docked(ship) {
+					problem = "Для торговли требуется стыковка с портом"
 					break
 				}
 				if _, exists := resource(in.Resource); !exists || in.Quantity < 1 || in.Quantity > 60 {
@@ -257,8 +339,10 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 					break
 				}
 				found := false
+				var sourceID string
 				for _, site := range systemSites(star) {
 					if site.Planet == in.Planet {
+						sourceID = site.ID
 						for _, id := range site.Resources {
 							if id == in.Resource {
 								found = true
@@ -270,28 +354,32 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 					problem = "Ресурс отсутствует на планете"
 					break
 				}
-				if cargoSize(ship.Cargo)+3 > 60 {
+				if !nearObject(ship, sourceID) {
+					problem = "Приблизьтесь к объекту добычи"
+					break
+				}
+				if cargoSize(ship.Cargo) >= 60 {
 					problem = "Трюм заполнен"
 					break
 				}
-				_, err = tx.Exec(ctx, `INSERT INTO deposits(star,planet,resource) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`, ship.Star, in.Planet, in.Resource)
+				count, start, extractErr := reserveExtraction(ctx, tx, ship.Star, in.Planet, in.Resource)
+				err = extractErr
 				if err != nil {
 					break
 				}
-				var left int
-				err = tx.QueryRow(ctx, `UPDATE deposits SET remaining=remaining-3 WHERE star=$1 AND planet=$2 AND resource=$3 AND remaining>=3 RETURNING remaining`, ship.Star, in.Planet, in.Resource).Scan(&left)
-				if errors.Is(err, pgx.ErrNoRows) {
-					err = nil
-					problem = "Месторождение истощено"
+				if cargoSize(ship.Cargo)+count > 60 {
+					problem = "Трюм заполнен"
 					break
 				}
-				if err == nil {
-					_, err = tx.Exec(ctx, `INSERT INTO mining_jobs(user_id,star,planet,resource,quantity,finish_tick) VALUES($1,$2,$3,$4,3,$5)`, u.ID, ship.Star, in.Planet, in.Resource, worldTick+1)
-					if err == nil {
-						job = &MiningJob{Resource: in.Resource, Quantity: 3, FinishTick: worldTick + 1, StartedAt: time.Now(), Planet: in.Planet}
-						_, err = tx.Exec(ctx, `UPDATE ships SET last_mine=now() WHERE user_id=$1`, u.ID)
-					}
+				if count == 0 {
+					problem = "Лимит добычи исчерпан"
+					break
 				}
+				_, err = tx.Exec(ctx, `INSERT INTO mining_jobs(user_id,star,planet,resource,quantity,finish_tick,quota_start) VALUES($1,$2,$3,$4,$5,$6,$7)`, u.ID, ship.Star, in.Planet, in.Resource, count, worldTick+1, start)
+				if err == nil {
+					job = &MiningJob{Resource: in.Resource, Quantity: count, FinishTick: worldTick + 1, StartedAt: time.Now(), Planet: in.Planet}
+				}
+
 			default:
 				problem = "Неизвестное действие"
 			}
@@ -304,19 +392,36 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 			fail(w, 409, problem)
 			return
 		}
-		cargo, _ := json.Marshal(ship.Cargo)
 		stockJSON, _ := json.Marshal(stock)
 		if _, err = tx.Exec(ctx, `UPDATE users SET credits=$2 WHERE id=$1`, u.ID, u.Credits); err != nil {
 			a.internal(w, err)
 			return
 		}
-		if _, err = tx.Exec(ctx, `UPDATE ships SET destination=$2,arrival=$3,fuel=$4,cargo=$5 WHERE user_id=$1`, u.ID, ship.Destination, ship.Arrival, ship.Fuel, cargo); err != nil {
+		if err = saveShip(ctx, tx, u.ID, ship); err != nil {
 			a.internal(w, err)
 			return
 		}
+		if err = recordEvent(ctx, tx, u.ID, in.Action, map[string]any{"star": ship.Star, "resource": in.Resource, "quantity": in.Quantity, "object": in.Target, "destination": in.To}); err != nil {
+			a.internal(w, err)
+			return
+		}
+
 		if _, err = tx.Exec(ctx, `UPDATE local_markets SET credits=$2,stock=$3 WHERE star=$1`, ship.Star, wallet, stockJSON); err != nil {
 			a.internal(w, err)
 			return
+		}
+	}
+	sites := systemSites(star)
+	if surveyed {
+		sites, err = quotaView(ctx, tx, star, sites)
+		if err != nil {
+			a.internal(w, err)
+			return
+		}
+	} else {
+		for i := range sites {
+			sites[i].Resources = nil
+			sites[i].Details = nil
 		}
 	}
 	if !hasStation(ship.Star) {
@@ -333,7 +438,7 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 	if !hasStation(ship.Star) {
 		marketOffers = []Offer{}
 	}
-	reply(w, 200, map[string]any{"job": job, "world_tick": worldTick, "station": hasStation(ship.Star), "ship": ship, "system": star, "region": regionName(star.Region), "surveyed": surveyed, "credits": u.Credits, "resources": resources, "offers": marketOffers, "market_credits": wallet, "capacity": 60})
+	reply(w, 200, map[string]any{"server_time": time.Now(), "job": job, "world_tick": worldTick, "station": hasStation(ship.Star), "docked": docked(ship), "sites": sites, "ship": ship, "system": star, "region": regionName(star.Region), "surveyed": surveyed, "credits": u.Credits, "resources": resourceCatalog(), "offers": marketOffers, "market_credits": wallet, "capacity": 60})
 }
 
 // The legacy prototype ore mine is separate. Bots trade only finite cargo against

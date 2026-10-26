@@ -100,6 +100,9 @@ func TestExpedition(t *testing.T) {
 	}
 	id := scanned.System.Planets[0].Resources[0]
 	mine := fmt.Sprintf(`{"action":"mine","planet":1,"resource":%q}`, id)
+	if _, err = db.Exec(ctx, `UPDATE ships SET object_id='planet-1',position_mode='orbit' WHERE user_id=(SELECT id FROM users WHERE username='voyager')`); err != nil {
+		t.Fatal(err)
+	}
 	post(mine, 200)
 	post(mine, 409)
 	if get().Ship.Cargo[id] != 0 {
@@ -111,19 +114,28 @@ func TestExpedition(t *testing.T) {
 	if get().Ship.Cargo[id] != 3 {
 		t.Fatal("mining cooldown failed")
 	}
+	if _, err = db.Exec(ctx, `UPDATE ships SET object_id='station',position_mode='docked' WHERE user_id=(SELECT id FROM users WHERE username='voyager')`); err != nil {
+		t.Fatal(err)
+	}
 	before = get()
 	post(fmt.Sprintf(`{"action":"sell","resource":%q,"quantity":3}`, id), 200)
 	afterSale := get()
 	if afterSale.Credits+afterSale.Market != before.Credits+before.Market || afterSale.Ship.Cargo[id] != 0 {
 		t.Fatal("sale conservation failed")
 	}
-	if _, err = db.Exec(ctx, `UPDATE deposits SET remaining=2 WHERE star=1 AND planet=1 AND resource=$1`, id); err != nil {
+	if _, err = db.Exec(ctx, `UPDATE resource_quotas SET used=capacity-2 WHERE star=1 AND object=1`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = db.Exec(ctx, `UPDATE ships SET last_mine=now()-interval '11 seconds'`); err != nil {
+	if _, err = db.Exec(ctx, `UPDATE ships SET object_id='planet-1',position_mode='orbit' WHERE user_id=(SELECT id FROM users WHERE username='voyager')`); err != nil {
 		t.Fatal(err)
 	}
-	post(mine, 409)
+	post(mine, 200)
+	if err = a.advanceTick(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec(ctx, `UPDATE ships SET object_id='station',position_mode='docked' WHERE user_id=(SELECT id FROM users WHERE username='voyager')`); err != nil {
+		t.Fatal(err)
+	}
 	before = get()
 	post(`{"action":"buy","resource":"agni","quantity":2}`, 200)
 	after := get()
