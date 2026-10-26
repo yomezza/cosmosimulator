@@ -102,6 +102,12 @@ func TestExpedition(t *testing.T) {
 	mine := fmt.Sprintf(`{"action":"mine","planet":1,"resource":%q}`, id)
 	post(mine, 200)
 	post(mine, 409)
+	if get().Ship.Cargo[id] != 0 {
+		t.Fatal("mining delivered before tick")
+	}
+	if err = a.advanceTick(ctx, true); err != nil {
+		t.Fatal(err)
+	}
 	if get().Ship.Cargo[id] != 3 {
 		t.Fatal("mining cooldown failed")
 	}

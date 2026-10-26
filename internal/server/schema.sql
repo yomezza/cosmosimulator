@@ -38,3 +38,26 @@ CREATE TABLE IF NOT EXISTS ships (
 CREATE TABLE IF NOT EXISTS surveys (user_id BIGINT REFERENCES users(id) ON DELETE CASCADE, star INTEGER NOT NULL, PRIMARY KEY(user_id,star));
 CREATE TABLE IF NOT EXISTS local_markets (star INTEGER PRIMARY KEY, credits BIGINT NOT NULL DEFAULT 5000 CHECK(credits>=0), stock JSONB NOT NULL);
 CREATE TABLE IF NOT EXISTS deposits (star INTEGER, planet INTEGER, resource TEXT, remaining INTEGER NOT NULL DEFAULT 1000 CHECK(remaining>=0),PRIMARY KEY(star,planet,resource));
+
+CREATE TABLE IF NOT EXISTS companies (
+ id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL UNIQUE, tag TEXT NOT NULL UNIQUE,
+ color TEXT NOT NULL DEFAULT '#efad58', flag TEXT NOT NULL DEFAULT '◈',
+ owner_id BIGINT REFERENCES users(id), starter BOOLEAN NOT NULL DEFAULT FALSE
+);
+INSERT INTO companies(id,name,tag,starter) VALUES(1,'Академия Эдема','EDM',TRUE) ON CONFLICT DO NOTHING;
+SELECT nextval(pg_get_serial_sequence('companies','id')) WHERE NOT (SELECT is_called FROM companies_id_seq);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS company_id BIGINT DEFAULT 1 REFERENCES companies(id);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS level INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS xp INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE IF NOT EXISTS mining_jobs (
+ user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+ star INTEGER NOT NULL, planet INTEGER NOT NULL, resource TEXT NOT NULL,
+ quantity INTEGER NOT NULL DEFAULT 3, finish_tick BIGINT NOT NULL, started_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS reservations (
+ id BIGSERIAL PRIMARY KEY,user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ star INTEGER NOT NULL,resource TEXT NOT NULL,quantity INTEGER NOT NULL CHECK(quantity>0),
+ cost BIGINT NOT NULL CHECK(cost>=0), status TEXT NOT NULL DEFAULT 'reserved' CHECK(status IN ('reserved','collected','cancelled')),
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS reservations_user ON reservations(user_id,id);

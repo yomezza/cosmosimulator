@@ -117,6 +117,15 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("POST /api/login", a.login)
 	m.HandleFunc("POST /api/logout", a.logout)
 	m.HandleFunc("GET /api/state", a.state)
+	m.HandleFunc("GET /api/system", a.systemView)
+	m.HandleFunc("GET /api/profile", a.profile)
+	m.HandleFunc("POST /api/profile/upgrade", a.upgrade)
+	m.HandleFunc("GET /api/companies", a.companyList)
+	m.HandleFunc("POST /api/companies", a.companyAction)
+	m.HandleFunc("GET /api/market/global", a.globalMarket)
+	m.HandleFunc("POST /api/market/global", a.globalMarket)
+	m.HandleFunc("POST /api/admin/tick", a.adminTick)
+	m.HandleFunc("POST /api/admin/user", a.editUser)
 	m.HandleFunc("GET /api/galaxy", a.galaxy)
 	m.HandleFunc("GET /api/route", a.galaxy)
 	m.HandleFunc("POST /api/sell", a.sell)
@@ -376,20 +385,23 @@ func (a *App) adminUsers(w http.ResponseWriter, r *http.Request) {
 		fail(w, 403, "Требуется роль администратора")
 		return
 	}
-	rows, err := a.db.Query(r.Context(), `SELECT id,username,role,is_bot,credits,ore FROM users ORDER BY id LIMIT 200`)
+	rows, err := a.db.Query(r.Context(), `SELECT id,username,role,is_bot,credits,ore,level,xp FROM users ORDER BY id LIMIT 200`)
 	if err != nil {
 		a.internal(w, err)
 		return
 	}
 	defer rows.Close()
-	list := []User{}
+	list := []map[string]any{}
 	for rows.Next() {
-		var p User
-		if err = rows.Scan(&p.ID, &p.Username, &p.Role, &p.Bot, &p.Credits, &p.Ore); err != nil {
+		var id, credits, ore int64
+		var name, role string
+		var bot bool
+		var level, xp int
+		if err = rows.Scan(&id, &name, &role, &bot, &credits, &ore, &level, &xp); err != nil {
 			a.internal(w, err)
 			return
 		}
-		list = append(list, p)
+		list = append(list, map[string]any{"id": id, "username": name, "role": role, "bot": bot, "credits": credits, "ore": ore, "level": level, "xp": xp})
 	}
 	if rows.Err() != nil {
 		a.internal(w, rows.Err())
@@ -415,14 +427,15 @@ func (a *App) simulate(ctx context.Context) {
 		}
 	}
 }
-func (a *App) tick(ctx context.Context) error {
+func (a *App) tick(ctx context.Context) error { return a.advanceTick(ctx, false) }
+func (a *App) advanceTick(ctx context.Context, force bool) error {
 	tx, err := a.db.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(context.Background())
 	var tick int64
-	err = tx.QueryRow(ctx, `UPDATE world SET tick=tick+1,last_tick=now() WHERE id=1 AND last_tick<=now()-interval '10 seconds' RETURNING tick`).Scan(&tick)
+	err = tx.QueryRow(ctx, `UPDATE world SET tick=tick+1,last_tick=now() WHERE id=1 AND ($1 OR last_tick<=now()-interval '10 seconds') RETURNING tick`, force).Scan(&tick)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
@@ -430,6 +443,14 @@ func (a *App) tick(ctx context.Context) error {
 		return err
 	}
 	if _, err = tx.Exec(ctx, `UPDATE users SET ore=ore+1 WHERE NOT is_bot`); err != nil {
+		return err
+	}
+	if force {
+		if _, err = tx.Exec(ctx, `UPDATE ships SET arrival=arrival-interval '10 seconds' WHERE arrival IS NOT NULL`); err != nil {
+			return err
+		}
+	}
+	if err = completeMining(ctx, tx, tick); err != nil {
 		return err
 	}
 	if tick%3 == 0 {

@@ -1,34 +1,9 @@
 'use strict';
-const t = text => window.I18n.t(text);
-const $ = id => document.getElementById(id);
-let mode = 'login', signedIn = false, pending = false;
-async function api(path, body) {
- const response = await fetch('/api/' + path, {method:body === undefined ? 'GET':'POST',headers:body === undefined?{}:{'Content-Type':'application/json'},body:body === undefined?undefined:JSON.stringify(body)});
- const data = await response.json();
- if (!response.ok) {const error = new Error(t(data.error) || t("Ошибка сервера"));error.status=response.status;throw error;}
- return data;
-}
-function authMode(value) {
- mode=value;$('login-tab').classList.toggle('active',mode==='login');$('register-tab').classList.toggle('active',mode==='register');
- $('submit').textContent=mode==='login'?t("Войти в терминал →"):t("Создать компанию →");
- const input=$('auth-form').elements.password;input.autocomplete=mode==='login'?'current-password':'new-password';input.minLength=mode==='login'?1:12;
- $('password-hint').textContent=mode==='login'?t("Используйте данные вашей компании."):t("Пароль: от 12 до 72 байт. Имя: латиница, цифры, _ и -.");$('auth-error').textContent='';
-}
-function showAuth(){signedIn=false;window.closeGalaxy?.(false);$('open-galaxy').hidden=true;$('auth').hidden=false;$('game').hidden=true;}
-function cell(row,value){const td=document.createElement('td');td.textContent=value;row.append(td);}
-async function refresh(){
- if(pending)return;pending=true;
- try{const s=await api('state');signedIn=true;$('open-galaxy').hidden=false;$('auth').hidden=true;$('game').hidden=false;$('company-name').textContent=s.user.username;$('role').textContent=s.user.role==='admin'?t("АДМИНИСТРАТОР"):t("ИГРОК");$('admin').hidden=s.user.role!=='admin';
- for(const key of ['credits','ore'])$(key).textContent=s.user[key].toLocaleString(I18n.language);$('tick').textContent=String(s.tick);$('sell').disabled=s.user.ore===0;
- $('companies').replaceChildren();for(const company of s.companies){const tr=document.createElement('tr');cell(tr,company.username);cell(tr,company.bot?t("АВТОНОМНАЯ"):t("ИГРОК"));cell(tr,company.credits.toLocaleString(I18n.language));cell(tr,company.ore.toLocaleString(I18n.language));$('companies').append(tr);}
- window.refreshExpedition?.();
- $('connection').textContent=t("Данные обновлены: ")+new Date().toLocaleTimeString(I18n.language)+t(" · Мир развивается, пока работает сервер.");
- }catch(e){if(e.status===401)showAuth();else if(signedIn)$('connection').textContent=e.message;else $('auth-error').textContent=t("Нет соединения с сервером: ")+e.message;}finally{pending=false;}
-}
-$('login-tab').onclick=()=>authMode('login');$('register-tab').onclick=()=>authMode('register');
-$('auth-form').onsubmit=async event=>{event.preventDefault();$('submit').disabled=true;$('auth-error').textContent='';try{const f=event.target;await api(mode,{username:f.elements.username.value,password:f.elements.password.value});f.elements.password.value='';await refresh();}catch(e){$('auth-error').textContent=e.message;}finally{$('submit').disabled=false;}};
-$('logout').onclick=async()=>{try{await api('logout',{});showAuth();$('admin-users').replaceChildren();}catch(e){$('connection').textContent=e.message;}};
-$('sell').onclick=async()=>{$('sell').disabled=true;try{await api('sell',{});$('game-message').textContent=t("Поставка выполнена. Кредиты зачислены.");await refresh();}catch(e){$('game-message').textContent=e.message;}finally{if(signedIn)await refresh();}};
-$('refresh').onclick=refresh;
-$('load-users').onclick=async()=>{try{const users=await api('admin/users');$('admin-users').replaceChildren();for(const u of users){const p=document.createElement('p');p.textContent=`#${u.id} · ${u.username} · ${u.bot?t('АВТОНОМНАЯ'):t(u.role==='admin'?'АДМИНИСТРАТОР':'ИГРОК')}`;$('admin-users').append(p);}}catch(e){$('admin-users').textContent=e.message;}};
-I18n.ready.then(()=>{authMode('login');refresh();});window.addEventListener('languagechange',()=>{authMode(mode);$('game-message').textContent='';if(signedIn)refresh();});setInterval(()=>{if(signedIn)refresh();},5000);
+const $=id=>document.getElementById(id),t=s=>I18n.t(s);let signedIn=false,pending=false,mode='login';window.gameData={};
+async function api(path,body){const r=await fetch('/api/'+path,{method:body===undefined?'GET':'POST',headers:body===undefined?{}:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const data=await r.json();if(!r.ok){const e=new Error(t(data.error||'Ошибка сервера'));e.status=r.status;throw e;}return data;}
+function authMode(value){mode=value;$('login-tab').classList.toggle('active',mode==='login');$('register-tab').classList.toggle('active',mode==='register');$('submit').textContent=t(mode==='login'?'Войти в терминал →':'Создать аккаунт →');$('auth-form').elements.password.minLength=mode==='login'?1:12;$('auth-form').elements.password.autocomplete=mode==='login'?'current-password':'new-password';$('password-hint').textContent=t(mode==='login'?'Используйте данные вашей компании.':'Пароль: от 12 до 72 байт. Имя: латиница, цифры, _ и -.');}
+function showAuth(){signedIn=false;for(const menu of document.querySelectorAll('.dropdown'))menu.open=false;Modules.closeAll();Modules.clearPrivate();gameData={};window.dispatchEvent(new Event('signedout'));for(const id of ['game','sidebar','profile-menu','admin-menu'])$(id).hidden=true;$('auth').hidden=false;}
+async function refresh(){if(pending)return;pending=true;try{const [state,profile,expedition]=await Promise.all([api('state'),api('profile'),api('expedition')]);signedIn=true;gameData={state,profile,expedition};$('auth').hidden=true;for(const id of ['game','sidebar','profile-menu'])$(id).hidden=false;$('admin-menu').hidden=state.user.role!=='admin';$('profile-nick').textContent=state.user.username;$('welcome-name').textContent=state.user.username;$('overview-company').textContent=profile.company_id===1?t(profile.company):profile.company||t('Без компании');$('credits').textContent=expedition.credits.toLocaleString(I18n.language);$('tick').textContent=state.tick;$('location').textContent=expedition.system.name;$('overview-region').textContent=t(expedition.region);$('connection').textContent=t('Данные обновлены: ')+new Date().toLocaleTimeString(I18n.language);$('server-status').textContent=t('● СЕРВЕР ОНЛАЙН');window.dispatchEvent(new Event('gamedata'));}catch(e){if(e.status===401)showAuth();else{notify(e.message);$('server-status').textContent=t('Нет соединения с сервером');}}finally{pending=false;}}
+$('login-tab').onclick=()=>authMode('login');$('register-tab').onclick=()=>authMode('register');$('auth-form').onsubmit=async e=>{e.preventDefault();$('submit').disabled=true;$('auth-error').textContent='';try{await api(mode,{username:e.target.elements.username.value,password:e.target.elements.password.value});e.target.elements.password.value='';await refresh();}catch(error){$('auth-error').textContent=error.message;}finally{$('submit').disabled=false;}};
+$('logout').onclick=async()=>{try{await api('logout',{});showAuth();}catch(e){notify(e.message);}};$('refresh').onclick=refresh;$('admin-tick').onclick=async()=>{const b=$('admin-tick');b.disabled=true;try{await api('admin/tick',{});await refresh();$('admin-message').dataset.i18n='Тик выполнен';$('admin-message').textContent=t('Тик выполнен');notify('Тик выполнен');}catch(e){notify(e.message);}finally{b.disabled=false;}};
+window.addEventListener('languagechange',()=>{authMode(mode);if(signedIn)refresh();});I18n.ready.then(()=>{I18n.apply();authMode('login');refresh();});setInterval(()=>{if(signedIn)refresh();},5000);
