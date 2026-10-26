@@ -67,6 +67,8 @@ func TestIntegration(t *testing.T) {
 		}
 	}
 	assert(request("GET", "/api/state", "", nil), 401)
+	assert(request("GET", "/api/galaxy", "", nil), 401)
+	assert(request("GET", "/api/route?from=1&to=5", "", nil), 401)
 	assert(request("POST", "/api/register", `{"username":"pilot","password":"short"}`, nil), 400)
 	w := request("POST", "/api/register", `{"username":"pilot","password":"a-long-test-password"}`, nil)
 	assert(w, 200)
@@ -75,6 +77,27 @@ func TestIntegration(t *testing.T) {
 		t.Fatal("secure session cookie missing")
 	}
 	cookie := cookies[0]
+	w = request("GET", "/api/galaxy", "", cookie)
+	assert(w, 200)
+	var galaxy Galaxy
+	if err = json.Unmarshal(w.Body.Bytes(), &galaxy); err != nil || len(galaxy.Stars) != 1000 {
+		t.Fatal("invalid persisted galaxy", err)
+	}
+	w = request("GET", "/api/route?from=1&to=5", "", cookie)
+	assert(w, 200)
+	var journey struct {
+		Path []int `json:"path"`
+	}
+	if err = json.Unmarshal(w.Body.Bytes(), &journey); err != nil || len(journey.Path) != 2 {
+		t.Fatal("route not returned", err)
+	}
+	w = request("GET", "/api/route?from=1&to=2", "", cookie)
+	assert(w, 200)
+	if err = json.Unmarshal(w.Body.Bytes(), &journey); err != nil || journey.Path != nil {
+		t.Fatal("unreachable route returned", err)
+	}
+	assert(request("GET", "/api/route?from=1&to=1001", "", cookie), 400)
+
 	assert(request("POST", "/api/register", `{"username":"pilot","password":"a-long-test-password"}`, nil), 409)
 	assert(request("POST", "/api/login", `{"username":"pilot","password":"wrong"}`, nil), 401)
 	assert(request("POST", "/api/login", `{"username":"pilot","password":"a-long-test-password"}`, nil), 200)

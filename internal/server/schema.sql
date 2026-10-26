@@ -23,3 +23,8 @@ INSERT INTO world(id) VALUES (1) ON CONFLICT DO NOTHING;
 INSERT INTO users(username,password_hash,is_bot) VALUES
  ('Helios Mining','',TRUE),('Kepler Logistics','',TRUE),('Orion Works','',TRUE)
  ON CONFLICT DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS galaxies (
+ name TEXT PRIMARY KEY,
+ data JSONB NOT NULL
+);

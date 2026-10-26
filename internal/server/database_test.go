@@ -93,12 +93,19 @@ func TestDatabaseSchemaIsolation(t *testing.T) {
 			c.Release()
 		}
 	}
+	if _, err = first.Exec(ctx, `UPDATE galaxies SET data=jsonb_set(data,'{seed}','123') WHERE name='Edem'`); err != nil {
+		t.Fatal(err)
+	}
 	// Existing schemas and their data survive repeated startup.
 	again, err := openDatabase(ctx, dsn, names[0])
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer again.Close()
+	var seed int64
+	if err = again.QueryRow(ctx, `SELECT (data->>'seed')::bigint FROM galaxies WHERE name='Edem'`).Scan(&seed); err != nil || seed != 123 {
+		t.Fatal("galaxy regenerated on restart", err)
+	}
 	var count int
 	if err = again.QueryRow(ctx, `SELECT count(*) FROM users`).Scan(&count); err != nil || count != 4 {
 		t.Fatalf("initialization is not repeatable: %d %v", count, err)

@@ -1,0 +1,22 @@
+'use strict';
+(()=>{
+let galaxy,loading=false,route=[],zoom=1,pan={x:0,y:0},pointer,selected=1,requestID=0;
+const canvas=document.getElementById('galaxy-map'),ctx=canvas.getContext('2d');
+const tr=s=>I18n.t(s),el=id=>document.getElementById(id);
+function projection(s){return {x:canvas.clientWidth/2+pan.x+s.x*scale(),y:canvas.clientHeight/2+pan.y+s.y*scale()};}
+function scale(){return Math.min(canvas.clientWidth,canvas.clientHeight)/2500*zoom;}
+function draw(){if(!galaxy)return;const ratio=devicePixelRatio||1,w=canvas.clientWidth,h=canvas.clientHeight;if(!w||!h)return;canvas.width=w*ratio;canvas.height=h*ratio;ctx.setTransform(ratio,0,0,ratio,0,0);ctx.clearRect(0,0,w,h);
+ ctx.lineWidth=.6;ctx.strokeStyle='#273749';ctx.beginPath();for(const e of galaxy.lanes){const a=projection(galaxy.stars[e.from-1]),b=projection(galaxy.stars[e.to-1]);ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);}ctx.stroke();
+ ctx.strokeStyle='#efad58';ctx.lineWidth=2;ctx.beginPath();for(let i=1;i<route.length;i++){const a=projection(galaxy.stars[route[i-1]-1]),b=projection(galaxy.stars[route[i]-1]);ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);}ctx.stroke();
+ const colors=['#96c8ff','#89d5cb','#c2a1e0','#e7bd83'];for(const s of galaxy.stars){const p=projection(s);ctx.fillStyle=s.region<0?'#687685':colors[s.region];ctx.beginPath();ctx.arc(p.x,p.y,Math.min(4,1.7*Math.sqrt(zoom)),0,Math.PI*2);ctx.fill();if(zoom>3){ctx.fillStyle='#aebac8';ctx.font='10px monospace';ctx.fillText(s.name,p.x+5,p.y-5);}}
+ const s=galaxy.stars[selected-1];if(s){const p=projection(s);ctx.strokeStyle='#fff';ctx.beginPath();ctx.arc(p.x,p.y,7,0,Math.PI*2);ctx.stroke();}
+}
+function labels(){if(!galaxy)return;el('galaxy-stats').textContent=`${I18n.language==='ru'?'Эдем':'Edem'} · ${tr('Систем')}: ${galaxy.stars.length} · ${tr('Гиперкоридоров')}: ${galaxy.lanes.length} · ${tr('Связанных областей')}: 4 · ${tr('Изолированных систем')}: ${galaxy.stars.filter(s=>s.region<0).length}`;const s=galaxy.stars[selected-1];el('system-info').textContent=`${tr('Система')}: ${s.name} · ${tr('Класс')}: ${s.class}${s.region<0?' · '+tr('Изолированная система'):''}`;}
+async function findRoute(){if(!galaxy)return;const id=++requestID;try{const from=el('route-from').value,to=el('route-to').value;const result=await api(`route?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);if(id!==requestID)return;route=result.path||[];el('route-result').textContent=route.length?`${tr('Маршрут')} (${route.length-1} ${tr('переходов')}): ${route.map(n=>galaxy.stars[n-1].name).join(' → ')}`:tr('Нет пути: системы не связаны гиперкоридорами.');draw();}catch(e){if(id!==requestID)return;route=[];el('route-result').textContent=tr(e.message);draw();}}
+window.loadGalaxy=async()=>{if(galaxy){draw();return;}if(loading)return;loading=true;try{galaxy=await api('galaxy');for(const id of ['route-from','route-to'])el(id).max=galaxy.stars.length;labels();draw();await findRoute();}catch(e){el('galaxy-stats').textContent=tr(e.message);}finally{loading=false;}};
+canvas.addEventListener('wheel',e=>{e.preventDefault();const rect=canvas.getBoundingClientRect(),x=e.clientX-rect.left-canvas.clientWidth/2,y=e.clientY-rect.top-canvas.clientHeight/2;const next=Math.max(.5,Math.min(18,zoom*Math.exp(-e.deltaY*.001)));const factor=next/zoom;pan={x:x-(x-pan.x)*factor,y:y-(y-pan.y)*factor};zoom=next;draw();},{passive:false});
+canvas.onpointerdown=e=>{pointer={x:e.clientX,y:e.clientY,startX:e.clientX,startY:e.clientY,moved:false};canvas.setPointerCapture(e.pointerId);};
+canvas.onpointermove=e=>{if(!pointer)return;const dx=e.clientX-pointer.x,dy=e.clientY-pointer.y;pointer.moved ||=Math.hypot(e.clientX-pointer.startX,e.clientY-pointer.startY)>5;pan.x+=dx;pan.y+=dy;pointer.x=e.clientX;pointer.y=e.clientY;draw();};
+canvas.onpointerup=e=>{if(!pointer)return;const moved=pointer.moved;pointer=null;if(moved||!galaxy)return;const rect=canvas.getBoundingClientRect();let distance=14,star;for(const s of galaxy.stars){const p=projection(s),d=Math.hypot(e.clientX-rect.left-p.x,e.clientY-rect.top-p.y);if(d<distance){distance=d;star=s;}}if(star){selected=star.id;el('route-to').value=selected;labels();findRoute();}};
+canvas.onpointercancel=()=>{pointer=null;};el('route-button').onclick=findRoute;el('map-reset').onclick=()=>{zoom=1;pan={x:0,y:0};draw();};new ResizeObserver(draw).observe(canvas);window.addEventListener('languagechange',()=>{labels();findRoute();});
+})();

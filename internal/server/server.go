@@ -115,6 +115,8 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("POST /api/login", a.login)
 	m.HandleFunc("POST /api/logout", a.logout)
 	m.HandleFunc("GET /api/state", a.state)
+	m.HandleFunc("GET /api/galaxy", a.galaxy)
+	m.HandleFunc("GET /api/route", a.galaxy)
 	m.HandleFunc("POST /api/sell", a.sell)
 	m.HandleFunc("GET /api/admin/users", a.adminUsers)
 	web, _ := fs.Sub(assets, "web")

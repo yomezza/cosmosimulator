@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"unicode/utf8"
@@ -75,6 +76,19 @@ func openDatabase(ctx context.Context, dsn, schema string) (*pgxpool.Pool, error
 	}
 	if _, err = tx.Exec(ctx, string(sql)); err != nil {
 		return nil, fmt.Errorf("initialize DB_SCHEMA %q (USAGE and CREATE on the schema are required): %w", schema, err)
+	}
+	var galaxyExists bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM galaxies WHERE name='Edem')`).Scan(&galaxyExists); err != nil {
+		return nil, err
+	}
+	if !galaxyExists {
+		data, err := json.Marshal(generateGalaxy(1000, 20261026))
+		if err != nil {
+			return nil, err
+		}
+		if _, err = tx.Exec(ctx, `INSERT INTO galaxies(name,data) VALUES('Edem',$1)`, data); err != nil {
+			return nil, err
+		}
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return nil, err
