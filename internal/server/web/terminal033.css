@@ -642,8 +642,48 @@ tr:hover td {
 .ship-model {
   max-height: 235px;
   object-fit: contain;
-  background: radial-gradient(ellipse at center, #183343, #101a24 72%);
+  background: transparent;
   margin-bottom: 14px;
+}
+#window-hologram,
+#window-hologram.window-active {
+  min-width: 240px;
+  min-height: 180px;
+  background: transparent;
+  box-shadow: none;
+  border-color: #4d967c70;
+}
+#window-hologram .module-titlebar {
+  background: rgba(22, 43, 39, 0.86);
+  border-bottom: 1px solid #4d967c50;
+}
+#window-hologram .hologram-content {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 6px;
+  background: transparent;
+  scrollbar-gutter: auto;
+}
+#window-hologram .hologram-model {
+  display: block;
+  flex: 1;
+  width: 100%;
+  height: 0;
+  min-height: 0;
+  object-fit: contain;
+  background: transparent;
+  pointer-events: none;
+  user-select: none;
+}
+.hologram-controls {
+  display: flex;
+  justify-content: flex-end;
+}
+#window-hologram .hologram-link {
+  min-height: 24px;
+  padding: 3px 7px;
+  font-size: 10px;
 }
 .cargo-grid {
   grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
@@ -1526,7 +1566,7 @@ input[aria-invalid="true"] {
   width: 100%;
   height: 125px;
   object-fit: contain;
-  background: #101922;
+  background: transparent;
 }
 .shipyard-card h3 {
   margin: 8px 0 0;

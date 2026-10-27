@@ -8,6 +8,7 @@
     choice = UI.choice;
   const ids = [
       "ship",
+      "hologram",
       "cargo",
       "research",
       "market",
@@ -318,9 +319,49 @@
         () => {
           Modules.link("ship", "cargo", !Modules.linked("cargo"));
           renderCargo();
+          Modules.arrangeShip();
         },
       ),
     );
+  }
+  function renderHologram() {
+    const root = roots.hologram,
+      s = d().ship;
+    Modules.title(
+      "hologram",
+      tr("Голограмма") + " · " + tr(s.name) + " #" + s.id,
+    );
+    root.classList.add("hologram-content");
+    let model = root.querySelector(".hologram-model");
+    if (!model) {
+      model = n("img");
+      model.className = "hologram-model";
+      model.draggable = false;
+      const controls = n("div", undefined, "hologram-controls"),
+        toggle = b("", () => {
+          Modules.link("ship", "hologram", !Modules.linked("hologram", "ship"));
+          renderHologram();
+          Modules.arrangeShip();
+        });
+      toggle.className = "hologram-link";
+      controls.append(toggle);
+      root.append(model, controls);
+    }
+    // Keep the image node and its timeline through polls, language and fuel updates.
+    if (model.getAttribute("src") !== s.spec.model) model.src = s.spec.model;
+    model.alt = tr("Голограмма корабля") + " · " + tr(s.spec.name);
+    root.dataset.ship = String(s.id);
+    root.querySelector(".hologram-link").textContent = tr(
+      Modules.linked("hologram", "ship")
+        ? "Отделить окно"
+        : "Связать с кораблём",
+    );
+  }
+  function openHologram() {
+    Modules.link("ship", "hologram", true);
+    Modules.open("hologram");
+    Modules.arrangeShip();
+    Modules.focus("ship");
   }
   function renderShip() {
     const root = roots.ship;
@@ -352,11 +393,6 @@
       s.id,
       (id) => command({ action: "select_ship", ship: Number(id) }),
     );
-    const model = n("img");
-    model.src = s.spec.model;
-    model.alt = tr(s.spec.name);
-    model.className = "ship-model";
-    root.append(model);
     const meters = n("div", undefined, "two-columns");
     meters.append(
       UI.bar(s.fuel, s.spec.fuel, "Топливо"),
@@ -395,9 +431,11 @@
     const tools = n("div", undefined, "inline-controls");
     tools.append(
       b("Трюм", () => {
+        Modules.link("ship", "cargo", true);
         Modules.open("cargo");
-        Modules.adjacent("cargo", "ship");
+        Modules.arrangeShip();
       }),
+      b("Голограмма", openHologram),
       b("Найти на карте", () => {
         window.dispatchEvent(new CustomEvent("findship", { detail: s.id }));
         Modules.open("galaxy");
@@ -1079,6 +1117,7 @@
       }
       root.append(
         b("Открыть трюм", () => {
+          Modules.link("ship", "cargo", false);
           Modules.open("cargo");
           Modules.adjacent("cargo", "market");
         }),
@@ -3010,6 +3049,7 @@
   }
   const renderers = {
     ship: renderShip,
+    hologram: renderHologram,
     cargo: renderCargo,
     research: renderResearch,
     market: renderMarket,
@@ -3081,9 +3121,13 @@
   }
   window.addEventListener("moduleopen", async (e) => {
     if (!signedIn) return;
+    const epoch = authEpoch;
     try {
       await ensureMap();
+      if (epoch !== authEpoch || !signedIn || !Modules.isOpen(e.detail)) return;
       await renderers[e.detail]?.();
+      if (epoch !== authEpoch || !signedIn || !Modules.isOpen(e.detail)) return;
+      if (e.detail === "ship") openHologram();
       if (e.detail === "notifications") {
         const dialog = document.getElementById("window-notifications");
         if (!dialog.dataset.positioned) {
@@ -3122,6 +3166,8 @@
   window.addEventListener("languagechange", () => renderVisible(true));
   window.addEventListener("moduleclose", (e) => {
     if (e.detail === "market") marketRequestID++;
+    if (e.detail === "ship" && Modules.isOpen("hologram"))
+      Modules.close("hologram");
   });
   window.addEventListener("signedout", () => {
     noticeCursor = null;

@@ -65,6 +65,22 @@
     d.style.top =
       Math.max(62, Math.min(r.y, innerHeight - r.height - 36)) + "px";
   }
+  function linkedPeers(id) {
+    const seen = new Set([id]),
+      result = [],
+      queue = [id];
+    for (let i = 0; i < queue.length; i++) {
+      for (const peerID of links.get(queue[i]) || []) {
+        if (seen.has(peerID)) continue;
+        seen.add(peerID);
+        const peer = windows.get(peerID);
+        if (!peer?.dialog.open || peer.pinned || peer.maximized) continue;
+        queue.push(peerID);
+        result.push([peerID, peer]);
+      }
+    }
+    return result;
+  }
   window.Modules = {
     create(id, title, width = 820, height = 600) {
       if (windows.has(id)) return windows.get(id).content;
@@ -212,28 +228,32 @@
         drag = {
           x: e.clientX - r.x,
           y: e.clientY - r.y,
-          previousX: r.x,
-          previousY: r.y,
         };
         bar.setPointerCapture(e.pointerId);
       };
       bar.onpointermove = (e) => {
         if (!drag) return;
-        d.style.left = e.clientX - drag.x + "px";
-        d.style.top = e.clientY - drag.y + "px";
-        clamp(w);
-        const r = d.getBoundingClientRect(),
-          linked = windows.get(links.get(id));
-        if (linked?.dialog.open && !linked.pinned && !linked.maximized) {
-          linked.dialog.style.left =
-            linked.dialog.offsetLeft + r.x - drag.previousX + "px";
-          linked.dialog.style.top =
-            linked.dialog.offsetTop + r.y - drag.previousY + "px";
-          clamp(linked);
-          save(links.get(id), linked);
+        const moving = [[id, w], ...linkedPeers(id)],
+          rects = moving.map(([, peer]) => peer.dialog.getBoundingClientRect()),
+          r = rects[0],
+          left = Math.min(...rects.map((r) => r.left)),
+          right = Math.max(...rects.map((r) => r.right)),
+          top = Math.min(...rects.map((r) => r.top)),
+          bottom = Math.max(...rects.map((r) => r.bottom)),
+          dx = Math.max(
+            4 - left,
+            Math.min(e.clientX - drag.x - r.x, innerWidth - 4 - right),
+          ),
+          dy = Math.max(
+            62 - top,
+            Math.min(e.clientY - drag.y - r.y, innerHeight - 36 - bottom),
+          );
+        for (let i = 0; i < moving.length; i++) {
+          const [peerID, peer] = moving[i];
+          peer.dialog.style.left = rects[i].x + dx + "px";
+          peer.dialog.style.top = rects[i].y + dy + "px";
+          save(peerID, peer);
         }
-        drag.previousX = r.x;
-        drag.previousY = r.y;
       };
       d.addEventListener("pointermove", (e) => {
         if (!resize) return;
@@ -288,7 +308,11 @@
       new ResizeObserver(() => {
         if (!d.open) return;
         const r = d.getBoundingClientRect();
-        d.classList.toggle("too-small", r.width < 350 || r.height < 220);
+        d.classList.toggle(
+          "too-small",
+          r.width < (id === "hologram" ? 240 : 350) ||
+            r.height < (id === "hologram" ? 180 : 220),
+        );
         clearTimeout(timer);
         timer = setTimeout(() => save(id, w), 200);
         window.dispatchEvent(new CustomEvent("moduleresize", { detail: id }));
@@ -302,6 +326,13 @@
       return content;
     },
     open: (id) => windows.get(id)?.show(),
+    focus: (id) => {
+      const w = windows.get(id);
+      if (w?.dialog.open) {
+        active(w);
+        w.bar.focus();
+      }
+    },
     close: (id) => windows.get(id)?.hide(),
     isOpen: (id) => !!windows.get(id)?.dialog.open,
     closeAll() {
@@ -320,32 +351,112 @@
         switcher();
       }
     },
-    adjacent(id, anchor) {
+    adjacent(id, anchor, side = "right") {
       const w = windows.get(id),
         a = windows.get(anchor);
-      if (!w || !a) return;
+      if (!w || !a || w.pinned || w.maximized) return;
       const r = a.dialog.getBoundingClientRect();
       w.dialog.style.left =
-        Math.min(innerWidth - w.dialog.offsetWidth - 6, r.right + 8) + "px";
+        (side === "left"
+          ? Math.max(6, r.left - w.dialog.offsetWidth - 8)
+          : Math.min(innerWidth - w.dialog.offsetWidth - 6, r.right + 8)) +
+        "px";
       w.dialog.style.top = r.y + "px";
       clamp(w);
       save(id, w);
     },
     link(a, b, enabled) {
       if (enabled) {
-        links.set(a, b);
-        links.set(b, a);
+        if (!links.has(a)) links.set(a, new Set());
+        if (!links.has(b)) links.set(b, new Set());
+        links.get(a).add(b);
+        links.get(b).add(a);
       } else {
-        links.delete(a);
-        links.delete(b);
+        links.get(a)?.delete(b);
+        links.get(b)?.delete(a);
+        if (!links.get(a)?.size) links.delete(a);
+        if (!links.get(b)?.size) links.delete(b);
       }
     },
-    linked: (id) => links.has(id),
+    linked: (id, anchor) =>
+      anchor ? !!links.get(id)?.has(anchor) : links.has(id),
+    arrangeShip() {
+      const ship = windows.get("ship");
+      if (!ship?.dialog.open) return;
+      const members = ["hologram", "ship", "cargo"]
+        .filter(
+          (id) =>
+            id === "ship" ||
+            (windows.get(id)?.dialog.open && Modules.linked(id, "ship")),
+        )
+        .map((id) => ({ id, w: windows.get(id) }));
+      if (members.some(({ w }) => w.pinned || w.maximized)) {
+        for (const { id } of members)
+          if (id !== "ship")
+            Modules.adjacent(id, "ship", id === "hologram" ? "left" : "right");
+        return;
+      }
+      const sidebar = document.getElementById("sidebar"),
+        left =
+          innerWidth >= 900 && !sidebar.hidden
+            ? sidebar.getBoundingClientRect().right + 12
+            : 6,
+        available = innerWidth - left - 8,
+        gap = 8,
+        rects = members.map(({ w }) => w.dialog.getBoundingClientRect());
+      if (
+        rects.every(
+          (r, i) =>
+            r.left >= left &&
+            r.right <= innerWidth - 8 &&
+            (i === 0 || r.left >= rects[i - 1].right + gap - 1),
+        )
+      )
+        return;
+      const minima = members.map(({ id }) => (id === "hologram" ? 240 : 350)),
+        widths = rects.map((r, i) => Math.max(minima[i], r.width)),
+        total = widths.reduce((a, b) => a + b, 0),
+        minimum = minima.reduce((a, b) => a + b, 0),
+        budget = available - gap * (members.length - 1),
+        fits = budget >= minimum;
+      if (fits && total > budget) {
+        const extra = total - minimum;
+        widths.forEach(
+          (v, i) =>
+            (widths[i] =
+              minima[i] + ((v - minima[i]) * (budget - minimum)) / extra),
+        );
+      } else if (!fits) {
+        widths.forEach((v, i) => (widths[i] = Math.min(minima[i], available)));
+      }
+      const span =
+          widths.reduce((a, b) => a + b, 0) + gap * (members.length - 1),
+        maxHeight = Math.max(...rects.map((r) => r.height)),
+        y = Math.max(
+          64,
+          Math.min(ship.dialog.offsetTop, innerHeight - maxHeight - 36),
+        );
+      let x = left + Math.max(0, (available - span) / 2);
+      members.forEach(({ id, w }, i) => {
+        if (!fits)
+          x =
+            left +
+            (available - widths[i]) *
+              (members.length === 1 ? 0.5 : i / (members.length - 1));
+        w.dialog.style.width = widths[i] + "px";
+        w.dialog.style.left = x + "px";
+        w.dialog.style.top = y + "px";
+        clamp(w);
+        save(id, w);
+        x += widths[i] + gap;
+      });
+    },
   };
   for (const [id, title, w, h] of [
     ["galaxy", "Галактическая карта", 1180, 700],
-    ["ship", "Корабль", 660, 640],
-    ["cargo", "Трюм", 420, 590],
+    ["ship", "Корабль", 480, 640],
+    ["hologram", "Голограмма корабля", 360, 470],
+    ["cargo", "Трюм", 360, 590],
     ["research", "Разведка и добыча", 1000, 660],
     ["market", "Рынок", 1060, 660],
     ["corporations", "Корпорация", 1000, 660],
@@ -362,6 +473,11 @@
     ["portal", "Портал Эдема", 700, 560],
   ])
     Modules.create(id, title, w, h);
+  let arrangeTimer;
+  window.addEventListener("resize", () => {
+    clearTimeout(arrangeTimer);
+    arrangeTimer = setTimeout(() => Modules.arrangeShip(), 80);
+  });
   const settings = document.querySelector("#window-settings .module-content");
   settings.append(node("h3", tr("Язык")));
   const language = node("select");
