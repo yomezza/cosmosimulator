@@ -48,9 +48,16 @@ func resourceCatalog() []map[string]any {
 	return out
 }
 func variedResources(star, object int, kind string) []string {
+	return variedStarResources(Star{ID: star}, object, kind)
+}
+func variedStarResources(s Star, object int, kind string) []string {
+	star := s.ID
 	rng := rand.New(rand.NewSource(int64(star)*104729 + int64(object)*7919))
 	out := []string{}
 	add := func(id string, chance float64) {
+		if s.ResourceWeights != nil {
+			chance *= float64(s.ResourceWeights[id]) / 100
+		}
 		if rng.Float64() < chance {
 			out = append(out, id)
 		}
@@ -77,7 +84,7 @@ func variedResources(star, object int, kind string) []string {
 		add("orichalcum", .12)
 		add("vajra", .06)
 	}
-	if len(out) == 0 {
+	if len(out) == 0 && s.ResourceWeights == nil {
 		if kind == "Ледяная" || kind == "Ледяное поле" {
 			out = append(out, "water")
 		} else if kind == "Газовый гигант" {
@@ -87,7 +94,12 @@ func variedResources(star, object int, kind string) []string {
 		}
 	}
 	if star == 1 && object == 101 {
-		return []string{"iron", "carbon", "orichalcum"}
+		out = []string{}
+		for _, id := range []string{"iron", "carbon", "orichalcum"} {
+			if s.ResourceWeights == nil || s.ResourceWeights[id] > 0 {
+				out = append(out, id)
+			}
+		}
 	}
 	return out
 }

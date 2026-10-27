@@ -80,7 +80,7 @@ func TestIntegration(t *testing.T) {
 	w = request("GET", "/api/galaxy", "", cookie)
 	assert(w, 200)
 	var galaxy Galaxy
-	if err = json.Unmarshal(w.Body.Bytes(), &galaxy); err != nil || len(galaxy.Stars) != 1000 {
+	if err = json.Unmarshal(w.Body.Bytes(), &galaxy); err != nil || len(galaxy.Stars) != 3000 {
 		t.Fatal("invalid persisted galaxy", err)
 	}
 	w = request("GET", "/api/route?from=1&to=5", "", cookie)
@@ -93,10 +93,10 @@ func TestIntegration(t *testing.T) {
 	}
 	w = request("GET", "/api/route?from=1&to=2", "", cookie)
 	assert(w, 200)
-	if err = json.Unmarshal(w.Body.Bytes(), &journey); err != nil || journey.Path != nil {
+	if err = json.Unmarshal(w.Body.Bytes(), &journey); err != nil || len(journey.Path) < 2 {
 		t.Fatal("unreachable route returned", err)
 	}
-	assert(request("GET", "/api/route?from=1&to=1001", "", cookie), 400)
+	assert(request("GET", "/api/route?from=1&to=3001", "", cookie), 400)
 
 	assert(request("POST", "/api/register", `{"username":"pilot","password":"a-long-test-password"}`, nil), 409)
 	assert(request("POST", "/api/login", `{"username":"pilot","password":"wrong"}`, nil), 401)

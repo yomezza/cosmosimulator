@@ -378,14 +378,19 @@ func (a *App) portalCommand(ctx context.Context, tx pgx.Tx, u User, s *Ship, g *
 				target = id
 			}
 		}
-		if s.Star > 1000 {
-			near = s.Star == 1001
+		if galaxyKey(g.Stars[s.Star-1]) == "asterion" {
+			near = g.Stars[s.Star-1].Number == 1
 		}
 		if !near {
 			return errors.New("Прибудьте в одну из систем у чёрной дыры")
 		}
-		if s.Star <= 1000 {
-			target = 1001
+		if galaxyKey(g.Stars[s.Star-1]) == "edem" {
+			for _, star := range g.Stars {
+				if galaxyKey(star) == "asterion" && star.Number == 1 {
+					target = star.ID
+					break
+				}
+			}
 		}
 		_, err := tx.Exec(ctx, `UPDATE ships SET star=$2,object_id='entry',position_mode='approach',waypoints='[]',reserved_fuel=0 WHERE id=$1`, s.ID, target)
 		return err
@@ -412,37 +417,23 @@ func (a *App) portalCommand(ctx context.Context, tx pgx.Tx, u User, s *Ship, g *
 		if err = json.Unmarshal(raw, &expanded); err != nil {
 			return err
 		}
-		if len(expanded.Stars) == 1000 {
-			other := generateGalaxy(1000, 20261027)
-			for _, s := range other.Stars {
-				s.ID += 1000
-				s.Name = fmt.Sprintf("NX-%04d", s.ID-1000)
-				s.Galaxy = "Edem-II"
-				if s.Region < 0 {
-					s.Region = -2
-				} else {
-					s.Region += 4
-				}
-				for i := range s.Planets {
-					s.Planets[i].Name = fmt.Sprintf("%s-%c", s.Name, 'b'+i)
-				}
-				expanded.Stars = append(expanded.Stars, s)
+		if !expanded.definition("asterion").Opened {
+			if err = appendGalaxySystems(&expanded, "asterion", 1000); err != nil {
+				return err
 			}
 			expanded.Regions = append(expanded.Regions, frontierRegions...)
-			for _, lane := range other.Lanes {
-				lane.From += 1000
-				lane.To += 1000
-				expanded.Lanes = append(expanded.Lanes, lane)
+			assignGalaxyContent(&expanded, "asterion")
+			rebuildGalaxyLanes(&expanded, "asterion", nil)
+			expanded.Revision++
+			raw, err = json.Marshal(expanded)
+			if err != nil {
+				return err
 			}
-			expanded.NamingVersion = 0
-			diversifySystemNames(&expanded)
-			arrangeFrontierRings(&expanded)
-			raw, _ = json.Marshal(expanded)
 			if _, err = tx.Exec(ctx, `UPDATE galaxies SET data=$1 WHERE name='Edem'`, raw); err != nil {
 				return err
 			}
 		}
-		return recordEvent(ctx, tx, u.ID, "portal_open", map[string]any{"galaxy": "Edem-II"})
+		return recordEvent(ctx, tx, u.ID, "portal_open", map[string]any{"galaxy": expanded.definition("asterion").Name})
 	}
 	return nil
 }

@@ -92,6 +92,13 @@ func openDatabase(ctx context.Context, dsn, schema string) (*pgxpool.Pool, error
 	if _, e = tx.Exec(ctx, string(upgrade040)); e != nil {
 		return nil, fmt.Errorf("upgrade 0.4.0: %w", e)
 	}
+	upgrade050, e := assets.ReadFile("schema050.sql")
+	if e != nil {
+		return nil, e
+	}
+	if _, e = tx.Exec(ctx, string(upgrade050)); e != nil {
+		return nil, fmt.Errorf("upgrade 0.5.0: %w", e)
+	}
 	var galaxyExists bool
 	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM galaxies WHERE name='Edem')`).Scan(&galaxyExists); err != nil {
 		return nil, err
@@ -150,6 +157,17 @@ func openDatabase(ctx context.Context, dsn, schema string) (*pgxpool.Pool, error
 		}
 	}
 	if arrangeFrontierRings(&existing) {
+		raw, err = json.Marshal(existing)
+		if err != nil {
+			return nil, err
+		}
+		if _, err = tx.Exec(ctx, `UPDATE galaxies SET data=$1 WHERE name='Edem'`, raw); err != nil {
+			return nil, err
+		}
+	}
+	if changed, e := upgradeManagedGalaxies(ctx, tx, &existing); e != nil {
+		return nil, e
+	} else if changed {
 		raw, err = json.Marshal(existing)
 		if err != nil {
 			return nil, err

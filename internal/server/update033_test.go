@@ -143,7 +143,7 @@ func Test033ResearchDataAndNotifications(t *testing.T) {
 		t.Fatal("invalid compressed response", err)
 	}
 
-	f.req(one, "GET", "/api/system?id=1", nil, 403)
+	f.req(one, "GET", "/api/system?id=1", nil, 200)
 	estimate := f.req(one, "GET", "/api/estimate?to=5", nil, 200)
 	var plan struct {
 		Fuel    int `json:"fuel"`
@@ -313,13 +313,13 @@ func Test033CorporateRolesAndPortal(t *testing.T) {
 	f.exec(`UPDATE portal SET required=100`)
 	f.cmd(one, map[string]any{"action": "portal_contribute", "amount": 100}, 200)
 	g, err := f.app.loadUniverse(f.ctx)
-	if err != nil || len(g.Stars) != 2000 {
+	if err != nil || len(g.Stars) != 4000 {
 		t.Fatal("portal galaxy", err)
 	}
 	core := coreSystems(g)[0]
 	f.exec(`UPDATE ships SET star=$2 WHERE user_id=$1`, id1, core)
 	f.cmd(one, map[string]any{"action": "portal_travel"}, 200)
-	if f.integer(`SELECT star FROM ships WHERE user_id=$1`, id1) != 1001 {
+	if f.integer(`SELECT star FROM ships WHERE user_id=$1`, id1) != int64(galaxyStars(g, "asterion")[0].ID) {
 		t.Fatal("portal transition")
 	}
 }

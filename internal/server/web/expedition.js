@@ -16,7 +16,8 @@
       "profile",
       "users",
       "gameplay",
-      "events",
+      "galaxies",
+      "adminchanges",
       "notifications",
       "guide",
       "tasks",
@@ -2292,22 +2293,8 @@
         ),
       ),
     );
-    const log = await api("admin/log");
-    const details = n("details");
-    details.append(n("summary", tr("Журнал администратора")));
-    for (const event of log.slice(0, 20))
-      details.append(
-        n(
-          "p",
-          fmtTime(event.at) +
-            " · " +
-            tr(event.kind) +
-            " · " +
-            (event.data.actor_name || event.data.actor),
-        ),
-      );
-    root.append(details);
   }
+
   const eventNames = {
     arrival: "Корабль прибыл",
     mining_complete: "Добыча завершена",
@@ -2796,17 +2783,6 @@
     );
     if (!w().ledger?.length) UI.empty(root, "Операций пока нет");
   }
-  async function renderEvents() {
-    const root = roots.events,
-      events = await api("events");
-    reset(root);
-    root.append(
-      UI.table(
-        ["Дата", "Событие"],
-        events.map((event) => [fmtTime(event.at), eventText(event)]),
-      ),
-    );
-  }
   function renderPortal() {
     const root = roots.portal;
     reset(root);
@@ -2853,8 +2829,8 @@
       n(
         "p",
         tr(
-          d().ship.star > 1000
-            ? "Обратный переход доступен из NX-0001."
+          window.MapData?.stars[d().ship.star - 1]?.galaxy === "asterion"
+            ? "Обратный переход доступен из входной системы Астериона."
             : "Переход доступен из систем у центральной чёрной дыры.",
         ),
         "muted",
@@ -3064,7 +3040,8 @@
     profile: renderProfile,
     users: renderUsers,
     gameplay: renderGameplay,
-    events: renderEvents,
+    galaxies: () => GalaxyAdmin.render(roots.galaxies),
+    adminchanges: () => GalaxyAdmin.logs(roots.adminchanges),
     notifications: renderNotifications,
     guide: renderGuide,
     tasks: renderTasks,
@@ -3075,7 +3052,8 @@
   const onDemand = new Set([
     "users",
     "gameplay",
-    "events",
+    "galaxies",
+    "adminchanges",
     "guide",
     "corporations",
   ]);
@@ -3128,6 +3106,15 @@
   }
   window.addEventListener("moduleopen", async (e) => {
     if (!signedIn) return;
+    if (
+      ["users", "gameplay", "benchmark", "galaxies", "adminchanges"].includes(
+        e.detail,
+      ) &&
+      gameData.state?.user.role !== "admin"
+    ) {
+      Modules.close(e.detail);
+      return;
+    }
     const epoch = authEpoch;
     try {
       await ensureMap();

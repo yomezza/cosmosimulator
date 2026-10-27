@@ -18,7 +18,7 @@ var originalCore = func() map[int]bool {
 func addCustomSites(ctx context.Context, db interface {
 	Query(context.Context, string, ...any) (pgx.Rows, error)
 }, s Star, sites []Site) ([]Site, error) {
-	rows, err := db.Query(ctx, `SELECT object_id,name FROM stations WHERE star=$1 ORDER BY object_id`, s.ID)
+	rows, err := db.Query(ctx, `SELECT object_id,name FROM stations WHERE star=$1 AND active ORDER BY object_id`, s.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -40,7 +40,7 @@ func addCustomSites(ctx context.Context, db interface {
 }
 func stationAllows(ctx context.Context, q querier, star int, id, res string) bool {
 	var goods []string
-	if err := q.QueryRow(ctx, `SELECT goods FROM stations WHERE star=$1 AND object_id=$2`, star, id).Scan(&goods); err != nil {
+	if err := q.QueryRow(ctx, `SELECT goods FROM stations WHERE star=$1 AND object_id=$2 AND active`, star, id).Scan(&goods); err != nil {
 		return false
 	}
 	for _, item := range goods {

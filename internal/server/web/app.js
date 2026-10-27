@@ -104,6 +104,19 @@ async function refreshData() {
     ])
       $(id).hidden = false;
     $("admin-menu").hidden = state.user.role !== "admin";
+    if (state.user.role !== "admin")
+      for (const id of [
+        "users",
+        "gameplay",
+        "benchmark",
+        "galaxies",
+        "adminchanges",
+      ]) {
+        Modules.close(id);
+        document
+          .querySelector("#window-" + id + " .module-content")
+          ?.replaceChildren();
+      }
     $("profile-nick").textContent = state.user.username;
     $("welcome-name").textContent = state.user.username;
     const company = $("overview-company");

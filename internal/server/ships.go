@@ -55,7 +55,7 @@ func buyShip(ctx context.Context, tx pgx.Tx, u User, s Ship, in Command) error {
 	}
 	var price int64
 	var quantity int
-	err := tx.QueryRow(ctx, `SELECT y.price,y.quantity FROM shipyard_stock y JOIN stations p ON p.star=y.star AND p.object_id=y.station WHERE y.star=$1 AND y.station=$2 AND y.ship_class=$3 AND p.shipyard FOR UPDATE OF y`, s.Star, s.ObjectID, id).Scan(&price, &quantity)
+	err := tx.QueryRow(ctx, `SELECT y.price,y.quantity FROM shipyard_stock y JOIN stations p ON p.star=y.star AND p.object_id=y.station WHERE y.star=$1 AND y.station=$2 AND y.ship_class=$3 AND p.shipyard AND p.active FOR UPDATE OF y`, s.Star, s.ObjectID, id).Scan(&price, &quantity)
 	if errors.Is(err, pgx.ErrNoRows) || err == nil && quantity < 1 {
 		return errors.New("На верфи нет доступных кораблей")
 	}

@@ -240,6 +240,10 @@ func (a *App) events(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if u.Role != "admin" {
+		fail(w, 403, "Требуется роль администратора")
+		return
+	}
 	admin := r.URL.Path == "/api/admin/log"
 	if admin && u.Role != "admin" {
 		fail(w, 403, "Требуется роль администратора")

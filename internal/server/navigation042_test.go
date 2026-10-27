@@ -1,9 +1,9 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"math"
-	"reflect"
 	"testing"
 )
 
@@ -21,7 +21,7 @@ func TestAdminTeleport(t *testing.T) {
 	f.req(player, "POST", "/api/admin/teleport", map[string]any{"to": 5}, 403)
 	teleport(map[string]any{"to": 5}, 403)
 	f.exec(`UPDATE users SET role='admin' WHERE id=$1`, uid)
-	for _, to := range []int{-1, 0, 1001, 2001} {
+	for _, to := range []int{-1, 0, 3001, 10001} {
 		teleport(map[string]any{"to": to}, 400)
 	}
 	teleport(map[string]any{"to": 5, "ship": otherShip}, 404)
@@ -46,7 +46,7 @@ func TestAdminTeleport(t *testing.T) {
 	if f.integer(`SELECT credits FROM users WHERE id=$1`, uid) != credits || f.integer(`SELECT count(*) FROM surveys WHERE user_id=$1 AND star=1000`, uid) != 0 {
 		t.Fatal("teleport changed finances or revealed unexplored objects")
 	}
-	f.req(admin, "GET", "/api/system?id=1000", nil, 403)
+	f.req(admin, "GET", "/api/system?id=1000", nil, 200)
 	if f.integer(`SELECT count(*) FROM admin_log WHERE actor=$1 AND action='teleport' AND (data->>'from')::int=1 AND (data->>'to')::int=1000 AND (data->>'ship')::bigint=$2`, uid, sid) != 1 {
 		t.Fatal("missing audit record")
 	}
@@ -74,62 +74,34 @@ func TestAdminTeleport(t *testing.T) {
 
 func TestFrontierRingsUpgrade(t *testing.T) {
 	f := newFixture033(t)
-	cookie, uid := f.signup("rings042")
-	f.exec(`UPDATE portal SET required=100`)
-	f.cmd(cookie, map[string]any{"action": "portal_contribute", "amount": 100}, 200)
-	g, err := f.app.loadUniverse(f.ctx)
-	if err != nil || len(g.Stars) != 2000 || g.RingLayoutVersion != 1 {
-		t.Fatal("newly unlocked galaxy lacks rings", err)
-	}
-	assertRings := func(g *Galaxy) {
-		t.Helper()
-		belts := [3]int{}
-		for _, s := range g.Stars[1000:] {
-			r := math.Hypot(s.X, s.Y)
-			if s.Region < 0 {
-				if r < 1119 || len(g.path(1001, s.ID)) != 0 {
-					t.Fatal("isolated system moved into the connected rings", s.ID)
-				}
-				continue
-			}
-			belt := int(math.Round((r - 390) / 290))
-			if belt < 0 || belt > 2 || math.Abs(r-(390+float64(belt)*290)) > 41 {
-				t.Fatalf("system %d outside the three belts: %f", s.ID, r)
-			}
-			belts[belt]++
-			if len(g.path(1001+s.Region-4, s.ID)) == 0 {
-				t.Fatal("region disconnected", s.ID)
-			}
+	_, uid := f.signup("rings050")
+	legacy := generateGalaxy(1000, 20261026)
+	frontier := generateGalaxy(1000, 20261027)
+	for _, star := range frontier.Stars {
+		star.ID += 1000
+		star.Galaxy = "Edem-II"
+		if star.Region < 0 {
+			star.Region = -2
+		} else {
+			star.Region += 4
 		}
-		for _, n := range belts {
-			if n < 50 {
-				t.Fatal("empty ring", belts)
-			}
-		}
+		legacy.Stars = append(legacy.Stars, star)
 	}
-	assertRings(g)
-	f.exec(`UPDATE users SET role='admin' WHERE id=$1`, uid)
-	f.req(cookie, "POST", "/api/admin/teleport", map[string]any{"to": 1001}, 200)
-	f.req(cookie, "POST", "/api/admin/teleport", map[string]any{"to": 1}, 200)
-	f.req(cookie, "GET", "/api/workbench", nil, 200)
-	// Simulate a previously opened 0.4.1 frontier; preserve all persistent identity.
-	raw, _ := json.Marshal(g)
-	var legacy Galaxy
-	_ = json.Unmarshal(raw, &legacy)
-	spiral := generateGalaxy(1000, 20261027)
-	for i, s := range spiral.Stars {
-		legacy.Stars[1000+i].X, legacy.Stars[1000+i].Y = s.X, s.Y
+	for _, lane := range frontier.Lanes {
+		legacy.Lanes = append(legacy.Lanes, Lane{lane.From + 1000, lane.To + 1000})
 	}
-	legacy.RingLayoutVersion = 0
-	raw, _ = json.Marshal(legacy)
+	legacy.Regions = append(legacy.Regions, frontierRegions...)
+	raw, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
 	f.exec(`UPDATE galaxies SET data=$1 WHERE name='Edem'`, raw)
+	f.exec(`UPDATE portal SET active=TRUE`)
 	f.exec(`UPDATE ships SET star=1001,destination=1005,departure=now(),arrival=now()+interval '1 hour',travel_path='[1001,1005]',cargo='{"iron":4}' WHERE user_id=$1`, uid)
 	f.exec(`INSERT INTO surveys(user_id,star) VALUES($1,1001)`, uid)
-	var shipBefore, stationsBefore []byte
-	_ = f.db.QueryRow(f.ctx, `SELECT to_jsonb(s) FROM ships s WHERE user_id=$1`, uid).Scan(&shipBefore)
-	_ = f.db.QueryRow(f.ctx, `SELECT jsonb_agg(to_jsonb(s) ORDER BY star,object_id) FROM stations s`).Scan(&stationsBefore)
 	var schema string
 	_ = f.db.QueryRow(f.ctx, `SELECT current_schema()`).Scan(&schema)
+	var previous []byte
 	for range 2 {
 		db, err := openDatabase(f.ctx, f.db.Config().ConnString(), schema)
 		if err != nil {
@@ -139,17 +111,41 @@ func TestFrontierRingsUpgrade(t *testing.T) {
 		if err = f.db.QueryRow(f.ctx, `SELECT data FROM galaxies WHERE name='Edem'`).Scan(&raw); err != nil {
 			t.Fatal(err)
 		}
-		var upgraded Galaxy
-		_ = json.Unmarshal(raw, &upgraded)
-		assertRings(&upgraded)
-		if !reflect.DeepEqual(upgraded, *g) || !reflect.DeepEqual(upgraded.Stars[:1000], legacy.Stars[:1000]) || !reflect.DeepEqual(upgraded.Lanes, legacy.Lanes) {
-			t.Fatal("upgrade drifted or modified Edem/corridors")
+		var g Galaxy
+		if err = json.Unmarshal(raw, &g); err != nil {
+			t.Fatal(err)
 		}
-		var shipAfter, stationsAfter []byte
-		_ = f.db.QueryRow(f.ctx, `SELECT to_jsonb(s) FROM ships s WHERE user_id=$1`, uid).Scan(&shipAfter)
-		_ = f.db.QueryRow(f.ctx, `SELECT jsonb_agg(to_jsonb(s) ORDER BY star,object_id) FROM stations s`).Scan(&stationsAfter)
-		if string(shipBefore) != string(shipAfter) || string(stationsBefore) != string(stationsAfter) || f.integer(`SELECT count(*) FROM surveys WHERE user_id=$1 AND star=1001`, uid) != 1 {
-			t.Fatal("upgrade changed existing fleet, stations, or discovery")
+		if len(g.Stars) != 4000 || len(galaxyStars(&g, "edem")) != 3000 || len(galaxyStars(&g, "asterion")) != 1000 || g.definition("asterion").Name != "Астерион" {
+			t.Fatal("galaxy membership lost")
+		}
+		for i, old := range legacy.Stars {
+			if g.Stars[i].ID != old.ID || g.Stars[i].Name != old.Name {
+				t.Fatal("legacy identity changed", old.ID)
+			}
+		}
+		belts := [3]int{}
+		for _, s := range galaxyStars(&g, "asterion") {
+			r := math.Hypot(s.X, s.Y)
+			if s.Region < 0 {
+				continue
+			}
+			belt := int(math.Round((r - 390) / 290))
+			if belt < 0 || belt > 2 || math.Abs(r-(390+float64(belt)*290)) > 41 {
+				t.Fatal("frontier no longer rings", s.ID, r)
+			}
+			belts[belt]++
+		}
+		for _, n := range belts {
+			if n < 50 {
+				t.Fatal("missing ring", belts)
+			}
+		}
+		if previous != nil && !bytes.Equal(previous, raw) {
+			t.Fatal("restart changed the upgraded map again")
+		}
+		previous = append([]byte(nil), raw...)
+		if f.integer(`SELECT count(*) FROM ships WHERE user_id=$1 AND star=1001 AND destination=1005 AND cargo='{"iron":4}' AND travel_path='[1001,1005]'`, uid) != 1 || f.integer(`SELECT count(*) FROM surveys WHERE user_id=$1 AND star=1001`, uid) != 1 {
+			t.Fatal("legacy progress lost")
 		}
 	}
 }

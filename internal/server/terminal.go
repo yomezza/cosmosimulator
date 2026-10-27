@@ -37,12 +37,19 @@ func systemSites(s Star) []Site {
 	for _, p := range s.Planets {
 		sites = append(sites, Site{ID: fmt.Sprintf("planet-%d", p.ID), Name: p.Name, Kind: p.Kind, Orbit: p.AU, Resources: p.Resources, Planet: p.ID, Details: &p})
 	}
-	sites = append(sites, Site{ID: "asteroids", Name: s.Name + " · A", Kind: "Пояс астероидов", Orbit: 2.3 * scale, Resources: variedResources(s.ID, 101, "Пояс астероидов"), Planet: 101})
+	sites = append(sites, Site{ID: "asteroids", Name: s.Name + " · A", Kind: "Пояс астероидов", Orbit: 2.3 * scale, Resources: variedStarResources(s, 101, "Пояс астероидов"), Planet: 101})
 	if s.ID%2 == 0 {
-		sites = append(sites, Site{ID: "ice", Name: s.Name + " · I", Kind: "Ледяное поле", Orbit: 6.5 * scale, Resources: variedResources(s.ID, 102, "Ледяное поле"), Planet: 102})
+		sites = append(sites, Site{ID: "ice", Name: s.Name + " · I", Kind: "Ледяное поле", Orbit: 6.5 * scale, Resources: variedStarResources(s, 102, "Ледяное поле"), Planet: 102})
 	}
+	ports := 0
 	if hasStation(s.ID) {
-		for i := 0; i < 1+s.ID%3; i++ {
+		ports = 1 + s.ID%3
+	}
+	if s.Ports != nil {
+		ports = *s.Ports
+	}
+	if ports > 0 {
+		for i := 0; i < ports; i++ {
 			id := "station"
 			if i > 0 {
 				id = fmt.Sprintf("station-%d", i+1)
@@ -73,22 +80,15 @@ func (a *App) systemView(w http.ResponseWriter, r *http.Request) {
 		a.internal(w, err)
 		return
 	}
-	if !scanned {
-		fail(w, 403, "Сначала исследуйте систему или купите разведданные")
-		return
-	}
 	sites, siteErr := addCustomSites(r.Context(), a.db, s, systemSites(s))
 	if siteErr != nil {
 		a.internal(w, siteErr)
 		return
 	}
-	if !scanned {
-		for i := range sites {
-			sites[i].Resources = nil
-			if sites[i].Details != nil {
-				sites[i].Details.Resources = nil
-			}
-		}
+	sites, err = revealedSites(r.Context(), a.db, u.ID, id, sites, scanned)
+	if err != nil {
+		a.internal(w, err)
+		return
 	}
 	if scanned {
 		tx, err := a.db.Begin(r.Context())
@@ -118,6 +118,8 @@ func (a *App) systemView(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.Planets = nil
+	s.Ports = nil
+	s.ResourceWeights = nil
 	reply(w, 200, map[string]any{"star": s, "region": regionName(s.Region), "surveyed": scanned, "sites": sites})
 }
 func (a *App) profile(w http.ResponseWriter, r *http.Request) {
@@ -392,7 +394,7 @@ func (a *App) companyList(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if c.Founder && !exists {
-				if err = a.db.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM stations WHERE founder=$1 AND star=ANY($2::int[]))`, c.ID, stars).Scan(&exists); err != nil {
+				if err = a.db.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM stations WHERE founder=$1 AND active AND star=ANY($2::int[]))`, c.ID, stars).Scan(&exists); err != nil {
 					a.internal(w, err)
 					return
 				}
@@ -633,7 +635,7 @@ func (a *App) globalMarket(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		var exists bool
-		if err = tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM stations WHERE star=$1 AND object_id=$2)`, star, station).Scan(&exists); err != nil {
+		if err = tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM stations WHERE star=$1 AND object_id=$2 AND active)`, star, station).Scan(&exists); err != nil {
 			a.internal(w, err)
 			return
 		}

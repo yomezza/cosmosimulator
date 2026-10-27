@@ -32,6 +32,7 @@
       planets: true,
       belts: true,
       labels: true,
+      territories: true,
     };
   for (const [id, text] of [
     ["ships", "Мои корабли"],
@@ -39,6 +40,7 @@
     ["planets", "Планеты"],
     ["belts", "Месторождения"],
     ["labels", "Подписи"],
+    ["territories", "Владения корпораций"],
   ]) {
     const l = e("label"),
       i = e("input"),
@@ -69,7 +71,7 @@
     e(
       "p",
       tr(
-        "Янтарный — маршрут · голубой — свои корабли · кольцо — выбранная система",
+        "Янтарный — маршрут · голубой — свои корабли · цвет изученной звезды — её спектральный класс · полупрозрачные области — владения корпораций",
       ),
     ),
   );
@@ -77,9 +79,194 @@
   body.append(view, side);
   root.append(top, body);
   const ctx = canvas.getContext("2d");
+  const summary = e("div", undefined, "map-system-summary");
+  summary.id = "map-system-summary";
+  summary.hidden = true;
+  summary.setAttribute("role", "tooltip");
+  document.body.append(summary);
+  let territorySource,
+    territories = [],
+    hoverID = null,
+    hoverTimer,
+    hoverGeneration = 0;
+  const summaryCache = new Map();
+  let knownStars = new Set();
+  function hideSummary() {
+    hoverID = null;
+    clearTimeout(hoverTimer);
+    hoverGeneration++;
+    summary.hidden = true;
+  }
+  canvas.onpointerleave = hideSummary;
+  function buildTerritories() {
+    if (territorySource === galaxy) return;
+    territorySource = galaxy;
+    territories = [];
+    const groups = new Map();
+    for (const s of galaxy.stars) {
+      if (!s.founder) continue;
+      const key = s.galaxy + "/" + s.region;
+      const group = groups.get(key) || [];
+      group.push(s);
+      groups.set(key, group);
+    }
+    const cross = (a, b, c) =>
+      (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+    for (const points of groups.values()) {
+      const sorted = [...points].sort((a, b) => a.x - b.x || a.y - b.y),
+        lower = [],
+        upper = [];
+      for (const p of sorted) {
+        while (lower.length > 1 && cross(lower.at(-2), lower.at(-1), p) <= 0)
+          lower.pop();
+        lower.push(p);
+      }
+      for (const p of [...sorted].reverse()) {
+        while (upper.length > 1 && cross(upper.at(-2), upper.at(-1), p) <= 0)
+          upper.pop();
+        upper.push(p);
+      }
+      const hull = lower.slice(0, -1).concat(upper.slice(0, -1)),
+        owner = galaxy.founders?.find(
+          (c) => c.founder_key === points[0].founder,
+        );
+      if (hull.length >= 3 && owner)
+        territories.push({
+          galaxy: points[0].galaxy,
+          points: hull,
+          color: owner.color,
+        });
+    }
+  }
+  function drawTerritories() {
+    if (!flags.territories) return;
+    ctx.save();
+    for (const area of territories) {
+      if (area.galaxy !== viewedGalaxy) continue;
+      const points = area.points.map(galaxyPoint);
+      ctx.beginPath();
+      const first = points[0],
+        last = points.at(-1);
+      ctx.moveTo((last.x + first.x) / 2, (last.y + first.y) / 2);
+      for (let i = 0; i < points.length; i++) {
+        const p = points[i],
+          next = points[(i + 1) % points.length];
+        ctx.quadraticCurveTo(p.x, p.y, (p.x + next.x) / 2, (p.y + next.y) / 2);
+      }
+      ctx.closePath();
+      ctx.fillStyle = area.color;
+      ctx.globalAlpha = 0.065;
+      ctx.fill();
+      ctx.strokeStyle = area.color;
+      ctx.globalAlpha = 0.22;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  function hoverSummary(event) {
+    const bounds = canvas.getBoundingClientRect(),
+      x = event.clientX - bounds.x,
+      y = event.clientY - bounds.y;
+    let closest = null,
+      distance = 9;
+    for (const star of galaxy.stars) {
+      if (star.galaxy !== viewedGalaxy) continue;
+      const p = galaxyPoint(star),
+        d = Math.hypot(x - p.x, y - p.y);
+      if (d < distance) {
+        distance = d;
+        closest = star;
+      }
+    }
+    if (!closest) {
+      hideSummary();
+      return;
+    }
+    summary.style.left =
+      Math.max(8, Math.min(event.clientX + 16, innerWidth - 310)) + "px";
+    summary.style.top =
+      Math.max(8, Math.min(event.clientY + 16, innerHeight - 240)) + "px";
+    if (hoverID === closest.id) return;
+    hideSummary();
+    hoverID = closest.id;
+    const generation = hoverGeneration,
+      epoch = authEpoch,
+      star = closest;
+    hoverTimer = setTimeout(async () => {
+      if (hoverID !== star.id) return;
+      const owner = galaxy.founders?.find(
+          (c) => c.founder_key === star.founder,
+        ),
+        region = galaxy.regions?.find((r) => r.id === star.region);
+      summary.replaceChildren(
+        e("b", star.name),
+        e(
+          "small",
+          tr(definition()?.name || "") + " · " + tr(region?.name || ""),
+        ),
+        e(
+          "p",
+          `${tr("Класс звезды")}: ${star.class} · ${star.mass} M☉ · ${star.luminosity} L☉`,
+        ),
+      );
+      const badge = e(
+        "span",
+        owner
+          ? `${owner.flag} [${owner.tag}] ${owner.name}`
+          : tr("Нейтральная система"),
+        "map-owner",
+      );
+      if (owner) badge.style.color = owner.color;
+      summary.append(badge);
+      const known = Game.known(star.id),
+        progress =
+          gameData.workbench?.research?.find((r) => r.star === star.id)
+            ?.scanned || 0;
+      summary.append(
+        e(
+          "p",
+          tr(
+            known
+              ? "Система исследована"
+              : progress
+                ? "Сканирование раскрывает объекты по очереди."
+                : "Объекты скрыты. Исследуйте систему, чтобы открыть их.",
+          ),
+          "muted",
+        ),
+      );
+      summary.hidden = false;
+      if (!known && !progress) return;
+      const cacheKey = `${star.id}/${known}/${progress}/${galaxy.revision}`;
+      try {
+        let data = summaryCache.get(cacheKey);
+        if (!data) {
+          data = await api("system?id=" + star.id);
+          summaryCache.set(cacheKey, data);
+        }
+        if (
+          generation !== hoverGeneration ||
+          epoch !== authEpoch ||
+          hoverID !== star.id ||
+          !signedIn
+        )
+          return;
+        const text = [
+          `${tr("Планеты")}: ${data.sites.filter((s) => s.details).length}`,
+          `${tr("Порты")}: ${data.sites.filter((s) => s.kind === "Орбитальная станция").length}`,
+          `${tr("Месторождения")}: ${data.sites.filter((s) => s.planet >= 101).length}`,
+        ];
+        summary.append(e("p", text.join(" · ")));
+      } catch (error) {
+        if (generation === hoverGeneration)
+          summary.append(e("p", tr("Сводка временно недоступна"), "muted"));
+      }
+    }, 180);
+  }
   let galaxy,
     local,
-    viewedGalaxy = 0,
+    viewedGalaxy = "edem",
     mode = "galaxy",
     camera = {
       galaxy: { zoom: 1, x: 0, y: 0 },
@@ -98,21 +285,28 @@
     hoveredSite = null,
     panelTab = "route",
     routeStops = [];
+  const starGalaxy = (id) => galaxy?.stars[id - 1]?.galaxy || "edem";
+  const definition = () => galaxy?.galaxies?.find((g) => g.id === viewedGalaxy);
+  const galaxyTitle = () =>
+    tr(definition()?.name || "Edem") +
+    " · " +
+    (galaxy?.stars.filter((s) => s.galaxy === viewedGalaxy).length || 0);
   function updateGalaxyPicker() {
     if (!galaxy) return;
+    const entries = (galaxy.galaxies || []).filter((g) => g.opened);
+    if (!entries.some((g) => g.id === viewedGalaxy))
+      viewedGalaxy = entries[0]?.id || "edem";
     const picker = UI.picker(
-      galaxy.stars.length > 1000
-        ? [
-            [0, "Edem"],
-            [1, "Edem-II"],
-          ]
-        : [[0, "Edem"]],
+      entries.map((g) => [g.id, tr(g.name)]),
       viewedGalaxy,
       (value) => {
-        viewedGalaxy = Number(value);
+        request++;
+        viewedGalaxy = value;
         selected =
-          fleet().find((ship) => ship.star > 1000 === !!viewedGalaxy)?.star ||
-          (viewedGalaxy ? 1001 : 1);
+          fleet().find((ship) => starGalaxy(ship.star) === viewedGalaxy)
+            ?.star ||
+          galaxy.stars.find((s) => s.galaxy === viewedGalaxy)?.id ||
+          1;
         mode = "galaxy";
         local = null;
         back.hidden = true;
@@ -123,21 +317,22 @@
         routePanel();
         draw();
       },
+      { raw: true },
     );
     picker.id = "map-galaxy";
     picker.classList.add("galaxy-picker");
-    picker.hidden = galaxy.stars.length <= 1000;
+    picker.hidden = entries.length < 2;
     galaxyPicker.replaceWith(picker);
     galaxyPicker = picker;
-    if (mode === "galaxy")
-      label.textContent =
-        (viewedGalaxy ? "Edem-II" : tr("Галактика Эдем")) + " · 1000";
+    if (mode === "galaxy") label.textContent = galaxyTitle();
+    buildTerritories();
   }
   function updateSystemPicker() {
     if (!galaxy) return;
     const picker = UI.systems(selected, (id) => {
+      request++;
       selected = Number(id);
-      viewedGalaxy = selected > 1000 ? 1 : 0;
+      viewedGalaxy = starGalaxy(selected);
       updateGalaxyPicker();
       const star = galaxy.stars[selected - 1];
       mode = "galaxy";
@@ -174,7 +369,9 @@
   function galaxyPoint(s) {
     const c = camera.galaxy,
       scale =
-        (Math.min(canvas.clientWidth, canvas.clientHeight) / 2500) * c.zoom;
+        (Math.min(canvas.clientWidth, canvas.clientHeight) /
+          ((definition()?.radius || 1250) * 2)) *
+        c.zoom;
     return {
       x: canvas.clientWidth / 2 + c.x + s.x * scale,
       y: canvas.clientHeight / 2 + c.y + s.y * scale,
@@ -248,6 +445,7 @@
     };
   }
   function draw() {
+    if (mode !== "galaxy") hideSummary();
     zoomLabel.textContent = cam().zoom.toFixed(1) + "×";
     if (
       !galaxy ||
@@ -276,10 +474,19 @@
       sites = [];
       const cx = w / 2,
         cy = h / 2,
-        max = Math.max(...local.sites.map((s) => Math.log(1 + s.orbit)));
+        max = Math.max(1, ...local.sites.map((s) => Math.log(1 + s.orbit)));
       const center = localPoint({ x: cx, y: cy });
-      ctx.fillStyle = "#efad58";
-      ctx.shadowColor = "#efad58";
+      ctx.fillStyle =
+        {
+          O: "#96baff",
+          B: "#bdd5ff",
+          A: "#edf1ff",
+          F: "#fff0c4",
+          G: "#ffdb78",
+          K: "#f5ad65",
+          M: "#ee8277",
+        }[local.star.class] || "#efad58";
+      ctx.shadowColor = ctx.fillStyle;
       ctx.shadowBlur = 18;
       ctx.beginPath();
       ctx.arc(center.x, center.y, 12 * Math.sqrt(cam().zoom), 0, Math.PI * 2);
@@ -381,11 +588,12 @@
         }
       return;
     }
+    drawTerritories();
     ctx.strokeStyle = "#273749";
     ctx.lineWidth = 0.6;
     ctx.beginPath();
     for (const lane of galaxy.lanes) {
-      if (lane.from > 1000 !== Boolean(viewedGalaxy)) continue;
+      if (starGalaxy(lane.from) !== viewedGalaxy) continue;
       const a = galaxyPoint(galaxy.stars[lane.from - 1]),
         b = galaxyPoint(galaxy.stars[lane.to - 1]);
       ctx.moveTo(a.x, a.y);
@@ -402,16 +610,26 @@
       ctx.lineTo(b.x, b.y);
     }
     ctx.stroke();
-    const colors = ["#96c8ff", "#89d5cb", "#c2a1e0", "#e7bd83"];
+    const colors = {
+      O: "#96baff",
+      B: "#bdd5ff",
+      A: "#edf1ff",
+      F: "#fff0c4",
+      G: "#ffdb78",
+      K: "#f5ad65",
+      M: "#ee8277",
+    };
     for (const s of galaxy.stars) {
-      if (s.id > 1000 !== Boolean(viewedGalaxy)) continue;
+      if (s.galaxy !== viewedGalaxy) continue;
       const p = galaxyPoint(s);
-      ctx.fillStyle = s.region >= 0 ? colors[s.region % 4] : "#687685";
+      ctx.fillStyle = knownStars.has(s.id)
+        ? colors[s.class] || "#ffffff"
+        : "#6d8296";
       ctx.beginPath();
       ctx.arc(
         p.x,
         p.y,
-        Math.min(4, 1.7 * Math.sqrt(cam().zoom)),
+        Math.min(3.2, 1.15 * Math.sqrt(cam().zoom)),
         0,
         Math.PI * 2,
       );
@@ -431,8 +649,7 @@
       ctx.font = "11px monospace";
       for (const region of galaxy.regions || []) {
         const stars = galaxy.stars.filter(
-          (s) =>
-            s.region === region.id && s.id > 1000 === Boolean(viewedGalaxy),
+          (s) => s.region === region.id && s.galaxy === viewedGalaxy,
         );
         if (!stars.length) continue;
         const p = galaxyPoint({
@@ -443,7 +660,7 @@
         ctx.fillText(tr(region.name), p.x, p.y);
       }
     }
-    if (!viewedGalaxy && galaxy.black_hole) {
+    if (viewedGalaxy === "edem" && galaxy.black_hole) {
       const p = galaxyPoint(galaxy.black_hole);
       ctx.strokeStyle = "#70618c";
       ctx.lineWidth = 1;
@@ -475,7 +692,7 @@
       }
       for (const group of groups.values()) {
         const { ship, p } = group[0];
-        if (ship.star > 1000 !== Boolean(viewedGalaxy)) continue;
+        if (starGalaxy(ship.star) !== viewedGalaxy) continue;
         ctx.strokeStyle = "#9de5f2";
         ctx.beginPath();
         ctx.arc(p.x, p.y, 15, 0, Math.PI * 2);
@@ -554,12 +771,7 @@
               : "Неизвестная система",
           ),
         ),
-        UI.button(
-          "Открыть систему",
-          () => openSystem(selected),
-          !Game.known(selected),
-          "Сначала исследуйте систему или купите разведданные",
-        ),
+        UI.button("Открыть систему", () => openSystem(selected), false),
         UI.button(
           "Исследовать",
           () => Game.explore(selected),
@@ -848,6 +1060,18 @@
       ),
     );
     side.append(stellar);
+    if (!local.surveyed)
+      side.append(
+        e(
+          "p",
+          tr(
+            local.sites.length
+              ? "Сканирование раскрывает объекты по очереди."
+              : "Объекты скрыты. Исследуйте систему, чтобы открыть их.",
+          ),
+          "muted",
+        ),
+      );
     const chosen = local.sites.find((s) => s.id === selectedSite);
     if (chosen) {
       const model = e("canvas");
@@ -911,11 +1135,7 @@
     side.append(display);
   }
   async function openSystem(id, notifySelection = true) {
-    if (
-      !Number.isInteger(id) ||
-      id < 1 ||
-      id > (galaxy?.stars.length || 1000)
-    ) {
+    if (!Number.isInteger(id) || id < 1 || id > (galaxy?.stars.length || 0)) {
       notify("Некорректная система");
       return;
     }
@@ -928,7 +1148,7 @@
         camera.system = { zoom: 1, x: 0, y: 0 };
       }
       local = d;
-      viewedGalaxy = id > 1000 ? 1 : 0;
+      viewedGalaxy = starGalaxy(id);
       updateGalaxyPicker();
       mode = "system";
       panelTab = "system";
@@ -964,15 +1184,16 @@
       galaxy = window.MapData || (await api("galaxy"));
       window.MapData = galaxy;
       selected = gameData.expedition.ship.star;
-      viewedGalaxy = selected > 1000 ? 1 : 0;
+      viewedGalaxy = starGalaxy(selected);
       updateSystemPicker();
       updateGalaxyPicker();
-      label.textContent =
-        (viewedGalaxy ? "Edem-II" : tr("Галактика Эдем")) + " · 1000";
+      label.textContent = galaxyTitle();
       routePanel();
       draw();
+      const focusRequested = pendingFind || pendingStar;
       if (pendingFind) findShip(pendingFind);
       if (pendingStar) showStar(pendingStar);
+      if (!focusRequested) findShip(gameData.expedition.ship.id);
     } catch (error) {
       notify(error.message);
     } finally {
@@ -984,10 +1205,11 @@
     if (!galaxy) return;
     const star = galaxy.stars.find((s) => s.id === id);
     if (!star) return;
+    request++;
     pendingStar = null;
     pendingFind = null;
     selected = id;
-    viewedGalaxy = id > 1000 ? 1 : 0;
+    viewedGalaxy = starGalaxy(id);
     mode = "galaxy";
     panelTab = "route";
     back.hidden = true;
@@ -1008,10 +1230,11 @@
     if (!galaxy) return;
     const ship = fleet().find((s) => s.id === id);
     if (!ship) return;
+    request++;
     pendingFind = null;
     pendingStar = null;
     selected = ship.star;
-    viewedGalaxy = ship.star > 1000 ? 1 : 0;
+    viewedGalaxy = starGalaxy(ship.star);
     updateSystemPicker();
     updateGalaxyPicker();
     mode = "galaxy";
@@ -1022,9 +1245,7 @@
     const p = galaxyShip(ship);
     camera.galaxy.x = canvas.clientWidth / 2 - p.x;
     camera.galaxy.y = canvas.clientHeight / 2 - p.y;
-    label.textContent = Boolean(viewedGalaxy)
-      ? "Edem-II"
-      : tr("Галактика Эдем");
+    label.textContent = galaxyTitle();
     routePanel();
     draw();
   }
@@ -1048,9 +1269,7 @@
     request++;
     mode = "galaxy";
     back.hidden = true;
-    label.textContent = Boolean(viewedGalaxy)
-      ? "Edem-II"
-      : tr("Галактика Эдем");
+    label.textContent = galaxyTitle();
     routePanel();
     draw();
   };
@@ -1076,6 +1295,7 @@
   );
   canvas.onpointerdown = (event) => {
     if (event.button !== 0) return;
+    hideSummary();
     pointer = {
       x: event.clientX,
       y: event.clientY,
@@ -1087,6 +1307,7 @@
   };
   canvas.onpointermove = (event) => {
     if (!pointer) {
+      if (mode === "galaxy") hoverSummary(event);
       if (mode === "system") {
         const r = canvas.getBoundingClientRect(),
           hit = sites.find(
@@ -1126,6 +1347,7 @@
   canvas.onlostpointercapture = () => (pointer = null);
   function clickMap(event) {
     if (!galaxy) return;
+    hideSummary();
     const r = canvas.getBoundingClientRect(),
       x = event.clientX - r.x,
       y = event.clientY - r.y,
@@ -1172,9 +1394,9 @@
       return;
     }
     let closest,
-      distance = 14;
+      distance = 9;
     for (const star of galaxy.stars) {
-      if (star.id > 1000 !== Boolean(viewedGalaxy)) continue;
+      if (star.galaxy !== viewedGalaxy) continue;
       const p = galaxyPoint(star),
         d = Math.hypot(x - p.x, y - p.y);
       if (d < distance) {
@@ -1199,8 +1421,6 @@
           },
           {
             label: "Открыть систему",
-            disabled: !Game.known(star.id),
-            reason: "Сначала исследуйте систему или купите разведданные",
             action: () => openSystem(star.id),
           },
           {
@@ -1221,7 +1441,7 @@
         event.clientX,
         event.clientY,
       );
-    } else if (galaxy.black_hole) {
+    } else if (viewedGalaxy === "edem" && galaxy.black_hole) {
       const p = galaxyPoint(galaxy.black_hole);
       if (Math.hypot(x - p.x, y - p.y) < 22) Modules.open("portal");
     }
@@ -1237,12 +1457,14 @@
     clickMap(event);
   };
   window.addEventListener("universechange", () => {
+    request++;
+    hideSummary();
+    summaryCache.clear();
     galaxy = window.MapData;
     selected = gameData.expedition.ship.star;
-    viewedGalaxy = selected > 1000 ? 1 : 0;
+    viewedGalaxy = starGalaxy(selected);
     updateGalaxyPicker();
-    label.textContent =
-      selected > 1000 ? "Edem-II · 1000" : tr("Галактика Эдем") + " · 1000";
+    label.textContent = galaxyTitle();
     back.hidden = true;
     mode = "galaxy";
     local = null;
@@ -1266,6 +1488,9 @@
   window.addEventListener("moduleopen", (event) => {
     if (event.detail === "galaxy") load();
   });
+  window.addEventListener("moduleclose", (event) => {
+    if (event.detail === "galaxy") hideSummary();
+  });
   window.addEventListener("moduleresize", (event) => {
     if (event.detail === "galaxy") draw();
   });
@@ -1275,16 +1500,17 @@
     draw();
   });
   window.addEventListener("gamedata", () => {
-    if (galaxy && gameData.expedition?.ship.star > galaxy.stars.length) {
+    knownStars = new Set(
+      (gameData.workbench?.known || []).map((item) => item.star),
+    );
+    if (galaxy && gameData.workbench?.universe_revision > galaxy.revision) {
       if (!loading) {
         loading = true;
         api("galaxy")
           .then((data) => {
-            galaxy = data;
+            if (!signedIn) return;
             window.MapData = data;
-            updateSystemPicker();
-            routePanel();
-            draw();
+            window.dispatchEvent(new Event("universechange"));
           })
           .catch((error) => notify(error.message, "error"))
           .finally(() => (loading = false));
@@ -1309,6 +1535,8 @@
       openSystem(local.star.id, false);
   });
   window.addEventListener("signedout", () => {
+    hideSummary();
+    summaryCache.clear();
     request++;
     pendingStar = null;
     local = null;

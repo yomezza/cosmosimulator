@@ -125,6 +125,11 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 			a.internal(w, err)
 			return
 		}
+		g, err = a.loadUniverse(ctx)
+		if err != nil {
+			a.internal(w, err)
+			return
+		}
 	}
 	// All mutations for one player serialize, including parallel browser requests.
 	if err = tx.QueryRow(ctx, `SELECT credits FROM users WHERE id=$1 FOR UPDATE`, u.ID).Scan(&u.Credits); err != nil {
@@ -218,6 +223,25 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 						copy := site
 						target = &copy
 					}
+				}
+				visible, e := revealedSites(ctx, tx, u.ID, star.ID, sitesForMove, surveyed)
+				if e != nil {
+					err = e
+					break
+				}
+				knownTarget := false
+				// Public port coordinates are broadcast by the market. Docking
+				// does not disclose the system's unscanned planets or deposits.
+				if target != nil && target.Kind == "Орбитальная станция" {
+					knownTarget = true
+				}
+				for _, site := range visible {
+					if site.ID == in.Target {
+						knownTarget = true
+					}
+				}
+				if !knownTarget {
+					target = nil
 				}
 				if target == nil {
 					problem = "Объект не найден"
@@ -465,15 +489,17 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 			a.internal(w, err)
 			return
 		}
-	} else {
-		for i := range sites {
-			sites[i].Resources = nil
-			sites[i].Details = nil
-		}
+	}
+	sites, err = revealedSites(ctx, tx, u.ID, star.ID, sites, surveyed)
+	if err != nil {
+		a.internal(w, err)
+		return
 	}
 	if !surveyed {
 		star.Planets = nil
 	}
+	star.ResourceWeights = nil
+	star.Ports = nil
 	if err = tx.Commit(ctx); err != nil {
 		a.internal(w, err)
 		return

@@ -130,7 +130,7 @@ func TestTerminal(t *testing.T) {
 	}
 	again.Close()
 	// Unknown system maps are now private until a survey or data purchase.
-	check(request(pilot, "GET", "/api/system?id=3", ""), 403)
+	check(request(pilot, "GET", "/api/system?id=3", ""), 200)
 	post(pilot, "/api/expedition", `{"action":"scan"}`, 200)
 	finishResearchForTest(t, a)
 	if _, err = db.Exec(ctx, `UPDATE ships SET object_id='asteroids',position_mode='approach' WHERE user_id=$1`, pid); err != nil {

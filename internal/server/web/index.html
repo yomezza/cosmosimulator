@@ -12,12 +12,13 @@
     <script src="workbench.js" defer></script>
     <script src="controls.js" defer></script>
     <script src="app.js" defer></script>
+    <script src="galaxy-admin.js" defer></script>
     <script src="expedition.js" defer></script>
     <script src="galaxy.js" defer></script>
   </head>
   <body>
     <header>
-      <a class="brand" href="/">◈ COSMOSIMULATOR <small>EDEM / 0.4.2</small></a>
+      <a class="brand" href="/">◈ COSMOSIMULATOR <small>EDEM / 0.5.0</small></a>
       <div class="header-actions">
         <div id="window-switcher" aria-label="Открытые окна"></div>
         <button
@@ -40,6 +41,10 @@
               <span data-i18n="Бенчмарк">Бенчмарк</span></button
             ><button data-open="gameplay">
               <span data-i18n="Игровой процесс">Игровой процесс</span></button
+            ><button data-open="galaxies">
+              <span data-i18n="Галактики">Галактики</span></button
+            ><button data-open="adminchanges">
+              <span data-i18n="Журнал изменений">Журнал изменений</span></button
             ><button data-open="users">
               <span data-i18n="Пользователи">Пользователи</span>
             </button>
@@ -58,8 +63,6 @@
               <span data-i18n="Профиль игрока">Профиль игрока</span></button
             ><button data-open="settings">
               <span data-i18n="Настройки">Настройки</span></button
-            ><button data-open="events">
-              <span data-i18n="Журнал событий">Журнал событий</span></button
             ><button data-open="finance">
               <span data-i18n="История финансов">История финансов</span></button
             ><button id="logout"><span data-i18n="Выйти">Выйти</span></button>
@@ -285,7 +288,7 @@
     <footer>
       <span id="server-status" class="signal"
         ><span data-i18n="● СЕРВЕР ОНЛАЙН">● СЕРВЕР ОНЛАЙН</span></span
-      ><span>COSMOSIMULATOR · v0.4.2</span>
+      ><span>COSMOSIMULATOR · v0.5.0</span>
     </footer>
     <div id="toast" role="status" hidden></div>
     <div id="tooltip" role="tooltip" hidden></div>

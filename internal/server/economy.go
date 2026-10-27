@@ -216,7 +216,7 @@ func (a *App) economyCommand(ctx context.Context, tx pgx.Tx, u User, s *Ship, g 
 			return true, errors.New("Обеспечение должно покрывать стоимость груза")
 		}
 		var dest bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM stations WHERE star=$1 AND object_id=$2)`, in.To, in.Station).Scan(&dest); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM stations WHERE star=$1 AND object_id=$2 AND active)`, in.To, in.Station).Scan(&dest); err != nil {
 			return true, err
 		}
 		if !dest || len(g.path(s.Star, in.To)) == 0 || s.Star == in.To && s.ObjectID == in.Station {

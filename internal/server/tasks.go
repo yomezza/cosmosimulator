@@ -204,6 +204,10 @@ func (a *App) advancePlayer(ctx context.Context, uid int64, g *Galaxy) error {
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(784218)`); err != nil {
 		return err
 	}
+	g, err = a.loadUniverse(ctx)
+	if err != nil {
+		return err
+	}
 	if _, err = tx.Exec(ctx, `SELECT id FROM users WHERE id=$1 FOR UPDATE`, uid); err != nil {
 		return err
 	}

@@ -105,7 +105,7 @@ func seedCommerce(ctx context.Context, tx pgx.Tx) error {
 			} else if p.spec == "refinery" {
 				p.spec = "industry"
 			}
-			batch.Queue(`UPDATE stations SET specialization=$3,goods=$4 WHERE star=$1 AND object_id=$2`, p.star, p.id, p.spec, stationGoods(p.star, p.id, p.spec))
+			batch.Queue(`UPDATE stations SET specialization=$3,goods=$4 WHERE star=$1 AND object_id=$2 AND active`, p.star, p.id, p.spec, stationGoods(p.star, p.id, p.spec))
 		}
 		if p.yard && !p.seeded {
 			models := map[string]bool{"pilgrim": true}
@@ -130,7 +130,7 @@ func seedCommerce(ctx context.Context, tx pgx.Tx) error {
 				}
 				batch.Queue(`INSERT INTO shipyard_stock(star,station,ship_class,quantity,price) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING`, p.star, p.id, c.ID, q, price)
 			}
-			batch.Queue(`UPDATE stations SET yard_seeded=TRUE WHERE star=$1 AND object_id=$2`, p.star, p.id)
+			batch.Queue(`UPDATE stations SET yard_seeded=TRUE WHERE star=$1 AND object_id=$2 AND active`, p.star, p.id)
 		}
 	}
 	if batch.Len() == 0 {
@@ -140,7 +140,7 @@ func seedCommerce(ctx context.Context, tx pgx.Tx) error {
 }
 func marketAt(ctx context.Context, tx pgx.Tx, star Star, id string) (map[string]int, int64, error) {
 	var goods []string
-	err := tx.QueryRow(ctx, `SELECT goods FROM stations WHERE star=$1 AND object_id=$2`, star.ID, id).Scan(&goods)
+	err := tx.QueryRow(ctx, `SELECT goods FROM stations WHERE star=$1 AND object_id=$2 AND active`, star.ID, id).Scan(&goods)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return map[string]int{}, 0, nil
 	}
@@ -161,7 +161,7 @@ func marketAt(ctx context.Context, tx pgx.Tx, star Star, id string) (map[string]
 	return stock, wallet, err
 }
 func (a *App) globalPorts(ctx context.Context, uid int64, g *Galaxy) ([]map[string]any, error) {
-	rows, err := a.db.Query(ctx, `SELECT s.star,s.object_id,s.name,s.specialization,s.goods,m.stock,COALESCE(m.credits,5000),CASE WHEN c.founder_key='founder-02' AND COALESCE(r.points,0)<20 THEN 2 ELSE 0 END FROM stations s LEFT JOIN local_markets m ON m.star=s.star AND m.station=s.object_id LEFT JOIN companies c ON c.id=s.founder LEFT JOIN reputation r ON r.company_id=s.founder AND r.user_id=$1 ORDER BY s.star,s.object_id`, uid)
+	rows, err := a.db.Query(ctx, `SELECT s.star,s.object_id,s.name,s.specialization,s.goods,m.stock,COALESCE(m.credits,5000),CASE WHEN c.founder_key='founder-02' AND COALESCE(r.points,0)<20 THEN 2 ELSE 0 END FROM stations s LEFT JOIN local_markets m ON m.star=s.star AND m.station=s.object_id LEFT JOIN companies c ON c.id=s.founder LEFT JOIN reputation r ON r.company_id=s.founder AND r.user_id=$1 WHERE s.active ORDER BY s.star,s.object_id`, uid)
 	if err != nil {
 		return nil, err
 	}

@@ -5,7 +5,7 @@ import "math"
 // Reproject Edem-II only. IDs, regions, objects and hyperlanes stay unchanged,
 // including routes already being flown when an existing universe is upgraded.
 func arrangeFrontierRings(g *Galaxy) bool {
-	if g.RingLayoutVersion >= 1 || len(g.Stars) <= 1000 {
+	if len(g.Catalog) > 0 || g.RingLayoutVersion >= 1 || len(g.Stars) <= 1000 {
 		return false
 	}
 	for i := range g.Stars {

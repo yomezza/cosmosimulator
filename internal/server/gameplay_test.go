@@ -229,6 +229,8 @@ func TestGameplay032(t *testing.T) {
 		t.Fatal("other player's fleet leaked")
 	}
 	post(one, "/api/expedition", `{"action":"move","target":"station","mode":"orbit"}`, 409)
+	post(one, "/api/expedition", `{"action":"scan"}`, 200)
+	finishResearchForTest(t, a)
 	post(one, "/api/expedition", `{"action":"move","target":"planet-1","mode":"orbit"}`, 200)
 	if _, err = db.Exec(ctx, `UPDATE ships SET local_arrival=now()-interval '1 second' WHERE user_id=$1`, id1); err != nil {
 		t.Fatal(err)
@@ -276,7 +278,7 @@ func TestGameplay032(t *testing.T) {
 		t.Fatal("password data leaked")
 	}
 	check(request(one, "GET", "/api/admin/users?q=search", ""), 403)
-	check(request(one, "GET", "/api/events", ""), 200)
+	check(request(one, "GET", "/api/events", ""), 403)
 	check(request(admin, "GET", "/api/admin/log", ""), 200)
 }
 func TestResourceDistribution(t *testing.T) {

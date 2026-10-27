@@ -55,7 +55,7 @@ func coreSystems(g *Galaxy) []int {
 	sort.Slice(list, func(i, j int) bool { return math.Hypot(list[i].X, list[i].Y) < math.Hypot(list[j].X, list[j].Y) })
 	out := []int{}
 	for _, s := range list {
-		if s.ID > 1000 {
+		if galaxyKey(s) != "edem" {
 			continue
 		}
 		out = append(out, s.ID)
@@ -91,7 +91,7 @@ func ensureStations(ctx context.Context, tx pgx.Tx, g *Galaxy) error {
 	list := []map[string]any{}
 	for _, star := range g.Stars {
 		sites := systemSites(star)
-		if core[star.ID] && !hasStation(star.ID) {
+		if star.Ports == nil && core[star.ID] && !hasStation(star.ID) {
 			sites = append(sites, Site{ID: "station", Name: star.Name + " · CORE", Kind: "Орбитальная станция", Orbit: 1})
 		}
 		for _, s := range sites {
@@ -100,8 +100,8 @@ func ensureStations(ctx context.Context, tx pgx.Tx, g *Galaxy) error {
 			}
 			spec := stationProfile(star.ID, s.ID)
 			var founder *int64
-			if len(founders) > 0 {
-				x := founders[star.Region&1]
+			if len(founders) > 0 && star.Region >= 0 {
+				x := founders[max(0, star.Region%4)/2]
 				founder = &x
 			}
 			yard := star.ID == 1 || star.ID == 5 || star.ID%17 == 0
@@ -109,7 +109,7 @@ func ensureStations(ctx context.Context, tx pgx.Tx, g *Galaxy) error {
 		}
 	}
 	raw, _ := json.Marshal(list)
-	_, err = tx.Exec(ctx, `INSERT INTO stations(star,object_id,name,specialization,founder,shipyard,ship_stock) SELECT * FROM jsonb_to_recordset($1) AS x(star int,object_id text,name text,specialization text,founder bigint,shipyard bool,ship_stock int) ON CONFLICT DO NOTHING`, raw)
+	_, err = tx.Exec(ctx, `INSERT INTO stations(star,object_id,name,specialization,founder,shipyard,ship_stock) SELECT * FROM jsonb_to_recordset($1) AS x(star int,object_id text,name text,specialization text,founder bigint,shipyard bool,ship_stock int) ON CONFLICT(star,object_id) DO UPDATE SET founder=EXCLUDED.founder WHERE stations.company_id IS NULL`, raw)
 	if err != nil {
 		return err
 	}
@@ -158,16 +158,16 @@ func (a *App) workbench(w http.ResponseWriter, r *http.Request) {
 		a.internal(w, err)
 		return
 	}
-	out := map[string]any{"research": researchView(ctx, a.db, u.ID), "core_systems": coreSystems(g), "server_name": "Иггдрасиль", "ship_classes": shipClasses, "trade_profiles": tradeProfiles, "extractor_price": 250, "reservation_policy": "full_refund", "time": time.Now()}
+	out := map[string]any{"universe_revision": g.Revision, "research": researchView(ctx, a.db, u.ID), "core_systems": coreSystems(g), "server_name": "Иггдрасиль", "ship_classes": shipClasses, "trade_profiles": tradeProfiles, "extractor_price": 250, "reservation_policy": "full_refund", "time": time.Now()}
 	queries := []struct {
 		key, sql string
 		args     []any
 	}{
 		{"mining", `SELECT j.*,s.name AS ship_name FROM mining_jobs j JOIN ships s ON s.id=j.ship_id WHERE j.user_id=$1 ORDER BY j.ship_id`, []any{u.ID}},
-		{"shipyards", `SELECT y.*,s.name AS station_name,s.specialization FROM shipyard_stock y JOIN stations s ON s.star=y.star AND s.object_id=y.station WHERE s.shipyard ORDER BY y.star,y.station,y.ship_class`, nil},
+		{"shipyards", `SELECT y.*,s.name AS station_name,s.specialization FROM shipyard_stock y JOIN stations s ON s.star=y.star AND s.object_id=y.station WHERE s.shipyard AND s.active ORDER BY y.star,y.station,y.ship_class`, nil},
 		{"known", `SELECT star,received_at,source FROM surveys WHERE user_id=$1 ORDER BY star`, []any{u.ID}},
 		{"notes", `SELECT star,object_id,note,bookmark FROM navigation_notes WHERE user_id=$1`, []any{u.ID}},
-		{"stations", `SELECT s.*,c.name AS founder_name,c.color AS founder_color,COALESCE(r.points,0) AS reputation,CASE WHEN c.founder_key='founder-02' AND COALESCE(r.points,0)<20 THEN 2 ELSE 0 END AS fee_percent FROM stations s LEFT JOIN companies c ON c.id=s.founder LEFT JOIN reputation r ON r.company_id=s.founder AND r.user_id=$1 ORDER BY s.star,s.object_id`, []any{u.ID}},
+		{"stations", `SELECT s.*,c.name AS founder_name,c.color AS founder_color,COALESCE(r.points,0) AS reputation,CASE WHEN c.founder_key='founder-02' AND COALESCE(r.points,0)<20 THEN 2 ELSE 0 END AS fee_percent FROM stations s LEFT JOIN companies c ON c.id=s.founder LEFT JOIN reputation r ON r.company_id=s.founder AND r.user_id=$1 WHERE s.active ORDER BY s.star,s.object_id`, []any{u.ID}},
 		{"data_offers", `SELECT o.*,u.username AS seller_name,(SELECT count(*) FROM unnest(o.systems) s WHERE NOT EXISTS(SELECT 1 FROM surveys v WHERE v.user_id=$1 AND v.star=s)) AS new_systems FROM survey_offers o JOIN users u ON u.id=o.seller ORDER BY o.id DESC LIMIT 500`, []any{u.ID}},
 		{"warehouses", `SELECT * FROM warehouses WHERE user_id=$1 ORDER BY star,station`, []any{u.ID}},
 		{"orders", `SELECT o.*,u.username AS seller_name FROM sell_orders o JOIN users u ON u.id=o.seller WHERE quantity>0 ORDER BY id DESC LIMIT 500`, nil},
@@ -246,6 +246,11 @@ func (a *App) command033(w http.ResponseWriter, r *http.Request) {
 		a.internal(w, err)
 		return
 	}
+	g, err = a.loadUniverse(ctx)
+	if err != nil {
+		a.internal(w, err)
+		return
+	}
 	if err = tx.QueryRow(ctx, `SELECT credits FROM users WHERE id=$1 FOR UPDATE`, u.ID).Scan(&u.Credits); err != nil {
 		a.internal(w, err)
 		return
@@ -301,14 +306,19 @@ func (a *App) command033(w http.ResponseWriter, r *http.Request) {
 		a.internal(w, err)
 		return
 	}
-	if err = tx.Commit(ctx); err != nil {
-		a.internal(w, err)
-		return
-	}
 	if in.Action == "portal_contribute" {
 		a.universeMu.Lock()
-		a.universe = nil
+	}
+	err = tx.Commit(ctx)
+	if in.Action == "portal_contribute" {
+		if err == nil {
+			a.universe = nil
+		}
 		a.universeMu.Unlock()
+	}
+	if err != nil {
+		a.internal(w, err)
+		return
 	}
 	reply(w, 200, map[string]bool{"ok": true})
 }
@@ -419,7 +429,11 @@ func (a *App) navigationCommand(ctx context.Context, tx pgx.Tx, u User, s *Ship,
 		path := []int{}
 		target := 0
 		for _, candidate := range g.Stars {
-			if !hasStation(candidate.ID) {
+			var available bool
+			if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM stations WHERE star=$1 AND active)`, candidate.ID).Scan(&available); err != nil {
+				return true, err
+			}
+			if !available {
 				continue
 			}
 			p := g.path(s.Star, candidate.ID)
