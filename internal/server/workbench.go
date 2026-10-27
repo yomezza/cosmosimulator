@@ -98,10 +98,7 @@ func ensureStations(ctx context.Context, tx pgx.Tx, g *Galaxy) error {
 			if s.Kind != "Орбитальная станция" {
 				continue
 			}
-			spec := []string{"general", "metals", "agro", "general", "refinery"}[(star.ID+len(s.ID))%5]
-			if star.ID == 1 || star.ID == 5 {
-				spec = "general"
-			}
+			spec := stationProfile(star.ID, s.ID)
 			var founder *int64
 			if len(founders) > 0 {
 				x := founders[star.Region&1]
@@ -113,7 +110,10 @@ func ensureStations(ctx context.Context, tx pgx.Tx, g *Galaxy) error {
 	}
 	raw, _ := json.Marshal(list)
 	_, err = tx.Exec(ctx, `INSERT INTO stations(star,object_id,name,specialization,founder,shipyard,ship_stock) SELECT * FROM jsonb_to_recordset($1) AS x(star int,object_id text,name text,specialization text,founder bigint,shipyard bool,ship_stock int) ON CONFLICT DO NOTHING`, raw)
-	return err
+	if err != nil {
+		return err
+	}
+	return seedCommerce(ctx, tx)
 }
 func queryMaps(ctx context.Context, db interface {
 	Query(context.Context, string, ...any) (pgx.Rows, error)
@@ -158,12 +158,13 @@ func (a *App) workbench(w http.ResponseWriter, r *http.Request) {
 		a.internal(w, err)
 		return
 	}
-	out := map[string]any{"research": researchView(ctx, a.db, u.ID), "core_systems": coreSystems(g), "server_name": "Иггдрасиль", "ship_price": 10000, "extractor_price": 250, "reservation_policy": "full_refund", "time": time.Now()}
+	out := map[string]any{"research": researchView(ctx, a.db, u.ID), "core_systems": coreSystems(g), "server_name": "Иггдрасиль", "ship_classes": shipClasses, "trade_profiles": tradeProfiles, "extractor_price": 250, "reservation_policy": "full_refund", "time": time.Now()}
 	queries := []struct {
 		key, sql string
 		args     []any
 	}{
 		{"mining", `SELECT j.*,s.name AS ship_name FROM mining_jobs j JOIN ships s ON s.id=j.ship_id WHERE j.user_id=$1 ORDER BY j.ship_id`, []any{u.ID}},
+		{"shipyards", `SELECT y.*,s.name AS station_name,s.specialization FROM shipyard_stock y JOIN stations s ON s.star=y.star AND s.object_id=y.station WHERE s.shipyard ORDER BY y.star,y.station,y.ship_class`, nil},
 		{"known", `SELECT star,received_at,source FROM surveys WHERE user_id=$1 ORDER BY star`, []any{u.ID}},
 		{"notes", `SELECT star,object_id,note,bookmark FROM navigation_notes WHERE user_id=$1`, []any{u.ID}},
 		{"stations", `SELECT s.*,c.name AS founder_name,c.color AS founder_color,COALESCE(r.points,0) AS reputation,CASE WHEN c.founder_key='founder-02' AND COALESCE(r.points,0)<20 THEN 2 ELSE 0 END AS fee_percent FROM stations s LEFT JOIN companies c ON c.id=s.founder LEFT JOIN reputation r ON r.company_id=s.founder AND r.user_id=$1 ORDER BY s.star,s.object_id`, []any{u.ID}},
@@ -374,7 +375,7 @@ func (a *App) navigationCommand(ctx context.Context, tx pgx.Tx, u User, s *Ship,
 			if len(path) < 2 {
 				return true, errors.New("Нет допустимого маршрута")
 			}
-			total += 2 * (len(path) - 1)
+			total += s.hull().JumpFuel * (len(path) - 1)
 			from = to
 		}
 		if total > s.Fuel {
@@ -441,25 +442,7 @@ func (a *App) navigationCommand(ctx context.Context, tx pgx.Tx, u User, s *Ship,
 		_, err = tx.Exec(ctx, `UPDATE ships SET destination=$2,departure=now(),arrival=now()+interval '30 seconds',travel_path=$3,waypoints='[]',reserved_fuel=0,fuel=GREATEST(fuel,10) WHERE id=$1`, s.ID, target, route)
 		return true, err
 	case "buy_ship":
-		if !docked(*s) {
-			return true, errors.New("Стыкуйтесь с верфью")
-		}
-		tag, err := tx.Exec(ctx, `UPDATE stations SET ship_stock=ship_stock-1 WHERE star=$1 AND object_id=$2 AND shipyard AND ship_stock>0`, s.Star, s.ObjectID)
-		if err != nil {
-			return true, err
-		}
-		if tag.RowsAffected() == 0 {
-			return true, errors.New("На верфи нет доступных кораблей")
-		}
-		tag, err = tx.Exec(ctx, `UPDATE users SET credits=credits-10000 WHERE id=$1 AND credits>=10000`, u.ID)
-		if err != nil {
-			return true, err
-		}
-		if tag.RowsAffected() == 0 {
-			return true, errors.New("Недостаточно кредитов")
-		}
-		_, err = tx.Exec(ctx, `INSERT INTO ships(user_id,star,object_id,active) VALUES($1,$2,$3,FALSE)`, u.ID, s.Star, s.ObjectID)
-		return true, err
+		return true, buyShip(ctx, tx, u, *s, in)
 	case "extractor":
 		if err := idle(ctx, tx, *s); err != nil {
 			return true, err

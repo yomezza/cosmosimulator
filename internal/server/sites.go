@@ -39,23 +39,16 @@ func addCustomSites(ctx context.Context, db interface {
 	return sites, rows.Err()
 }
 func stationAllows(ctx context.Context, q querier, star int, id, res string) bool {
-	var specialization string
-	if err := q.QueryRow(ctx, `SELECT specialization FROM stations WHERE star=$1 AND object_id=$2`, star, id).Scan(&specialization); err != nil {
-		return true
-	}
-	r, ok := resource(res)
-	if !ok {
+	var goods []string
+	if err := q.QueryRow(ctx, `SELECT goods FROM stations WHERE star=$1 AND object_id=$2`, star, id).Scan(&goods); err != nil {
 		return false
 	}
-	switch specialization {
-	case "metals":
-		return r.Kind == "Металл" || r.Kind == "Минерал" || res == "agni"
-	case "agro":
-		return r.Kind == "Агроресурс" || res == "water" || res == "agni"
-	case "refinery":
-		return r.Kind != "Агроресурс"
+	for _, item := range goods {
+		if item == res {
+			return true
+		}
 	}
-	return true
+	return false
 }
 func concentration(star, object int) int { return 35 + (star*17+object*11)%61 }
 func quality(star, object int) string    { return fmt.Sprintf("Q%d", 1+(star*13+object*7)%5) }

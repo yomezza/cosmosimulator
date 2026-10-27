@@ -12,7 +12,7 @@ import (
 func readShip(ctx context.Context, q querier, id int64) (Ship, error) {
 	var s Ship
 	var raw, path, way []byte
-	err := q.QueryRow(ctx, `SELECT star,destination,arrival,fuel,cargo,id,name,object_id,position_mode,departure,travel_path,local_target,local_mode,local_started,local_arrival,extractor,reserved_fuel,active,waypoints FROM ships WHERE id=$1`, id).Scan(&s.Star, &s.Destination, &s.Arrival, &s.Fuel, &raw, &s.ID, &s.Name, &s.ObjectID, &s.PositionMode, &s.Departure, &path, &s.LocalTarget, &s.LocalMode, &s.LocalStarted, &s.LocalArrival, &s.Extractor, &s.ReservedFuel, &s.Active, &way)
+	err := q.QueryRow(ctx, `SELECT star,destination,arrival,fuel,cargo,id,name,object_id,position_mode,departure,travel_path,local_target,local_mode,local_started,local_arrival,extractor,reserved_fuel,active,waypoints,class FROM ships WHERE id=$1`, id).Scan(&s.Star, &s.Destination, &s.Arrival, &s.Fuel, &raw, &s.ID, &s.Name, &s.ObjectID, &s.PositionMode, &s.Departure, &path, &s.LocalTarget, &s.LocalMode, &s.LocalStarted, &s.LocalArrival, &s.Extractor, &s.ReservedFuel, &s.Active, &way, &s.Class)
 	if err != nil {
 		return s, err
 	}
@@ -22,6 +22,7 @@ func readShip(ctx context.Context, q querier, id int64) (Ship, error) {
 	if err = json.Unmarshal(path, &s.Path); err != nil {
 		return s, err
 	}
+	s.Spec = s.hull()
 	err = json.Unmarshal(way, &s.Waypoints)
 	return s, err
 }
@@ -286,13 +287,13 @@ func (a *App) advancePlayer(ctx context.Context, uid int64, g *Galaxy) error {
 		if len(path) < 2 {
 			return fmt.Errorf("invalid persisted route")
 		}
-		cost := 2 * (len(path) - 1)
+		cost := s.hull().JumpFuel * (len(path) - 1)
 		if s.Fuel < cost {
 			return errors.New("reserved route fuel missing")
 		}
 		raw, _ := json.Marshal(s.Waypoints[1:])
 		route, _ := json.Marshal(path)
-		_, err = tx.Exec(ctx, `UPDATE ships SET fuel=fuel-$2,reserved_fuel=GREATEST(0,reserved_fuel-$2),destination=$3,departure=now(),arrival=now()+make_interval(secs=>$4),travel_path=$5,waypoints=$6 WHERE id=$1`, sid, cost, s.Waypoints[0], 5*(len(path)-1), route, raw)
+		_, err = tx.Exec(ctx, `UPDATE ships SET fuel=fuel-$2,reserved_fuel=GREATEST(0,reserved_fuel-$2),destination=$3,departure=now(),arrival=now()+make_interval(secs=>$4),travel_path=$5,waypoints=$6 WHERE id=$1`, sid, cost, s.Waypoints[0], s.hull().JumpSeconds*(len(path)-1), route, raw)
 		if err != nil {
 			return err
 		}

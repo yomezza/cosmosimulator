@@ -85,6 +85,13 @@ func openDatabase(ctx context.Context, dsn, schema string) (*pgxpool.Pool, error
 	if _, e = tx.Exec(ctx, string(upgrade)); e != nil {
 		return nil, fmt.Errorf("upgrade 0.3.3: %w", e)
 	}
+	upgrade040, e := assets.ReadFile("schema040.sql")
+	if e != nil {
+		return nil, e
+	}
+	if _, e = tx.Exec(ctx, string(upgrade040)); e != nil {
+		return nil, fmt.Errorf("upgrade 0.4.0: %w", e)
+	}
 	var galaxyExists bool
 	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM galaxies WHERE name='Edem')`).Scan(&galaxyExists); err != nil {
 		return nil, err
@@ -141,6 +148,9 @@ func openDatabase(ctx context.Context, dsn, schema string) (*pgxpool.Pool, error
 		if _, err = tx.Exec(ctx, `UPDATE galaxies SET data=$1 WHERE name='Edem'`, raw); err != nil {
 			return nil, err
 		}
+	}
+	if err = ensureStations(ctx, tx, &existing); err != nil {
+		return nil, err
 	}
 	// Complete metadata for a v0.3.1 flight without changing its route or ETA.
 	rows, err := tx.Query(ctx, `SELECT user_id,star,destination,arrival FROM ships WHERE destination IS NOT NULL AND jsonb_array_length(travel_path)<2`)

@@ -71,7 +71,7 @@ func (a *App) economyCommand(ctx context.Context, tx pgx.Tx, u User, s *Ship, g 
 			if err = tx.QueryRow(ctx, `SELECT COALESCE(sum(quantity),0) FROM mining_jobs WHERE ship_id=$1`, s.ID).Scan(&reserved); err != nil {
 				return true, err
 			}
-			if m[in.Resource] < in.Quantity || cargoSize(s.Cargo)+reserved+in.Quantity > 60 {
+			if m[in.Resource] < in.Quantity || cargoSize(s.Cargo)+reserved+in.Quantity > s.capacity() {
 				return true, errors.New("Недостаточно товара или места в трюме")
 			}
 			m[in.Resource] -= in.Quantity
@@ -208,7 +208,7 @@ func (a *App) economyCommand(ctx context.Context, tx pgx.Tx, u User, s *Ship, g 
 		_, err = tx.Exec(ctx, `UPDATE sell_orders SET quantity=quantity-$2 WHERE id=$1`, in.ID, in.Quantity)
 		return true, err
 	case "delivery_create":
-		if !docked(*s) || in.Quantity < 1 || in.Quantity > 60 || in.Amount < 1 || in.Hours < 1 || in.Hours > 168 || in.To < 1 || in.To > len(g.Stars) {
+		if !docked(*s) || in.Quantity < 1 || in.Quantity > s.capacity() || in.Amount < 1 || in.Hours < 1 || in.Hours > 168 || in.To < 1 || in.To > len(g.Stars) {
 			return true, errors.New("Некорректный заказ доставки")
 		}
 		res, ok := resource(in.Resource)
@@ -259,14 +259,14 @@ func (a *App) deliveryCommand(ctx context.Context, tx pgx.Tx, u User, s *Ship, g
 		if status != "open" || owner == u.ID || !time.Now().Before(deadline) {
 			return errors.New("Заказ недоступен")
 		}
-		if !docked(*s) || s.Star != from || s.ObjectID != fs || cargoSize(s.Cargo)+q > 60 {
+		if !docked(*s) || s.Star != from || s.ObjectID != fs || cargoSize(s.Cargo)+q > s.capacity() {
 			return errors.New("Прибудьте к отправителю и освободите трюм")
 		}
 		var reserved int
 		if err = tx.QueryRow(ctx, `SELECT COALESCE(sum(quantity),0) FROM mining_jobs WHERE ship_id=$1`, s.ID).Scan(&reserved); err != nil {
 			return err
 		}
-		if cargoSize(s.Cargo)+reserved+q > 60 {
+		if cargoSize(s.Cargo)+reserved+q > s.capacity() {
 			return errors.New("Трюм заполнен")
 		}
 		if err = debit(ctx, tx, u.ID, collateral); err != nil {
@@ -431,14 +431,14 @@ func (a *App) advanceLogistics(ctx context.Context) error {
 		}
 	}
 	// Reservations have full refunds and no storage fee until their visible expiry.
-	rows, err = tx.Query(ctx, `SELECT id,user_id,star,resource,quantity,cost FROM reservations WHERE status='reserved' AND expires_at<=now() ORDER BY id FOR UPDATE`)
+	rows, err = tx.Query(ctx, `SELECT id,user_id,star,station,resource,quantity,cost FROM reservations WHERE status='reserved' AND expires_at<=now() ORDER BY id FOR UPDATE`)
 	if err != nil {
 		return err
 	}
 	list = nil
 	for rows.Next() {
 		var d done
-		if err = rows.Scan(&d.id, &d.owner, &d.star, &d.res, &d.q, &d.reward); err != nil {
+		if err = rows.Scan(&d.id, &d.owner, &d.star, &d.station, &d.res, &d.q, &d.reward); err != nil {
 			rows.Close()
 			return err
 		}
@@ -450,7 +450,7 @@ func (a *App) advanceLogistics(ctx context.Context) error {
 		return err
 	}
 	for _, d := range list {
-		if _, err = tx.Exec(ctx, `UPDATE local_markets SET stock=jsonb_set(stock,ARRAY[$2::text],to_jsonb(COALESCE((stock->>$2)::int,0)+$3)) WHERE star=$1`, d.star, d.res, d.q); err != nil {
+		if _, err = tx.Exec(ctx, `UPDATE local_markets SET stock=jsonb_set(stock,ARRAY[$2::text],to_jsonb(COALESCE((stock->>$2)::int,0)+$3)) WHERE star=$1 AND station=$4`, d.star, d.res, d.q, d.station); err != nil {
 			return err
 		}
 		if err = credit(ctx, tx, d.owner, d.reward); err != nil {

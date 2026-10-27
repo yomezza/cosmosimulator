@@ -74,5 +74,5 @@ func (a *App) estimate(w http.ResponseWriter, r *http.Request) {
 		a.internal(w, err)
 		return
 	}
-	reply(w, 200, map[string]any{"path": path, "objects": len(sites), "remaining": remaining, "scan_seconds": remaining * settings.ScanSeconds, "travel_seconds": jumps * 5, "fuel": jumps * 2, "return_fuel": jumps * 4, "cost": cost, "can_depart": len(path) > 0 && s.Fuel-s.ReservedFuel >= jumps*2 && u.Credits >= int64(cost), "known": known})
+	reply(w, 200, map[string]any{"path": path, "objects": len(sites), "remaining": remaining, "scan_seconds": remaining * settings.ScanSeconds, "travel_seconds": jumps * s.hull().JumpSeconds, "fuel": jumps * s.hull().JumpFuel, "return_fuel": jumps * s.hull().JumpFuel * 2, "cost": cost, "can_depart": len(path) > 0 && s.Fuel-s.ReservedFuel >= jumps*s.hull().JumpFuel && u.Credits >= int64(cost), "known": known})
 }

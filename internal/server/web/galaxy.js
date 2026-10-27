@@ -94,6 +94,7 @@
     request = 0,
     loading = false,
     pendingFind = null,
+    pendingStar = null,
     hoveredSite = null,
     panelTab = "route",
     routeStops = [];
@@ -658,10 +659,14 @@
     const path = plan(),
       jumps = path ? path.length - 1 : 0;
     result.textContent = path
-      ? `${jumps} ${tr("переходов")} · ${jumps * 5} s · ${jumps * 2} ${tr("Топливо")}`
+      ? `${jumps} ${tr("переходов")} · ${jumps * (gameData.expedition.ship.spec?.jump_seconds || 5)} s · ${jumps * (gameData.expedition.ship.spec?.jump_fuel || 2)} ${tr("Топливо")}`
       : tr("Нет пути: системы не связаны гиперкоридорами.");
     side.append(result);
-    if (path && jumps * 4 > gameData.expedition.ship.fuel)
+    if (
+      path &&
+      jumps * (gameData.expedition.ship.spec?.jump_fuel || 2) * 2 >
+        gameData.expedition.ship.fuel
+    )
       side.append(
         e("p", tr("Топлива на обратный путь может не хватить"), "error"),
       );
@@ -681,7 +686,10 @@
             action: "route",
             waypoints: [...routeStops, selected],
           }),
-        !path || !jumps || jumps * 2 > gameData.expedition.ship.fuel,
+        !path ||
+          !jumps ||
+          jumps * (gameData.expedition.ship.spec?.jump_fuel || 2) >
+            gameData.expedition.ship.fuel,
         "Недостаточно топлива или нет пути",
       ),
     );
@@ -947,6 +955,7 @@
       if (mode === "galaxy") routePanel();
       draw();
       if (pendingFind) findShip(pendingFind);
+      if (pendingStar) showStar(pendingStar);
       return;
     }
     if (loading) return;
@@ -963,18 +972,44 @@
       routePanel();
       draw();
       if (pendingFind) findShip(pendingFind);
+      if (pendingStar) showStar(pendingStar);
     } catch (error) {
       notify(error.message);
     } finally {
       loading = false;
     }
   }
+  function showStar(id) {
+    pendingStar = id;
+    if (!galaxy) return;
+    const star = galaxy.stars.find((s) => s.id === id);
+    if (!star) return;
+    pendingStar = null;
+    pendingFind = null;
+    selected = id;
+    viewedGalaxy = id > 1000 ? 1 : 0;
+    mode = "galaxy";
+    panelTab = "route";
+    back.hidden = true;
+    camera.galaxy = { zoom: 3, x: 0, y: 0 };
+    const point = galaxyPoint(star);
+    camera.galaxy.x = canvas.clientWidth / 2 - point.x;
+    camera.galaxy.y = canvas.clientHeight / 2 - point.y;
+    updateSystemPicker();
+    updateGalaxyPicker();
+    routePanel();
+    draw();
+  }
+  window.addEventListener("showstar", (event) =>
+    showStar(Number(event.detail)),
+  );
   function findShip(id) {
     pendingFind = id;
     if (!galaxy) return;
     const ship = fleet().find((s) => s.id === id);
     if (!ship) return;
     pendingFind = null;
+    pendingStar = null;
     selected = ship.star;
     viewedGalaxy = ship.star > 1000 ? 1 : 0;
     updateSystemPicker();
@@ -1267,6 +1302,7 @@
   });
   window.addEventListener("signedout", () => {
     request++;
+    pendingStar = null;
     local = null;
     mode = "galaxy";
     route = [];

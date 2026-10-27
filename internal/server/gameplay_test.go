@@ -217,7 +217,11 @@ func TestGameplay032(t *testing.T) {
 	if _, err = db.Exec(ctx, `UPDATE ships SET local_arrival=now()-interval '1 second' WHERE user_id=$1`, id1); err != nil {
 		t.Fatal(err)
 	}
-	post(one, "/api/expedition", `{"action":"buy","resource":"agni","quantity":1}`, 200)
+	var goods []string
+	if err = db.QueryRow(ctx, `SELECT goods FROM stations WHERE star=5 AND object_id='station-2'`).Scan(&goods); err != nil || len(goods) == 0 {
+		t.Fatal("station catalogue", goods, err)
+	}
+	post(one, "/api/expedition", fmt.Sprintf(`{"action":"buy","resource":%q,"quantity":1}`, goods[0]), 200)
 	w = request(two, "GET", "/api/fleet", "")
 	check(w, 200)
 	_ = json.Unmarshal(w.Body.Bytes(), &fleet)

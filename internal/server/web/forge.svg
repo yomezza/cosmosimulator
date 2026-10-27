@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 340" role="img" aria-label="forge, orthographic spacecraft projection">
+ <defs><linearGradient id="h" x2="1"><stop stop-color="#2a3b46"/><stop offset=".5" stop-color="#73868e"/><stop offset="1" stop-color="#2a3b46"/></linearGradient></defs>
+ <g stroke="#c9a35f" stroke-width="1.5" stroke-linejoin="round"><path d="M262 144 209 130 184 159 184 265 222 265 222 181 262 190 M378 144 431 130 456 159 456 265 418 265 418 181 378 190" fill="#293e4c"/><path d="M285 76 355 76 378 122 378 244 352 276 288 276 262 244 262 122Z" fill="url(#h)"/><path d="M196 143v-42l11-18 11 18v42m204 0v-42l11-18 11 18v42" fill="#39454b"/><path d="M305 88h30l8 29h-46Z" fill="#123b4b" stroke="#86cada"/><path d="M299 137h42v95h-42Z" fill="#334b57"/><path d="M320 143v82m-21-56h42m-42 25h42" stroke="#7b909b"/><path d="M300 278h40" stroke="#a4deec" stroke-width="5"/></g>
+</svg>

@@ -540,75 +540,31 @@ func (a *App) globalMarket(w http.ResponseWriter, r *http.Request) {
 			a.internal(w, err)
 			return
 		}
-		rows, err := a.db.Query(r.Context(), `SELECT star,credits,stock FROM local_markets ORDER BY star LIMIT 1000`)
+		if err = a.seedStations(r.Context(), g); err != nil {
+			a.internal(w, err)
+			return
+		}
+		ports, err := a.globalPorts(r.Context(), u.ID, g)
 		if err != nil {
 			a.internal(w, err)
 			return
 		}
-		ports := []map[string]any{}
-		for rows.Next() {
-			var star int
-			var credits int64
-			var raw []byte
-			if err = rows.Scan(&star, &credits, &raw); err != nil {
-				rows.Close()
-				a.internal(w, err)
-				return
-			}
-			if !hasStation(star) {
-				continue
-			}
-			var stock map[string]int
-			if err = json.Unmarshal(raw, &stock); err != nil {
-				rows.Close()
-				a.internal(w, err)
-				return
-			}
-			ports = append(ports, map[string]any{"star": star, "credits": credits, "offers": offers(g.Stars[star-1], stock)})
-		}
-		err = rows.Err()
-		rows.Close()
+		reservations, err := queryMaps(r.Context(), a.db, `SELECT id,star,station,resource,quantity,cost,status,expires_at FROM reservations WHERE user_id=$1 ORDER BY (status='reserved') DESC,id DESC LIMIT 200`, u.ID)
 		if err != nil {
 			a.internal(w, err)
 			return
 		}
-		seen := map[int]bool{}
-		for _, port := range ports {
-			seen[port["star"].(int)] = true
+		if reservations == nil {
+			reservations = []map[string]any{}
 		}
-		for _, s := range g.Stars {
-			if hasStation(s.ID) && !seen[s.ID] {
-				ports = append(ports, map[string]any{"star": s.ID, "credits": int64(5000), "offers": offers(s, marketStock(s))})
-			}
-		}
-		rows, err = a.db.Query(r.Context(), `SELECT id,star,resource,quantity,cost,status,expires_at FROM reservations WHERE user_id=$1 ORDER BY (status='reserved') DESC,id DESC LIMIT 200`, u.ID)
-		if err != nil {
-			a.internal(w, err)
-			return
-		}
-		defer rows.Close()
-		reservations := []map[string]any{}
-		for rows.Next() {
-			var id, cost int64
-			var star, q int
-			var resource, status string
-			var expires time.Time
-			if err = rows.Scan(&id, &star, &resource, &q, &cost, &status, &expires); err != nil {
-				a.internal(w, err)
-				return
-			}
-			reservations = append(reservations, map[string]any{"id": id, "star": star, "resource": resource, "quantity": q, "cost": cost, "status": status, "expires_at": expires})
-		}
-		if rows.Err() != nil {
-			a.internal(w, rows.Err())
-			return
-		}
+
 		reply(w, 200, map[string]any{"ports": ports, "reservations": reservations})
 		return
 	}
 	var in struct {
 		Action        string `json:"action"`
 		Star          int    `json:"star"`
+		Station       string `json:"station"`
 		Resource      string `json:"resource"`
 		Quantity      int    `json:"quantity"`
 		ID            int64  `json:"id"`
@@ -652,6 +608,10 @@ func (a *App) globalMarket(w http.ResponseWriter, r *http.Request) {
 	var cost int64
 	var star, q int
 	var res string
+	station := in.Station
+	if station == "" {
+		station = "station"
+	}
 	problem := ""
 	if in.Action == "reserve" {
 		star, q, res = in.Star, in.Quantity, in.Resource
@@ -664,7 +624,7 @@ func (a *App) globalMarket(w http.ResponseWriter, r *http.Request) {
 			fail(w, 409, "Достигнут лимит активных броней")
 			return
 		}
-		if star < 1 || star > len(g.Stars) || !hasStation(star) || q < 1 || q > 60 {
+		if star < 1 || star > len(g.Stars) || q < 1 || q > 240 {
 			fail(w, 400, "Некорректная сделка")
 			return
 		}
@@ -672,24 +632,29 @@ func (a *App) globalMarket(w http.ResponseWriter, r *http.Request) {
 			fail(w, 400, "Некорректная сделка")
 			return
 		}
-		stock := marketStock(g.Stars[star-1])
-		raw, _ := json.Marshal(stock)
-		if _, err = tx.Exec(r.Context(), `INSERT INTO local_markets(star,stock) VALUES($1,$2) ON CONFLICT DO NOTHING`, star, raw); err != nil {
+		var exists bool
+		if err = tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM stations WHERE star=$1 AND object_id=$2)`, star, station).Scan(&exists); err != nil {
 			a.internal(w, err)
 			return
 		}
-		var wallet int64
-		if err = tx.QueryRow(r.Context(), `SELECT credits,stock FROM local_markets WHERE star=$1 FOR UPDATE`, star).Scan(&wallet, &raw); err != nil {
+		if !exists {
+			fail(w, 400, "Некорректная сделка")
+			return
+		}
+		if !stationAllows(r.Context(), tx, star, station, res) {
+			fail(w, 409, "Станция не торгует этим ресурсом")
+			return
+		}
+		stock, _, err := marketAt(r.Context(), tx, g.Stars[star-1], station)
+		if err != nil {
 			a.internal(w, err)
 			return
 		}
-		if err = json.Unmarshal(raw, &stock); err != nil {
-			a.internal(w, err)
-			return
-		}
+		var raw []byte
+
 		for _, o := range offers(g.Stars[star-1], stock) {
 			if o.Resource == res {
-				cost = int64(q * o.Buy)
+				cost = int64(q * feeOffer(o, portFee(r.Context(), tx, u.ID, star, station)).Buy)
 			}
 		}
 		if in.ExpectedPrice != nil && cost != int64(q**in.ExpectedPrice) {
@@ -703,14 +668,14 @@ func (a *App) globalMarket(w http.ResponseWriter, r *http.Request) {
 		} else {
 			stock[res] -= q
 			raw, _ = json.Marshal(stock)
-			if _, err = tx.Exec(r.Context(), `UPDATE local_markets SET stock=$2 WHERE star=$1`, star, raw); err == nil {
-				err = tx.QueryRow(r.Context(), `INSERT INTO reservations(user_id,star,resource,quantity,cost,expires_at) VALUES($1,$2,$3,$4,$5,now()+make_interval(hours=>(SELECT reservation_hours FROM game_settings WHERE id=1))) RETURNING id`, u.ID, star, res, q, cost).Scan(&reservationID)
+			if _, err = tx.Exec(r.Context(), `UPDATE local_markets SET stock=$2 WHERE star=$1 AND station=$3`, star, raw, station); err == nil {
+				err = tx.QueryRow(r.Context(), `INSERT INTO reservations(user_id,star,resource,quantity,cost,station,expires_at) VALUES($1,$2,$3,$4,$5,$6,now()+make_interval(hours=>(SELECT reservation_hours FROM game_settings WHERE id=1))) RETURNING id`, u.ID, star, res, q, cost, station).Scan(&reservationID)
 			}
 			credits -= cost
 		}
 	} else if in.Action == "collect" || in.Action == "cancel" {
 		var status string
-		err = tx.QueryRow(r.Context(), `SELECT star,resource,quantity,cost,status FROM reservations WHERE id=$1 AND user_id=$2 FOR UPDATE`, in.ID, u.ID).Scan(&star, &res, &q, &cost, &status)
+		err = tx.QueryRow(r.Context(), `SELECT star,station,resource,quantity,cost,status FROM reservations WHERE id=$1 AND user_id=$2 FOR UPDATE`, in.ID, u.ID).Scan(&star, &station, &res, &q, &cost, &status)
 		if errors.Is(err, pgx.ErrNoRows) {
 			fail(w, 404, "Бронь не найдена")
 			return
@@ -727,22 +692,22 @@ func (a *App) globalMarket(w http.ResponseWriter, r *http.Request) {
 				a.internal(w, err)
 				return
 			}
-			if !docked(ship) || ship.Star != star {
+			if !docked(ship) || ship.Star != star || ship.ObjectID != station {
 				problem = "Прибудьте на станцию получения"
-			} else if cargoSize(ship.Cargo)+pending+q > 60 {
+			} else if cargoSize(ship.Cargo)+pending+q > ship.capacity() {
 				problem = "Трюм заполнен"
 			} else {
 				ship.Cargo[res] += q
 				raw, _ := json.Marshal(ship.Cargo)
 				if _, err = tx.Exec(r.Context(), `UPDATE ships SET cargo=$2 WHERE user_id=$1 AND active`, u.ID, raw); err == nil {
-					_, err = tx.Exec(r.Context(), `UPDATE local_markets SET credits=credits+$2 WHERE star=$1`, star, cost)
+					_, err = tx.Exec(r.Context(), `UPDATE local_markets SET credits=credits+$2 WHERE star=$1 AND station=$3`, star, cost, station)
 				}
 				if err == nil {
 					_, err = tx.Exec(r.Context(), `UPDATE reservations SET status='collected' WHERE id=$1`, in.ID)
 				}
 			}
 		} else {
-			_, err = tx.Exec(r.Context(), `UPDATE local_markets SET stock=jsonb_set(stock,ARRAY[$2::text],to_jsonb(COALESCE((stock->>$2)::int,0)+$3)) WHERE star=$1`, star, res, q)
+			_, err = tx.Exec(r.Context(), `UPDATE local_markets SET stock=jsonb_set(stock,ARRAY[$2::text],to_jsonb(COALESCE((stock->>$2)::int,0)+$3)) WHERE star=$1 AND station=$4`, star, res, q, station)
 			if err == nil {
 				_, err = tx.Exec(r.Context(), `UPDATE reservations SET status='cancelled' WHERE id=$1`, in.ID)
 			}

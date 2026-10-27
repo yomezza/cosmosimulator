@@ -31,6 +31,10 @@
     );
   let busy = false,
     marketTab = "local",
+    yardQuery = "",
+    yardLocation = "",
+    yardClass = "all",
+    yardPage = 1,
     corpTab = "overview",
     corpScope = "all",
     userPage = 1,
@@ -58,7 +62,9 @@
     fmtTime = (value) => new Date(value).toLocaleString(I18n.language),
     money = (v) => num(v) + " CR",
     known = (id) => w().known?.some((v) => v.star === id),
-    fly = (s) => !!s.destination || !!s.local_target;
+    fly = (s) => !!s.destination || !!s.local_target,
+    cargoCapacity = () => d()?.ship.spec?.cargo || d()?.capacity || 60,
+    fuelCapacity = () => d()?.ship.spec?.fuel || 40;
   function reset(root) {
     const scroll = root.scrollTop,
       folds = new Map(
@@ -137,10 +143,16 @@
       guideID = id;
       Modules.open("guide");
     },
+    openShipyards(star, stationID) {
+      marketTab = "shipyards";
+      if (star) yardLocation = star + "|" + stationID;
+      Modules.open("market");
+    },
     openTasks() {
       Modules.open("tasks");
     },
   };
+  document.getElementById("nav-shipyards").onclick = () => Game.openShipyards();
   window.performExpedition = (body) =>
     act(
       "expedition",
@@ -192,7 +204,8 @@
         { label: "Руководство пилота", action: () => Game.openGuide(id) },
         {
           label: "Заправить",
-          disabled: id !== "agni" || fly(d().ship) || d().ship.fuel >= 40,
+          disabled:
+            id !== "agni" || fly(d().ship) || d().ship.fuel >= fuelCapacity(),
           reason:
             id !== "agni"
               ? "Этот ресурс не является топливом"
@@ -244,7 +257,7 @@
     );
     const used = Object.values(d().ship.cargo).reduce((a, b) => a + b, 0),
       reserved = d().job?.quantity || 0;
-    root.append(UI.bar(used + reserved, 60, "Вместимость"));
+    root.append(UI.bar(used + reserved, cargoCapacity(), "Вместимость"));
     row(root, "Занято", num(used));
     row(root, "Зарезервировано", num(reserved));
     const tools = n("div", undefined, "inline-controls");
@@ -340,21 +353,26 @@
       (id) => command({ action: "select_ship", ship: Number(id) }),
     );
     const model = n("img");
-    model.src = "pilgrim.svg";
-    model.alt = tr("Корабль «Пилигрим»");
+    model.src = s.spec.model;
+    model.alt = tr(s.spec.name);
     model.className = "ship-model";
     root.append(model);
     const meters = n("div", undefined, "two-columns");
     meters.append(
-      UI.bar(s.fuel, 40, "Топливо"),
+      UI.bar(s.fuel, s.spec.fuel, "Топливо"),
       UI.bar(
         Object.values(s.cargo).reduce((a, b) => a + b, 0) +
           (d().job?.quantity || 0),
-        60,
+        s.spec.cargo,
         "Груз",
       ),
     );
     root.append(meters);
+    row(root, "Класс корабля", tr(s.spec.role));
+    row(root, "Время перехода", s.spec.jump_seconds + " s");
+    row(root, "Расход за переход", s.spec.jump_fuel);
+    if (s.spec.mining_bonus)
+      row(root, "Бонус добычи", "+" + s.spec.mining_bonus);
     row(root, "Местоположение", d().system.name + " · " + tr(d().region));
     row(
       root,
@@ -387,7 +405,7 @@
       b(
         "Заправить",
         () => performExpedition({ action: "refuel" }),
-        fly(s) || s.fuel >= 40 || !s.cargo.agni,
+        fly(s) || s.fuel >= s.spec.fuel || !s.cargo.agni,
         "Нужен Агни в трюме",
       ),
     );
@@ -419,30 +437,9 @@
       ),
     );
     root.append(equip);
-    const port = station();
-    if (port?.shipyard) {
-      root.append(
-        n("h3", tr("Верфь")),
-        n(
-          "p",
-          tr("Пилигрим") +
-            " · " +
-            money(w().ship_price) +
-            " · " +
-            tr("В наличии") +
-            ": " +
-            port.ship_stock,
-        ),
-        b(
-          "Купить корабль",
-          () =>
-            UI.confirm("Покупка корабля", money(w().ship_price), () =>
-              command({ action: "buy_ship" }),
-            ),
-          !d().docked || port.ship_stock < 1 || d().credits < w().ship_price,
-        ),
-      );
-    }
+    root.append(
+      b("Верфи", () => Game.openShipyards(d().ship.star, d().ship.object_id)),
+    );
     const shipActions = n("div", undefined, "inline-controls ship-actions");
     root.append(shipActions);
     shipActions.append(
@@ -584,13 +581,203 @@
     );
     side.append(training);
   }
-  function tradeForm(root, offer, global = false, starID) {
+  function shipStats(root, c) {
+    row(root, "Класс корабля", tr(c.role));
+    row(root, "Вместимость", c.cargo);
+    row(root, "Топливный бак", c.fuel);
+    row(root, "Время перехода", c.jump_seconds + " s");
+    row(root, "Расход за переход", c.jump_fuel);
+    if (c.mining_bonus) row(root, "Бонус добычи", "+" + c.mining_bonus);
+  }
+  function renderShipyards(root) {
+    root.append(
+      n(
+        "p",
+        tr(
+          "Корабли продаются только на верфях. Набор моделей и количество различаются; покупка требует стыковки с выбранной верфью.",
+        ),
+        "muted",
+      ),
+    );
+    const layout = n("div", undefined, "shipyard-layout"),
+      left = n("section"),
+      right = n("section", undefined, "shipyard-models");
+    layout.append(left, right);
+    root.append(layout);
+    const search = field(
+      left,
+      "Поиск верфи или модели",
+      "yard-search",
+      yardQuery,
+      "search",
+    );
+    choice(
+      left,
+      "Модель корабля",
+      [
+        ["all", "Все модели"],
+        ...(w().ship_classes || []).map((c) => [c.id, c.name]),
+      ],
+      yardClass,
+      (value) => {
+        yardClass = value;
+        yardPage = 1;
+        draw();
+      },
+    );
+    const list = n("div", undefined, "shipyard-list"),
+      pagination = n("div", undefined, "pagination");
+    left.append(list, pagination);
+    const classes = w().ship_classes || [],
+      yards = new Map();
+    for (const offer of w().shipyards || []) {
+      const key = offer.star + "|" + offer.station;
+      if (!yards.has(key))
+        yards.set(key, {
+          key,
+          star: offer.star,
+          station: offer.station,
+          name: offer.station_name,
+          offers: [],
+        });
+      yards.get(key).offers.push(offer);
+    }
+    function draw() {
+      list.replaceChildren();
+      right.replaceChildren();
+      pagination.replaceChildren();
+      const q = yardQuery.toLowerCase().trim(),
+        filtered = [...yards.values()].filter((y) => {
+          const models = y.offers
+            .map((o) => classes.find((c) => c.id === o.ship_class))
+            .filter(Boolean);
+          return (
+            (yardClass === "all" || models.some((c) => c.id === yardClass)) &&
+            [
+              y.name,
+              String(y.star),
+              window.MapData?.stars.find((s) => s.id === y.star)?.name || "",
+              ...models.flatMap((c) => [tr(c.name), tr(c.role)]),
+            ].some((v) => v.toLowerCase().includes(q))
+          );
+        });
+      const pages = Math.max(1, Math.ceil(filtered.length / 8));
+      yardPage = Math.min(yardPage, pages);
+      if (!filtered.some((y) => y.key === yardLocation))
+        yardLocation =
+          filtered.find(
+            (y) => y.star === d().ship.star && y.station === d().ship.object_id,
+          )?.key ||
+          filtered[0]?.key ||
+          "";
+      for (const y of filtered.slice((yardPage - 1) * 8, yardPage * 8)) {
+        const button = b("", () => {
+          yardLocation = y.key;
+          draw();
+        });
+        button.className = "shipyard-location";
+        button.classList.toggle("selected", y.key === yardLocation);
+        const available = y.offers.reduce((sum, o) => sum + o.quantity, 0);
+        button.append(
+          n("span", String(y.star), "system-id"),
+          n("span", y.name),
+          n("small", num(available)),
+        );
+        list.append(button);
+      }
+      pagination.append(
+        b(
+          "‹",
+          () => {
+            yardPage--;
+            draw();
+          },
+          yardPage === 1,
+        ),
+        n("span", yardPage + " / " + pages),
+        b(
+          "›",
+          () => {
+            yardPage++;
+            draw();
+          },
+          yardPage === pages,
+        ),
+      );
+      if (!filtered.length) {
+        UI.empty(list, "Ничего не найдено");
+        return;
+      }
+      const y = filtered.find((v) => v.key === yardLocation),
+        here =
+          d().docked &&
+          d().ship.star === y.star &&
+          d().ship.object_id === y.station;
+      right.append(n("h3", y.name));
+      const route = b("Построить маршрут", () => {
+        Modules.open("galaxy");
+        window.dispatchEvent(new CustomEvent("showstar", { detail: y.star }));
+      });
+      right.append(route);
+      const cards = n("div", undefined, "shipyard-cards");
+      right.append(cards);
+      for (const offer of y.offers) {
+        const c = classes.find((c) => c.id === offer.ship_class);
+        if (!c || (yardClass !== "all" && c.id !== yardClass)) continue;
+        const card = n("article", undefined, "shipyard-card"),
+          model = n("img");
+        model.src = c.model;
+        model.alt = tr(c.name);
+        card.dataset.hull = c.id;
+        card.append(
+          model,
+          n("h3", tr(c.name)),
+          n("p", tr(c.description), "muted"),
+        );
+        shipStats(card, c);
+        row(card, "В наличии", num(offer.quantity));
+        row(card, "Стоимость", money(offer.price));
+        card.append(
+          b(
+            "Купить корабль",
+            () =>
+              UI.confirm(
+                "Покупка корабля",
+                tr(c.name) + " · " + money(offer.price) + " · " + y.name,
+                () =>
+                  command({
+                    action: "buy_ship",
+                    target: c.id,
+                    price: offer.price,
+                    star: y.star,
+                    station: y.station,
+                  }),
+              ),
+            !here || offer.quantity < 1 || d().credits < offer.price,
+            !here
+              ? "Прибудьте на выбранную верфь"
+              : offer.quantity < 1
+                ? "На верфи нет доступных кораблей"
+                : "Недостаточно кредитов",
+          ),
+        );
+        cards.append(card);
+      }
+    }
+    search.oninput = () => {
+      yardQuery = search.value;
+      yardPage = 1;
+      draw();
+    };
+    draw();
+  }
+  function tradeForm(root, offer, global = false, starID, stationID) {
     const r = res(offer.resource),
       panel = n("aside", undefined, "detail-panel");
     panel.append(n("h3", tr(r.name)), n("p", tr(r.description), "muted"));
     const q = field(panel, "Количество", "trade-quantity", 1, "number");
     q.min = 1;
-    q.max = Math.min(60, offer.stock);
+    q.max = Math.min(global ? 240 : cargoCapacity(), offer.stock);
     const quote = n("p", undefined, "trade-total"),
       capacity = n("p", undefined, "muted");
     const buy = b(global ? "Забронировать на станции" : "Купить в трюм", () =>
@@ -598,6 +785,7 @@
         ? act("market/global", {
             action: "reserve",
             star: starID,
+            station: stationID,
             resource: r.id,
             quantity: Number(q.value),
             expected_price: offer.buy,
@@ -629,14 +817,14 @@
         ? tr(
             "Выдача на станции указанной системы. Полный возврат до получения; комиссия хранения — 0 CR.",
           )
-        : tr("Свободно в трюме") + ": " + (60 - used);
+        : tr("Свободно в трюме") + ": " + (cargoCapacity() - used);
       buy.disabled =
         !Number.isInteger(count) ||
         count < 1 ||
         count > offer.stock ||
-        count > 60 ||
+        count > (global ? 240 : cargoCapacity()) ||
         cost > d().credits ||
-        (!global && (!d().docked || count + used > 60));
+        (!global && (!d().docked || count + used > cargoCapacity()));
       sell.disabled =
         global ||
         !d().docked ||
@@ -682,6 +870,7 @@
     }
     // Keep the current table while loading; only the latest render may replace it.
     if (!current()) return false;
+    Modules.title("market", tr(tab === "shipyards" ? "Верфи" : "Рынок"));
     reset(root);
     const port = station();
     root.append(
@@ -700,6 +889,7 @@
         ["warehouse", "Склады"],
         ["data", "Разведданные"],
         ["delivery", "Перевозки"],
+        ["shipyards", "Верфи"],
       ],
       tab,
       (id) => {
@@ -707,6 +897,10 @@
         renderMarket();
       },
     );
+    if (tab === "shipyards") {
+      renderShipyards(root);
+      return;
+    }
     if (tab === "local") {
       if (!d().docked) {
         UI.empty(root, "Для локальной торговли пристыкуйтесь к порту.");
@@ -749,16 +943,21 @@
     if (tab === "global") {
       const result = globalMarket;
       const eligible = result.ports.sort((a, b) => a.star - b.star);
-      let target = Number(root.dataset.target || d().ship.star);
-      if (!eligible.some((p) => p.star === target)) target = eligible[0]?.star;
+      const portKey = (p) => p.star + "|" + p.station;
+      let target =
+        root.dataset.target || d().ship.star + "|" + d().ship.object_id;
+      if (!eligible.some((p) => portKey(p) === target))
+        target = eligible[0] && portKey(eligible[0]);
+      if (!target) {
+        UI.empty(root, "Нет доступных станций");
+        return;
+      }
       choice(
         root,
-        "Система получения",
+        "Станция получения",
         eligible.map((p) => ({
-          id: p.star,
-          label:
-            window.MapData?.stars.find((s) => s.id === p.star)?.name ||
-            String(p.star),
+          id: portKey(p),
+          label: p.name + " · " + tr(p.specialization),
           code: String(p.star),
         })),
         target,
@@ -767,10 +966,20 @@
           renderMarket();
         },
       );
+      const targetPort = eligible.find((p) => portKey(p) === target);
+      root.append(
+        n(
+          "p",
+          tr(targetPort.specialization) +
+            " · " +
+            tr("Ассортимент зависит от станции"),
+          "muted",
+        ),
+      );
       const layout = n("div", undefined, "master-detail"),
         list = n("section");
       layout.append(list);
-      const offers = eligible.find((p) => p.star === target)?.offers || [],
+      const offers = targetPort.offers || [],
         offer =
           offers.find((o) => o.resource === selectedResource) || offers[0];
       list.append(
@@ -786,7 +995,8 @@
           ]),
         ),
       );
-      if (offer) tradeForm(layout, offer, true, target);
+      if (offer)
+        tradeForm(layout, offer, true, targetPort.star, targetPort.station);
       root.append(layout, n("h3", tr("Мои бронирования")));
       const rows = result.reservations.map((r) => {
         const controls = n("div", undefined, "inline-controls");
@@ -795,7 +1005,9 @@
             b(
               "Получить груз",
               () => act("market/global", { action: "collect", id: r.id }),
-              !d().docked || d().ship.star !== r.star,
+              !d().docked ||
+                d().ship.star !== r.star ||
+                d().ship.object_id !== r.station,
               "Прибудьте на станцию получения",
             ),
             b("Отменить бронь", () =>
@@ -804,7 +1016,9 @@
           );
         return [
           "#" + r.id,
-          r.star,
+          w().stations.find(
+            (p) => p.star === r.star && p.object_id === r.station,
+          )?.name || r.star + " / " + r.station,
           resourceName(r.resource),
           "× " + r.quantity,
           money(r.cost),
@@ -817,7 +1031,7 @@
         UI.table(
           [
             "ID",
-            "Система",
+            "Станция",
             "Ресурс",
             "Количество",
             "Стоимость",
@@ -852,7 +1066,7 @@
                     actionAmount(
                       "В трюм",
                       "Количество",
-                      Math.min(q, 60),
+                      Math.min(q, cargoCapacity()),
                       (quantity) =>
                         command({ action: "withdraw", resource: id, quantity }),
                     ),
@@ -1469,7 +1683,7 @@
                     actionAmount(
                       "В трюм",
                       "Количество",
-                      Math.min(60, q),
+                      Math.min(cargoCapacity(), q),
                       (quantity) =>
                         command({
                           action: "company_cargo_withdraw",
@@ -2286,6 +2500,14 @@
         category: "Ресурсы",
         subcategory: r.kind,
       })),
+      ...(w().ship_classes || []).map((ship) => ({
+        id: "ship-" + ship.id,
+        name: ship.name,
+        desc: ship.description,
+        category: "Корабли",
+        subcategory: ship.role,
+        ship,
+      })),
       ...objectArticles.map(([id, name, kind, desc]) => ({
         id,
         name,
@@ -2325,7 +2547,7 @@
           tr(item.subcategory),
         ].some((value) => value.toLowerCase().includes(q)),
       );
-      for (const category of ["Ресурсы", "Космические объекты"]) {
+      for (const category of ["Ресурсы", "Космические объекты", "Корабли"]) {
         const entries = matched.filter((item) => item.category === category);
         if (!entries.length) continue;
         const group = n("details", undefined, "guide-category");
@@ -2369,7 +2591,21 @@
       article.replaceChildren();
       const item = all.find((v) => v.id === guideID) || all[0];
       article.append(n("h2", tr(item.name)));
-      if (item.resource) {
+      if (item.ship) {
+        const model = n("img");
+        model.src = item.ship.model;
+        model.alt = tr(item.ship.name);
+        model.className = "ship-model";
+        article.append(model, n("p", tr(item.desc)));
+        shipStats(article, item.ship);
+        article.append(
+          b("Найти верфь", () => {
+            yardClass = item.ship.id;
+            yardQuery = "";
+            Game.openShipyards();
+          }),
+        );
+      } else if (item.resource) {
         article.append(
           n("div", item.code, "guide-code"),
           n("p", tr(item.desc)),
@@ -2892,6 +3128,10 @@
     notifySelected.clear();
     createCorp = false;
     selectedCorp = null;
+    yardQuery = "";
+    yardLocation = "";
+    yardClass = "all";
+    yardPage = 1;
     userQuery = "";
     userPage = 1;
     marketRequestID++;

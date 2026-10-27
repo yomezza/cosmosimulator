@@ -244,7 +244,7 @@ func (a *App) corporationCommand(ctx context.Context, tx pgx.Tx, u User, s *Ship
 		raw, _ := json.Marshal(in.FlagDesign)
 		_, err = tx.Exec(ctx, `UPDATE companies SET color=$2,flag=$3,flag_design=$4 WHERE id=$1`, cid, in.Color, in.Flag, raw)
 	case "company_store", "company_cargo_withdraw":
-		if !docked(*s) || in.Quantity < 1 || in.Quantity > 60 {
+		if !docked(*s) || in.Quantity < 1 || in.Quantity > s.capacity() {
 			return true, errors.New("Стыкуйтесь с портом и укажите количество")
 		}
 		var enabled bool
@@ -270,7 +270,7 @@ func (a *App) corporationCommand(ctx context.Context, tx pgx.Tx, u User, s *Ship
 			if err = tx.QueryRow(ctx, `SELECT COALESCE(sum(quantity),0) FROM mining_jobs WHERE ship_id=$1`, s.ID).Scan(&reserved); err != nil {
 				return true, err
 			}
-			if stock[in.Resource] < in.Quantity || cargoSize(s.Cargo)+reserved+in.Quantity > 60 {
+			if stock[in.Resource] < in.Quantity || cargoSize(s.Cargo)+reserved+in.Quantity > s.capacity() {
 				return true, errors.New("Недостаточно товара или места")
 			}
 			stock[in.Resource] -= in.Quantity
@@ -339,13 +339,16 @@ func (a *App) corporationCommand(ctx context.Context, tx pgx.Tx, u User, s *Ship
 			if kind != "warehouse" {
 				_, err = tx.Exec(ctx, `INSERT INTO stations(star,object_id,name,specialization,company_id) VALUES($1,$2,$3,$4,$5)`, star, fmt.Sprintf("project-%d", in.ID), name, func() string {
 					if kind == "station" {
-						return "refinery"
+						return "industry"
 					}
-					return "general"
+					return "trade"
 				}(), cid)
 				if err != nil {
 					return true, err
 				}
+			}
+			if err = seedCommerce(ctx, tx); err != nil {
+				return true, err
 			}
 			err = recordEvent(ctx, tx, u.ID, "project_complete", map[string]any{"project": in.ID, "star": star})
 		}

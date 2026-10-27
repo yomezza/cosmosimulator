@@ -11,6 +11,8 @@ import (
 )
 
 type Ship struct {
+	Class        string         `json:"class"`
+	Spec         ShipClass      `json:"spec"`
 	Star         int            `json:"star"`
 	Destination  *int           `json:"destination"`
 	Arrival      *time.Time     `json:"arrival"`
@@ -68,6 +70,19 @@ func offers(star Star, stock map[string]int) []Offer {
 	}
 	return out
 }
+func stationOffers(star Star, stock map[string]int, goods []string) []Offer {
+	allowed := map[string]bool{}
+	for _, id := range goods {
+		allowed[id] = true
+	}
+	out := []Offer{}
+	for _, o := range offers(star, stock) {
+		if allowed[o.Resource] {
+			out = append(out, o)
+		}
+	}
+	return out
+}
 func cargoSize(c map[string]int) int {
 	n := 0
 	for _, q := range c {
@@ -121,27 +136,21 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 		a.internal(w, err)
 		return
 	}
-	var raw []byte
 	star := g.Stars[ship.Star-1]
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(784219,$1)`, ship.Star); err != nil {
 		a.internal(w, err)
 		return
 	}
-	stock := marketStock(star)
-	raw, _ = json.Marshal(stock)
-	if _, err = tx.Exec(ctx, `INSERT INTO local_markets(star,stock) VALUES($1,$2) ON CONFLICT DO NOTHING`, ship.Star, raw); err != nil {
+	marketID := ship.ObjectID
+	if !docked(ship) {
+		marketID = ""
+	}
+	stock, wallet, err := marketAt(ctx, tx, star, marketID)
+	if err != nil {
 		a.internal(w, err)
 		return
 	}
-	var wallet int64
-	if err = tx.QueryRow(ctx, `SELECT credits,stock FROM local_markets WHERE star=$1 FOR UPDATE`, ship.Star).Scan(&wallet, &raw); err != nil {
-		a.internal(w, err)
-		return
-	}
-	if err = json.Unmarshal(raw, &stock); err != nil {
-		a.internal(w, err)
-		return
-	}
+
 	var job *MiningJob
 	var active MiningJob
 	err = tx.QueryRow(ctx, `SELECT resource,quantity,finish_tick,started_at,planet FROM mining_jobs WHERE ship_id=$1`, ship.ID).Scan(&active.Resource, &active.Quantity, &active.FinishTick, &active.StartedAt, &active.Planet)
@@ -275,11 +284,11 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 				path := g.path(ship.Star, in.To)
 				if len(path) < 2 {
 					problem = "Нет допустимого маршрута"
-				} else if ship.Fuel-ship.ReservedFuel < (len(path)-1)*2 {
+				} else if ship.Fuel-ship.ReservedFuel < (len(path)-1)*ship.hull().JumpFuel {
 					problem = "Недостаточно топлива"
 				} else {
-					ship.Fuel -= (len(path) - 1) * 2
-					arrival := time.Now().Add(time.Duration(len(path)-1) * 5 * time.Second)
+					ship.Fuel -= (len(path) - 1) * ship.hull().JumpFuel
+					arrival := time.Now().Add(time.Duration((len(path)-1)*ship.hull().JumpSeconds) * time.Second)
 					ship.Arrival = &arrival
 					now := time.Now()
 					ship.Departure = &now
@@ -287,15 +296,15 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 					ship.Destination = &in.To
 				}
 			case "refuel":
-				if ship.Fuel >= 40 {
+				if ship.Fuel >= ship.hull().Fuel {
 					problem = "Бак полон"
 				} else if ship.Cargo["agni"] < 1 {
 					problem = "Нужен Агни в трюме"
 				} else {
 					ship.Cargo["agni"]--
 					ship.Fuel += 5
-					if ship.Fuel > 40 {
-						ship.Fuel = 40
+					if ship.Fuel > ship.hull().Fuel {
+						ship.Fuel = ship.hull().Fuel
 					}
 				}
 			case "buy", "sell":
@@ -303,11 +312,11 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 					problem = "Станция не торгует этой категорией"
 					break
 				}
-				if !hasStation(ship.Star) || !docked(ship) {
+				if !docked(ship) {
 					problem = "Для торговли требуется стыковка с портом"
 					break
 				}
-				if _, exists := resource(in.Resource); !exists || in.Quantity < 1 || in.Quantity > 60 {
+				if _, exists := resource(in.Resource); !exists || in.Quantity < 1 || in.Quantity > ship.capacity() {
 					problem = "Некорректная сделка"
 					break
 				}
@@ -332,7 +341,7 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 					cost := int64(q * offer.Buy)
 					if stock[in.Resource] < q {
 						problem = "Нет товара на рынке"
-					} else if cargoSize(ship.Cargo)+reservedCargo+q > 60 {
+					} else if cargoSize(ship.Cargo)+reservedCargo+q > ship.capacity() {
 						problem = "Трюм заполнен"
 					} else if u.Credits < cost {
 						problem = "Недостаточно кредитов"
@@ -388,7 +397,7 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 					problem = "Приблизьтесь к объекту добычи"
 					break
 				}
-				if cargoSize(ship.Cargo) >= 60 {
+				if cargoSize(ship.Cargo) >= ship.capacity() {
 					problem = "Трюм заполнен"
 					break
 				}
@@ -396,12 +405,12 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 					problem = "Установите подходящий добытчик"
 					break
 				}
-				count, start, extractErr := reserveExtraction(ctx, tx, ship.Star, in.Planet, in.Resource, extractorYield(ship.Extractor, ship.Star, in.Planet))
+				count, start, extractErr := reserveExtraction(ctx, tx, ship.Star, in.Planet, in.Resource, extractorYield(ship.Extractor, ship.Star, in.Planet)+ship.hull().MiningBonus)
 				err = extractErr
 				if err != nil {
 					break
 				}
-				if cargoSize(ship.Cargo)+count > 60 {
+				if cargoSize(ship.Cargo)+count > ship.capacity() {
 					problem = "Трюм заполнен"
 					break
 				}
@@ -440,7 +449,7 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if _, err = tx.Exec(ctx, `UPDATE local_markets SET credits=$2,stock=$3 WHERE star=$1`, ship.Star, wallet, stockJSON); err != nil {
+		if _, err = tx.Exec(ctx, `UPDATE local_markets SET credits=$2,stock=$3 WHERE star=$1 AND station=$4`, ship.Star, wallet, stockJSON, marketID); err != nil {
 			a.internal(w, err)
 			return
 		}
@@ -462,9 +471,6 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 			sites[i].Details = nil
 		}
 	}
-	if !hasStation(ship.Star) {
-		stock = map[string]int{}
-	}
 	if !surveyed {
 		star.Planets = nil
 	}
@@ -472,18 +478,27 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 		a.internal(w, err)
 		return
 	}
-	marketOffers := offers(star, stock)
-	filtered := []Offer{}
-	for _, o := range marketOffers {
-		if stationAllows(ctx, a.db, ship.Star, ship.ObjectID, o.Resource) {
-			filtered = append(filtered, feeOffer(o, portFee(ctx, a.db, u.ID, ship.Star, ship.ObjectID)))
+	marketOffers := []Offer{}
+	fee := portFee(ctx, a.db, u.ID, ship.Star, marketID)
+	var goods []string
+	if docked(ship) {
+		if e := a.db.QueryRow(ctx, `SELECT goods FROM stations WHERE star=$1 AND object_id=$2`, ship.Star, marketID).Scan(&goods); e != nil {
+			a.internal(w, e)
+			return
 		}
 	}
-	marketOffers = filtered
-	if !hasStation(ship.Star) {
-		marketOffers = []Offer{}
+	for _, o := range stationOffers(star, stock, goods) {
+		marketOffers = append(marketOffers, feeOffer(o, fee))
 	}
-	reply(w, 200, map[string]any{"server_time": time.Now(), "job": job, "world_tick": worldTick, "station": hasStation(ship.Star), "docked": docked(ship), "sites": sites, "ship": ship, "system": star, "region": regionName(star.Region), "surveyed": surveyed, "credits": u.Credits, "resources": resourceCatalog(), "offers": marketOffers, "market_credits": wallet, "capacity": 60, "research": researchView(ctx, a.db, u.ID)})
+	stationPresent := false
+	for _, site := range sites {
+		if site.Kind == "Орбитальная станция" {
+			stationPresent = true
+			break
+		}
+	}
+
+	reply(w, 200, map[string]any{"server_time": time.Now(), "job": job, "world_tick": worldTick, "station": stationPresent, "docked": docked(ship), "sites": sites, "ship": ship, "system": star, "region": regionName(star.Region), "surveyed": surveyed, "credits": u.Credits, "resources": resourceCatalog(), "offers": marketOffers, "market_credits": wallet, "capacity": ship.capacity(), "research": researchView(ctx, a.db, u.ID)})
 }
 
 // The legacy prototype ore mine is separate. Bots trade only finite cargo against
@@ -517,19 +532,21 @@ func tradeBots(ctx context.Context, tx pgx.Tx) error {
 			return err
 		}
 		star := Star{ID: 1, Region: 0}
-		stock := marketStock(star)
-		raw, _ := json.Marshal(stock)
-		if _, err = tx.Exec(ctx, `INSERT INTO local_markets(star,stock) VALUES(1,$1) ON CONFLICT DO NOTHING`, raw); err != nil {
+		stock, wallet, err := marketAt(ctx, tx, star, "station")
+		if err != nil {
 			return err
 		}
-		var wallet int64
-		if err = tx.QueryRow(ctx, `SELECT credits,stock FROM local_markets WHERE star=1 FOR UPDATE`).Scan(&wallet, &raw); err != nil {
+		var raw []byte
+		var goods []string
+		if err = tx.QueryRow(ctx, `SELECT goods FROM stations WHERE star=1 AND object_id='station'`).Scan(&goods); err != nil {
 			return err
 		}
-		if err = json.Unmarshal(raw, &stock); err != nil {
-			return err
+		available := stationOffers(star, stock, goods)
+		if len(available) == 0 {
+			continue
 		}
-		res := resources[i%len(resources)].ID
+		res := available[i%len(available)].Resource
+
 		var offer Offer
 		for _, o := range offers(star, stock) {
 			if o.Resource == res {
@@ -541,7 +558,7 @@ func tradeBots(ctx context.Context, tx pgx.Tx) error {
 			stock[res]++
 			credits += int64(offer.Sell)
 			wallet -= int64(offer.Sell)
-		} else if ship.Cargo[res] == 0 && stock[res] > 0 && credits >= int64(offer.Buy) && cargoSize(ship.Cargo) < 60 {
+		} else if ship.Cargo[res] == 0 && stock[res] > 0 && credits >= int64(offer.Buy) && cargoSize(ship.Cargo) < ship.capacity() {
 			ship.Cargo[res]++
 			stock[res]--
 			credits -= int64(offer.Buy)
@@ -552,7 +569,7 @@ func tradeBots(ctx context.Context, tx pgx.Tx) error {
 		for _, q := range []struct {
 			sql  string
 			args []any
-		}{{`UPDATE ships SET cargo=$2 WHERE user_id=$1 AND active`, []any{id, cargo}}, {`UPDATE users SET credits=$2 WHERE id=$1`, []any{id, credits}}, {`UPDATE local_markets SET credits=$1,stock=$2 WHERE star=1`, []any{wallet, raw}}} {
+		}{{`UPDATE ships SET cargo=$2 WHERE user_id=$1 AND active`, []any{id, cargo}}, {`UPDATE users SET credits=$2 WHERE id=$1`, []any{id, credits}}, {`UPDATE local_markets SET credits=$1,stock=$2 WHERE star=1 AND station='station'`, []any{wallet, raw}}} {
 			if _, err = tx.Exec(ctx, q.sql, q.args...); err != nil {
 				return fmt.Errorf("bot trade: %w", err)
 			}
