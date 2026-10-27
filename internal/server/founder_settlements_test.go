@@ -171,7 +171,7 @@ func TestSecondShipRefueling(t *testing.T) {
 	f := newFixture033(t)
 	cookie, uid := f.signup("refuel051")
 	first := f.integer(`SELECT id FROM ships WHERE user_id=$1 AND active`, uid)
-	f.exec(`UPDATE users SET credits=1000000 WHERE id=$1`, uid)
+	f.exec(`UPDATE users SET credits=1000000,level=20 WHERE id=$1`, uid)
 	f.cmd(cookie, map[string]any{"action": "buy_ship", "target": "wanderer"}, 200)
 	second := f.integer(`SELECT id FROM ships WHERE user_id=$1 AND class='wanderer'`, uid)
 	f.cmd(cookie, map[string]any{"action": "select_ship", "ship": second}, 200)

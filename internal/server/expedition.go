@@ -195,6 +195,13 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 		if !decode(w, r, &in) {
 			return
 		}
+		if busy, e := automationBusy(ctx, tx, ship.ID); e != nil {
+			a.internal(w, e)
+			return
+		} else if busy {
+			fail(w, 409, "Приостановите задачу планировщика")
+			return
+		}
 		if in.Ship > 0 && in.Ship != ship.ID {
 			fail(w, 409, "Активный корабль изменился. Повторите действие")
 			return
@@ -372,6 +379,8 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 						problem = "Нет товара на рынке"
 					} else if cargoSize(ship.Cargo)+reservedCargo+q > ship.capacity() {
 						problem = "Трюм заполнен"
+					} else if wallet > MaxCredits-cost {
+						problem = "Достигнут лимит 500 млрд CR"
 					} else if u.Credits < cost {
 						problem = "Недостаточно кредитов"
 					} else {
@@ -385,6 +394,8 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 					cost := int64(q * offer.Sell)
 					if ship.Cargo[in.Resource] < q {
 						problem = "Нет груза для продажи"
+					} else if u.Credits > MaxCredits-cost {
+						problem = "Достигнут лимит 500 млрд CR"
 					} else if wallet < cost {
 						problem = "У рынка недостаточно кредитов"
 					} else {
@@ -398,58 +409,10 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 					_, err = tx.Exec(ctx, `INSERT INTO reputation(user_id,company_id,points) SELECT $1,founder,1 FROM stations WHERE star=$2 AND object_id=$3 AND founder IS NOT NULL ON CONFLICT(user_id,company_id) DO UPDATE SET points=reputation.points+1`, u.ID, ship.Star, ship.ObjectID)
 				}
 			case "mine":
-				if job != nil {
-					problem = "Добыча уже выполняется"
-					break
-				}
-				if !surveyed {
-					problem = "Сначала исследуйте систему"
-					break
-				}
-				found := false
-				var sourceID string
-				for _, site := range systemSites(star) {
-					if site.Planet == in.Planet {
-						sourceID = site.ID
-						for _, id := range site.Resources {
-							if id == in.Resource {
-								found = true
-							}
-						}
-					}
-				}
-				if !found {
-					problem = "Ресурс отсутствует на планете"
-					break
-				}
-				if !nearObject(ship, sourceID) {
-					problem = "Приблизьтесь к объекту добычи"
-					break
-				}
-				if cargoSize(ship.Cargo) >= ship.capacity() {
-					problem = "Трюм заполнен"
-					break
-				}
-				if !extractorAccepts(ship.Extractor, in.Resource) {
-					problem = "Установите подходящий добытчик"
-					break
-				}
-				count, start, extractErr := reserveExtraction(ctx, tx, ship.Star, in.Planet, in.Resource, extractorYield(ship.Extractor, ship.Star, in.Planet)+ship.hull().MiningBonus)
-				err = extractErr
+				job, err = beginExtraction(ctx, tx, u.ID, ship, star, in.Planet, in.Resource, 0)
 				if err != nil {
-					break
-				}
-				if cargoSize(ship.Cargo)+count > ship.capacity() {
-					problem = "Трюм заполнен"
-					break
-				}
-				if count == 0 {
-					problem = "Лимит добычи исчерпан"
-					break
-				}
-				_, err = tx.Exec(ctx, `INSERT INTO mining_jobs(user_id,star,planet,resource,quantity,finish_tick,quota_start,ship_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, u.ID, ship.Star, in.Planet, in.Resource, count, worldTick+1, start, ship.ID)
-				if err == nil {
-					job = &MiningJob{Resource: in.Resource, Quantity: count, FinishTick: worldTick + 1, StartedAt: time.Now(), Planet: in.Planet}
+					problem = err.Error()
+					err = nil
 				}
 
 			default:
@@ -529,7 +492,7 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	reply(w, 200, map[string]any{"server_time": time.Now(), "job": job, "world_tick": worldTick, "station": stationPresent, "docked": docked(ship), "sites": sites, "ship": ship, "system": star, "region": regionName(star.Region), "surveyed": surveyed, "credits": u.Credits, "resources": resourceCatalog(), "offers": marketOffers, "market_credits": wallet, "capacity": ship.capacity(), "research": researchView(ctx, a.db, u.ID)})
+	reply(w, 200, map[string]any{"server_time": time.Now(), "job": job, "world_tick": worldTick, "station": stationPresent, "docked": docked(ship), "sites": sites, "ship": ship, "system": star, "region": g.regionName(star.Region), "surveyed": surveyed, "credits": u.Credits, "resources": resourceCatalog(), "offers": marketOffers, "market_credits": wallet, "capacity": ship.capacity(), "research": researchView(ctx, a.db, u.ID)})
 }
 
 // The legacy prototype ore mine is separate. Bots trade only finite cargo against
@@ -584,12 +547,12 @@ func tradeBots(ctx context.Context, tx pgx.Tx) error {
 				offer = o
 			}
 		}
-		if ship.Cargo[res] > 0 && wallet >= int64(offer.Sell) {
+		if ship.Cargo[res] > 0 && wallet >= int64(offer.Sell) && credits <= MaxCredits-int64(offer.Sell) {
 			ship.Cargo[res]--
 			stock[res]++
 			credits += int64(offer.Sell)
 			wallet -= int64(offer.Sell)
-		} else if ship.Cargo[res] == 0 && stock[res] > 0 && credits >= int64(offer.Buy) && cargoSize(ship.Cargo) < ship.capacity() {
+		} else if ship.Cargo[res] == 0 && stock[res] > 0 && credits >= int64(offer.Buy) && cargoSize(ship.Cargo) < ship.capacity() && wallet <= MaxCredits-int64(offer.Buy) {
 			ship.Cargo[res]++
 			stock[res]--
 			credits -= int64(offer.Buy)

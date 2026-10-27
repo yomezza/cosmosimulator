@@ -261,10 +261,7 @@
   function renderCargo() {
     const root = roots.cargo;
     reset(root);
-    Modules.title(
-      "cargo",
-      tr("Трюм") + " · " + tr(d().ship.name) + " #" + d().ship.id,
-    );
+    Modules.title("cargo", tr("Трюм") + " · " + UI.shipName(d().ship));
     const used = Object.values(d().ship.cargo).reduce((a, b) => a + b, 0),
       reserved = d().job?.quantity || 0;
     root.append(UI.bar(used + reserved, cargoCapacity(), "Вместимость"));
@@ -336,10 +333,7 @@
   function renderHologram() {
     const root = roots.hologram,
       s = d().ship;
-    Modules.title(
-      "hologram",
-      tr("Голограмма") + " · " + tr(s.name) + " #" + s.id,
-    );
+    Modules.title("hologram", tr("Голограмма") + " · " + UI.shipName(s));
     root.classList.add("hologram-content");
     let model = root.querySelector(".hologram-model");
     if (!model) {
@@ -384,13 +378,7 @@
     const s = d().ship;
     Modules.title(
       "ship",
-      tr("Корабль") +
-        " · " +
-        tr(s.name) +
-        " #" +
-        s.id +
-        " · " +
-        d().system.name,
+      tr("Корабль") + " · " + UI.shipName(s) + " · " + d().system.name,
     );
     const ships = gameData.fleet.ships;
     choice(
@@ -398,9 +386,7 @@
       "Корабль",
       ships.map((s) => [
         s.id,
-        tr(s.name) +
-          " #" +
-          s.id +
+        UI.shipName(s) +
           " · " +
           (window.MapData?.stars.find((star) => star.id === s.star)?.name ||
             s.star),
@@ -419,6 +405,13 @@
       ),
     );
     root.append(meters);
+    const rename = field(root, "Название корабля", "ship-rename", s.name);
+    rename.maxLength = 40;
+    root.append(
+      b("Переименовать корабль", () =>
+        command({ action: "rename_ship", ship: s.id, name: rename.value }),
+      ),
+    );
     row(root, "Класс корабля", tr(s.spec.role));
     row(root, "Длина корпуса", s.spec.length + " " + tr("м"));
     row(root, "Время перехода", s.spec.jump_seconds + " s");
@@ -642,6 +635,7 @@
   }
   function shipStats(root, c) {
     row(root, "Класс корабля", tr(c.role));
+    row(root, "Требуемый стаж", c.required_level);
     row(root, "Длина корпуса", c.length + " " + tr("м"));
     row(root, "Вместимость", c.cargo);
     row(root, "Топливный бак", c.fuel);
@@ -836,12 +830,17 @@
                     station: y.station,
                   }),
               ),
-            !here || offer.quantity < 1 || d().credits < offer.price,
+            !here ||
+              offer.quantity < 1 ||
+              d().credits < offer.price ||
+              gameData.profile.level < c.required_level,
             !here
               ? "Прибудьте на выбранную верфь"
               : offer.quantity < 1
                 ? "На верфи нет доступных кораблей"
-                : "Недостаточно кредитов",
+                : gameData.profile.level < c.required_level
+                  ? "Недостаточный стаж для покупки"
+                  : "Недостаточно кредитов",
           ),
         );
         cards.append(card);
@@ -1035,20 +1034,13 @@
         UI.empty(root, "Нет доступных станций");
         return;
       }
-      choice(
-        root,
-        "Станция получения",
-        eligible.map((p) => ({
-          id: portKey(p),
-          label: p.name + " · " + tr(p.specialization),
-          code: String(p.star),
-        })),
-        target,
-        (value) => {
-          root.dataset.target = value;
-          renderMarket();
-        },
-      );
+      const stationLabel = n("label");
+      stationLabel.append(n("span", tr("Станция получения")));
+      root.append(stationLabel);
+      UI.stationPicker(stationLabel, eligible, target, (value) => {
+        root.dataset.target = value;
+        renderMarket();
+      });
       const targetPort = eligible.find((p) => portKey(p) === target);
       root.append(
         n(
@@ -1105,7 +1097,7 @@
           resourceName(r.resource),
           "× " + r.quantity,
           money(r.cost),
-          tr(r.status),
+          n("span", tr(r.status), "reservation-status status-" + r.status),
           r.expires_at ? fmtTime(r.expires_at) : "—",
           controls,
         ];
@@ -1513,7 +1505,7 @@
         const grid = n("div", undefined, "flag-grid");
         for (const flag of [..."◈◆★☀☾⚑⚙✦"]) {
           const tile = b(flag, () => {
-            preview.textContent = flag;
+            preview.replaceChildren(n("span", flag, "flag-symbol"));
             preview.value = flag;
             grid.remove();
             change?.(flag);
@@ -1525,6 +1517,7 @@
       });
     preview.value = initial;
     preview.className = "flag-preview";
+    preview.replaceChildren(n("span", initial, "flag-symbol"));
     host.append(preview);
     root.append(host);
     return preview;
@@ -1565,7 +1558,19 @@
     root.append(tools);
     const layout = n("div", undefined, "master-detail"),
       list = n("section");
+    companyList.sort(
+      (a, b) =>
+        Number(!!b.founder) - Number(!!a.founder) ||
+        Number(!!b.starter) - Number(!!a.starter) ||
+        a.name.localeCompare(b.name),
+    );
+    list.append(n("small", tr("Основатели и академия"), "company-group-label"));
+    let separated = false;
     for (const c of companyList) {
+      if (!c.founder && !c.starter && !separated) {
+        list.append(n("hr"), n("small", tr("Корпорации игроков")));
+        separated = true;
+      }
       const button = b("", () => {
         selectedCorp = c.id;
         createCorp = false;
@@ -1585,6 +1590,12 @@
       );
       list.append(button);
     }
+    if (!separated)
+      list.append(
+        n("hr"),
+        n("small", tr("Корпорации игроков")),
+        n("p", tr("Пока нет корпораций игроков"), "muted"),
+      );
     layout.append(list);
     const side = n("aside", undefined, "detail-panel");
     layout.append(side);
@@ -2125,7 +2136,7 @@
     root.append(
       paging,
       UI.table(
-        ["ID", "Игрок", "Роль", "Баланс", "Уровень игрока", "Действие"],
+        ["ID", "Игрок", "Роль", "Баланс", "Стаж игрока", "Действие"],
         result.items.map((u) => [
           u.id,
           u.username,
@@ -2160,13 +2171,24 @@
       ),
       level = field(
         values,
-        "Уровень игрока",
+        "Стаж игрока",
         "edit-level-" + u.id,
         u.level,
         "number",
       ),
       xp = field(values, "Опыт", "edit-xp-" + u.id, u.xp, "number");
-    form.append(values, n("h3", tr("Доступ")));
+    credits.min = 0;
+    credits.max = 500000000000;
+    credits.step = 1;
+    level.min = 1;
+    level.max = 1000000;
+    xp.min = 0;
+    xp.max = 1000000000;
+    form.append(
+      values,
+      b("Выдача ресурсов", () => AdminResources.open(u.id)),
+      n("h3", tr("Доступ")),
+    );
     const role = choice(
       form,
       "Роль",
@@ -2344,7 +2366,11 @@
   function eventText(item) {
     const data = item.data || {};
     return (
-      item.message ||
+      (item.message
+        ? tr(item.message) +
+          (data.ship_name ? " · " + data.ship_name : "") +
+          (data.reason ? " · " + tr(data.reason) : "")
+        : "") ||
       tr(eventNames[item.kind] || item.kind) +
         (data.star
           ? " · " +
@@ -2731,13 +2757,21 @@
   }
   function renderTasks() {
     const root = roots.tasks;
-    reset(root);
+    if (!root.querySelector(".planner")) reset(root);
+    [...root.children]
+      .filter((e) => !e.classList.contains("planner"))
+      .forEach((e) => e.remove());
+    Scheduler.render(root).catch((error) => notify(error.message, "error"));
+    root.append(n("h3", tr("Текущие действия флота"), "fleet-heading"));
     for (const s of gameData.fleet.ships) {
       const card = n("section", undefined, "task-card");
-      card.append(n("h3", tr(s.name) + " #" + s.id));
+      card.append(n("h3", UI.shipName(s)));
       if (s.destination)
         card.append(
-          n("p", `${s.star} → ${s.destination} · ${fmtTime(s.arrival)}`),
+          n(
+            "p",
+            `${window.MapData?.stars[s.star - 1]?.name || s.star} → ${window.MapData?.stars[s.destination - 1]?.name || s.destination} · ${fmtTime(s.arrival)}`,
+          ),
         );
       if (s.local_target)
         card.append(
@@ -2752,7 +2786,14 @@
         );
       if (s.waypoints?.length)
         card.append(
-          n("p", tr("Маршрут") + ": " + s.waypoints.join(" → ")),
+          n(
+            "p",
+            tr("Маршрут") +
+              ": " +
+              s.waypoints
+                .map((id) => window.MapData?.stars[id - 1]?.name || id)
+                .join(" → "),
+          ),
           b("Отменить оставшийся маршрут", () =>
             command({ action: "cancel_route", ship: s.id }),
           ),
@@ -2841,7 +2882,7 @@
     const portal = w().portal?.[0];
     if (!portal) return;
     root.append(
-      n("h2", tr("Портал Эдема")),
+      n("h2", tr("Межгалактический переход")),
       n(
         "p",
         tr(
@@ -2867,36 +2908,44 @@
           }),
         ),
       );
-    } else
+    }
+    const current = window.MapData?.stars[d().ship.star - 1]?.galaxy || "edem",
+      destinations = (window.MapData?.galaxies || []).filter(
+        (g) => g.opened && g.id !== current,
+      );
+    if (destinations.length) {
+      let target = destinations[0].id;
+      choice(
+        root,
+        "Галактика назначения",
+        destinations.map((g) => [g.id, g.name]),
+        target,
+        (value) => (target = value),
+      );
       root.append(
-        n("p", tr("Портал активирован")),
         b("Перейти в другую галактику", async () => {
-          if (await command({ action: "portal_travel" })) {
+          if (await command({ action: "portal_travel", target })) {
             window.MapData = await api("galaxy");
             window.dispatchEvent(new Event("universechange"));
           }
         }),
       );
+    }
     root.append(
       n(
         "p",
-        tr(
-          window.MapData?.stars[d().ship.star - 1]?.galaxy === "asterion"
-            ? "Обратный переход доступен из входной системы Астериона."
-            : "Переход доступен из систем у центральной чёрной дыры.",
-        ),
+        tr("Переход доступен из систем у центральной чёрной дыры."),
         "muted",
       ),
       n(
         "p",
-        (w().core_systems || [])
-          .map(
-            (id) => window.MapData?.stars.find((s) => s.id === id)?.name || id,
-          )
+        (w().portal_cores?.[current] || w().core_systems || [])
+          .map((id) => window.MapData?.stars[id - 1]?.name || "")
           .join(" · "),
       ),
     );
   }
+
   async function renderBenchmark() {
     const root = roots.benchmark,
       focused =

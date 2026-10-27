@@ -66,15 +66,25 @@
   canvas.setAttribute("aria-label", "Edem interactive map");
   tools.append(minus, zoomLabel, plus, reset);
   reset.dataset.help = "Вместить карту";
-  legend.append(
-    e("summary", tr("Легенда")),
-    e(
-      "p",
-      tr(
-        "Янтарный — маршрут · голубой — свои корабли · цвет изученной звезды — её спектральный класс · полупрозрачные области — владения корпораций",
-      ),
-    ),
-  );
+  function mapLegend() {
+    legend.replaceChildren(e("summary", tr("Легенда")));
+    for (const [symbol, label, cls] of [
+      ["━", "Маршрут", "route"],
+      ["◆", "Мои корабли", "fleet"],
+      ["●", "Класс звезды", "star"],
+      ["◯", "Владения корпораций", "territory"],
+      ["┄", "Гиперкоридоры", "lanes"],
+    ]) {
+      const row = e("div", undefined, "legend-row");
+      row.append(
+        e("span", symbol, "legend-symbol " + cls),
+        e("span", tr(label)),
+      );
+      legend.append(row);
+    }
+  }
+  mapLegend();
+  window.addEventListener("languagechange", mapLegend);
   view.append(canvas, tools, legend);
   body.append(view, side);
   root.append(top, body);
@@ -205,7 +215,7 @@
               ? "Система исследована"
               : progress
                 ? "Сканирование раскрывает объекты по очереди."
-                : "Объекты скрыты. Исследуйте систему, чтобы открыть их.",
+                : "Система не исследована. Исследуйте её, чтобы открыть объекты.",
           ),
           "muted",
         ),
@@ -634,11 +644,17 @@
         ctx.fillText(tr(region.name), p.x, p.y);
       }
     }
-    if (viewedGalaxy === "edem" && galaxy.black_hole) {
-      const p = galaxyPoint(galaxy.black_hole);
+    if (
+      galaxy.black_holes?.[viewedGalaxy] ||
+      (viewedGalaxy === "edem" && galaxy.black_hole)
+    ) {
+      const p = galaxyPoint(
+        galaxy.black_holes?.[viewedGalaxy] || galaxy.black_hole,
+      );
       ctx.strokeStyle = "#70618c";
       ctx.lineWidth = 1;
-      for (const id of galaxy.black_hole.systems) {
+      for (const id of (galaxy.black_holes?.[viewedGalaxy] || galaxy.black_hole)
+        .systems) {
         const q = galaxyPoint(galaxy.stars[id - 1]);
         ctx.beginPath();
         ctx.moveTo(p.x, p.y);
@@ -692,7 +708,7 @@
     for (const ship of fleet()) {
       const card = e("div", undefined, "fleet-card");
       card.append(
-        e("b", tr(ship.name) + " #" + ship.id),
+        e("b", UI.shipName(ship)),
         e(
           "p",
           ship.destination
@@ -1041,7 +1057,7 @@
           tr(
             local.sites.length
               ? "Сканирование раскрывает объекты по очереди."
-              : "Объекты скрыты. Исследуйте систему, чтобы открыть их.",
+              : "Система не исследована. Исследуйте её, чтобы открыть объекты.",
           ),
           "muted",
         ),
@@ -1415,8 +1431,13 @@
         event.clientX,
         event.clientY,
       );
-    } else if (viewedGalaxy === "edem" && galaxy.black_hole) {
-      const p = galaxyPoint(galaxy.black_hole);
+    } else if (
+      galaxy.black_holes?.[viewedGalaxy] ||
+      (viewedGalaxy === "edem" && galaxy.black_hole)
+    ) {
+      const p = galaxyPoint(
+        galaxy.black_holes?.[viewedGalaxy] || galaxy.black_hole,
+      );
       if (Math.hypot(x - p.x, y - p.y) < 22) Modules.open("portal");
     }
   }

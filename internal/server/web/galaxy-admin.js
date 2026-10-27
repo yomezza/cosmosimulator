@@ -4,7 +4,8 @@
     tr = (s) => I18n.t(s);
   let selected = "edem",
     request = 0,
-    logRequest = 0;
+    logRequest = 0,
+    draft = null;
   const admin = () => signedIn && gameData.state?.user.role === "admin";
   const labels = {
     systems: "Системы",
@@ -40,6 +41,25 @@
         return false;
       root.replaceChildren();
       root.classList.add("galaxy-admin");
+      if (draft) result.galaxies.push(draft);
+      const create = UI.button("Создать галактику", () => {
+        draft = {
+          definition: {
+            id: "g-" + Date.now().toString(36),
+            name: "",
+            shape: "spiral",
+            seed: Date.now(),
+            opened: true,
+            create: true,
+            settings: structuredClone(result.galaxies[0].definition.settings),
+          },
+          stats: Object.fromEntries(Object.keys(labels).map((k) => [k, 0])),
+        };
+        selected = draft.definition.id;
+        root.replaceChildren(n("p", tr("Загрузка…")));
+        return GalaxyAdmin.render(root);
+      });
+      root.append(create);
       const layout = n("div", undefined, "galaxy-admin-layout"),
         list = n("aside", undefined, "galaxy-admin-list"),
         editor = n("section", undefined, "galaxy-admin-editor");
@@ -57,7 +77,17 @@
         card.classList.toggle("selected", d.id === selected);
         card.append(
           n("b", d.name),
-          n("small", tr(d.shape === "rings" ? "Кольцевая" : "Спиральная")),
+          n(
+            "small",
+            tr(
+              {
+                rings: "Кольцевая",
+                spiral: "Спиральная",
+                elliptical: "Эллиптическая",
+                irregular: "Нерегулярная",
+              }[d.shape],
+            ),
+          ),
           n(
             "span",
             d.opened
@@ -91,12 +121,37 @@
         grid,
         "Количество систем",
         "galaxy-count",
-        entry.stats.systems,
+        d.create ? 1000 : entry.stats.systems,
         "number",
       );
-      count.min = entry.stats.systems;
+      count.min = d.create ? 50 : entry.stats.systems;
       count.max = 10000;
       count.required = true;
+      if (d.create) {
+        UI.choice(
+          grid,
+          "Форма галактики",
+          [
+            ["spiral", "Спиральная"],
+            ["rings", "Кольцевая"],
+            ["elliptical", "Эллиптическая"],
+            ["irregular", "Нерегулярная"],
+          ],
+          d.shape,
+          (value) => {
+            d.shape = value;
+            form.dispatchEvent(new Event("input", { bubbles: true }));
+          },
+        );
+        const seed = UI.field(
+          grid,
+          "Зерно генерации",
+          "galaxy-seed",
+          d.seed,
+          "number",
+        );
+        seed.oninput = () => (d.seed = Number(seed.value));
+      }
       const fields = {};
       const section = (title) => {
         const details = n("details");
@@ -212,6 +267,9 @@
         dirty = 0;
       const values = () => ({
         id: d.id,
+        create: !!d.create,
+        shape: d.shape,
+        seed: d.seed,
         name: name.value,
         systems: Number(count.value),
         settings: {
@@ -237,6 +295,8 @@
           const body = { ...values(), preview: snapshot.preview };
           await api("admin/galaxies/apply", body);
           if (epoch !== authEpoch || !admin()) return;
+          selected = d.id;
+          draft = null;
           notify("Галактика обновлена");
           window.MapData = await api("galaxy");
           window.dispatchEvent(new Event("universechange"));
@@ -455,7 +515,7 @@
                 ["user", "Игрок"],
                 ["role", "Роль"],
                 ["credits", "Кредиты"],
-                ["level", "Уровень игрока"],
+                ["level", "Стаж игрока"],
                 ["xp", "Опыт"],
               ])
                 UI.row(entry, label, data[key] ?? "—");

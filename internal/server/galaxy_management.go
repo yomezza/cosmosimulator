@@ -31,6 +31,7 @@ type GalaxyDefinition struct {
 	Shape       string             `json:"shape"`
 	Seed        int64              `json:"seed"`
 	Opened      bool               `json:"opened"`
+	RegionBase  int                `json:"region_base,omitempty"`
 	Radius      float64            `json:"radius"`
 	Settings    GalaxySettings     `json:"settings"`
 	Territories []FounderTerritory `json:"territories,omitempty"`
@@ -47,7 +48,10 @@ func galaxyKey(s Star) string {
 	if s.Galaxy == "asterion" || s.Galaxy == "Edem-II" || s.Galaxy == "Астерион" {
 		return "asterion"
 	}
-	return "edem"
+	if s.Galaxy == "" || s.Galaxy == "Edem" {
+		return "edem"
+	}
+	return s.Galaxy
 }
 func (g *Galaxy) definition(id string) *GalaxyDefinition {
 	for i := range g.Catalog {
@@ -101,6 +105,9 @@ func appendGalaxySystems(g *Galaxy, id string, target int) error {
 	if target < current || target > 10000 {
 		return errors.New("Количество систем можно только увеличивать, максимум 10000")
 	}
+	if len(g.Stars)+target-current > 50000 {
+		return errors.New("От 50 до 10000 систем; всего не более 50000")
+	}
 	if current == target {
 		return nil
 	}
@@ -115,7 +122,7 @@ func appendGalaxySystems(g *Galaxy, id string, target int) error {
 		s.ID = len(g.Stars) + 1
 		s.Number = current + i + 1
 		s.Galaxy = id
-		region := (s.Number - 1) % 4
+		region := (s.Number-1)%4 + d.RegionBase
 		if id == "asterion" {
 			region += 4
 		}
@@ -128,9 +135,17 @@ func appendGalaxySystems(g *Galaxy, id string, target int) error {
 		}
 		radius := 300 + math.Sqrt(rng.Float64())*2400
 		angle := float64(region%4)*math.Pi/2 + radius/1110 + (rng.Float64()-.5)*.5
-		if id == "asterion" {
+		if d.Shape == "rings" {
 			radius = 390 + float64(s.Number%3)*290 + (rng.Float64()-.5)*70
 			angle = rng.Float64() * 2 * math.Pi
+		}
+		if d.Shape == "elliptical" {
+			radius = d.Radius * (.10 + .70*math.Sqrt(rng.Float64()))
+			angle = rng.Float64() * 2 * math.Pi
+		}
+		if d.Shape == "irregular" {
+			angle = float64((s.Number-1)%4)*math.Pi/2 + (rng.Float64()-.5)*1.4
+			radius = d.Radius * (.18 + rng.Float64()*.60)
 		}
 		if s.Region < 0 {
 			radius = d.Radius * (.9 + rng.Float64()*.08)
@@ -140,6 +155,9 @@ func appendGalaxySystems(g *Galaxy, id string, target int) error {
 		bestX, bestY, bestDistance := 0.0, 0.0, -1.0
 		for trial := 0; trial < 8; trial++ {
 			x, y := math.Cos(angle)*radius, math.Sin(angle)*radius
+			if d.Shape == "elliptical" {
+				y *= .55
+			}
 			nearest := math.Inf(1)
 			for _, p := range g.Stars {
 				if galaxyKey(p) == id {
@@ -187,7 +205,7 @@ func appendGalaxySystems(g *Galaxy, id string, target int) error {
 func assignGalaxyContent(g *Galaxy, id string) {
 	d := g.definition(id)
 	core := map[int]bool{}
-	for _, v := range coreSystems(g) {
+	for _, v := range coreSystems(g, id) {
 		core[v] = true
 	}
 	for i := range g.Stars {
@@ -238,7 +256,18 @@ func rebuildGalaxyLanes(g *Galaxy, id string, protected []Lane) {
 		}
 	}
 	// A minimum spanning forest favors short corridors; isolated systems stay out.
-	for region := 0; region < 8; region++ {
+	regionSet := map[int]bool{}
+	for _, s := range stars {
+		if s.Region >= 0 {
+			regionSet[s.Region] = true
+		}
+	}
+	regionIDs := []int{}
+	for r := range regionSet {
+		regionIDs = append(regionIDs, r)
+	}
+	sort.Ints(regionIDs)
+	for _, region := range regionIDs {
 		members := []Star{}
 		for _, s := range stars {
 			if s.Region == region {
@@ -467,6 +496,7 @@ func protectedPorts(ctx context.Context, tx pgx.Tx) (map[string]bool, error) {
  OR EXISTS(SELECT 1 FROM reservations r WHERE r.star=s.star AND r.station=s.object_id AND r.status='reserved')
  OR EXISTS(SELECT 1 FROM sell_orders o WHERE o.star=s.star AND o.station=s.object_id AND o.quantity>0)
  OR EXISTS(SELECT 1 FROM survey_offers o WHERE o.star=s.star AND o.station=s.object_id)
+ OR EXISTS(SELECT 1 FROM automation_tasks t WHERE t.status IN('queued','running','paused') AND ((t.kind='haul' AND t.source_star=s.star AND t.source_object=s.object_id) OR (t.dest_star=s.star AND t.dest_station=s.object_id)))
  OR EXISTS(SELECT 1 FROM deliveries d WHERE d.status IN('open','carrying','bot') AND ((d.from_star=s.star AND d.from_station=s.object_id) OR (d.to_star=s.star AND d.to_station=s.object_id)))`)
 	if err != nil {
 		return nil, err
@@ -553,6 +583,9 @@ func upgradeManagedGalaxies(ctx context.Context, tx pgx.Tx, g *Galaxy) (bool, er
 }
 
 type GalaxyEdit struct {
+	Create   bool           `json:"create"`
+	Shape    string         `json:"shape"`
+	Seed     int64          `json:"seed"`
 	ID       string         `json:"id"`
 	Name     string         `json:"name"`
 	Systems  int            `json:"systems"`
@@ -562,7 +595,17 @@ type GalaxyEdit struct {
 
 func validateGalaxyEdit(in GalaxyEdit, g *Galaxy) error {
 	d := g.definition(in.ID)
-	if d == nil || !d.Opened {
+	if in.Create {
+		if d != nil || len(g.Catalog) >= 24 || len(in.ID) < 3 || len(in.ID) > 40 || strings.ContainsFunc(in.ID, func(r rune) bool { return !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-') }) {
+			return errors.New("Некорректная новая галактика")
+		}
+		if in.Systems < 50 || len(g.Stars)+in.Systems > 50000 {
+			return errors.New("От 50 до 10000 систем; всего не более 50000")
+		}
+		if in.Shape != "spiral" && in.Shape != "rings" && in.Shape != "elliptical" && in.Shape != "irregular" {
+			return errors.New("Неизвестная форма галактики")
+		}
+	} else if d == nil || !d.Opened {
 		return errors.New("Галактика не открыта")
 	}
 	if strings.TrimSpace(in.Name) == "" || utf8.RuneCountInString(in.Name) > 48 {
@@ -586,6 +629,9 @@ func validateGalaxyEdit(in GalaxyEdit, g *Galaxy) error {
 			return errors.New("Распространённость ресурса должна быть от 0 до 300%")
 		}
 	}
+	if len(g.Stars)+in.Systems-len(galaxyStars(g, in.ID)) > 50000 {
+		return errors.New("От 50 до 10000 систем; всего не более 50000")
+	}
 	if in.Systems < len(galaxyStars(g, in.ID)) || in.Systems > 10000 {
 		return errors.New("Количество систем можно только увеличивать, максимум 10000")
 	}
@@ -599,6 +645,22 @@ func buildGalaxyEdit(ctx context.Context, tx pgx.Tx, g *Galaxy, in GalaxyEdit) (
 	var next Galaxy
 	if err := json.Unmarshal(raw, &next); err != nil {
 		return nil, nil, err
+	}
+	if in.Create {
+		base := 8
+		for _, r := range next.Regions {
+			if r.ID >= base {
+				base = r.ID + 1
+			}
+		}
+		radius := 3600.0
+		if in.Shape == "rings" {
+			radius = 1250
+		}
+		next.Catalog = append(next.Catalog, GalaxyDefinition{ID: in.ID, Name: strings.TrimSpace(in.Name), Shape: in.Shape, Seed: in.Seed, Opened: true, Radius: radius, RegionBase: base, Settings: in.Settings})
+		for i, title := range []string{"Тихая дуга", "Светлый предел", "Дальний рубеж", "Звёздный поток"} {
+			next.Regions = append(next.Regions, Region{base + i, strings.TrimSpace(in.Name) + " · " + title, []string{"iron", "orichalcum", "azoth", "vajra"}[i]})
+		}
 	}
 	d := next.definition(in.ID)
 	d.Name = strings.TrimSpace(in.Name)
@@ -777,4 +839,13 @@ func (a *App) adminGalaxies(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	reply(w, 200, map[string]any{"ok": true, "revision": next.Revision})
+}
+
+func (g *Galaxy) regionName(id int) string {
+	for _, r := range g.Regions {
+		if r.ID == id {
+			return r.Name
+		}
+	}
+	return regionName(id)
 }

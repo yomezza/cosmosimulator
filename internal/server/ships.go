@@ -6,21 +6,24 @@ import (
 	"fmt"
 	"github.com/jackc/pgx/v5"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 type ShipClass struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Role        string `json:"role"`
-	Description string `json:"description"`
-	Cargo       int    `json:"cargo"`
-	Fuel        int    `json:"fuel"`
-	JumpSeconds int    `json:"jump_seconds"`
-	JumpFuel    int    `json:"jump_fuel"`
-	MiningBonus int    `json:"mining_bonus"`
-	Price       int64  `json:"price"`
-	Model       string `json:"model"`
-	Length      int    `json:"length"`
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	Role          string `json:"role"`
+	Description   string `json:"description"`
+	Cargo         int    `json:"cargo"`
+	Fuel          int    `json:"fuel"`
+	JumpSeconds   int    `json:"jump_seconds"`
+	JumpFuel      int    `json:"jump_fuel"`
+	MiningBonus   int    `json:"mining_bonus"`
+	Price         int64  `json:"price"`
+	Model         string `json:"model"`
+	Length        int    `json:"length"`
+	RequiredLevel int    `json:"required_level"`
 }
 
 var shipClasses = priceShipClasses([]ShipClass{
@@ -46,6 +49,7 @@ var shipClasses = priceShipClasses([]ShipClass{
 func priceShipClasses(classes []ShipClass) []ShipClass {
 	for i := range classes {
 		c := &classes[i]
+		c.RequiredLevel = map[string]int{"pilgrim": 6, "wanderer": 6, "forge": 10, "ark": 10, "hermes": 10, "vesper": 10, "astra": 15, "argus": 20, "crucible": 15, "titan": 20, "atlas": 15, "leviathan": 20, "iris": 10, "zephyr": 15, "lightning": 20}[c.ID]
 		value := int64(100000 + (c.Cargo-60)*1000 + (c.Fuel-40)*2000 + 600000/c.JumpSeconds - 120000 + 120000/c.JumpFuel - 60000 + c.MiningBonus*90000)
 		c.Price = (max(int64(100000), value) + 4999) / 5000 * 5000
 	}
@@ -98,6 +102,13 @@ func buyShip(ctx context.Context, tx pgx.Tx, u User, s Ship, in Command) error {
 	if !ok {
 		return errors.New("Неизвестная модель корабля")
 	}
+	var level int
+	if err := tx.QueryRow(ctx, `SELECT level FROM users WHERE id=$1`, u.ID).Scan(&level); err != nil {
+		return err
+	}
+	if level < c.RequiredLevel {
+		return fmt.Errorf("Для покупки нужен стаж %d", c.RequiredLevel)
+	}
 	var price int64
 	var quantity int
 	err := tx.QueryRow(ctx, `SELECT y.price,y.quantity FROM shipyard_stock y JOIN stations p ON p.star=y.star AND p.object_id=y.station WHERE y.star=$1 AND y.station=$2 AND y.ship_class=$3 AND p.shipyard AND p.active FOR UPDATE OF y`, s.Star, s.ObjectID, id).Scan(&price, &quantity)
@@ -122,5 +133,14 @@ func buyShip(ctx context.Context, tx pgx.Tx, u User, s Ship, in Command) error {
 		}
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO ships(user_id,star,object_id,active,class,name,fuel) VALUES($1,$2,$3,FALSE,$4,$5,$6)`, u.ID, s.Star, s.ObjectID, c.ID, c.Name, c.Fuel)
+	return err
+}
+
+func renameShip(ctx context.Context, tx pgx.Tx, s Ship, name string) error {
+	name = strings.TrimSpace(name)
+	if !utf8.ValidString(name) || utf8.RuneCountInString(name) < 1 || utf8.RuneCountInString(name) > 40 || strings.ContainsFunc(name, unicode.IsControl) {
+		return errors.New("Название корабля: от 1 до 40 символов")
+	}
+	_, err := tx.Exec(ctx, `UPDATE ships SET name=$2 WHERE id=$1`, s.ID, name)
 	return err
 }

@@ -157,7 +157,7 @@ func (a *App) galaxy(w http.ResponseWriter, r *http.Request) {
 			a.internal(w, e)
 			return
 		}
-		reply(w, 200, map[string]any{"name": public.Name, "seed": public.Seed, "version": public.Version, "revision": g.Revision, "galaxies": g.Catalog, "founders": founders, "stars": public.Stars, "regions": public.Regions, "lanes": public.Lanes, "black_hole": map[string]any{"x": 0, "y": 0, "systems": coreSystems(g)}})
+		reply(w, 200, map[string]any{"name": public.Name, "seed": public.Seed, "version": public.Version, "revision": g.Revision, "galaxies": g.Catalog, "founders": founders, "stars": public.Stars, "regions": public.Regions, "lanes": public.Lanes, "black_holes": blackHoles(g), "black_hole": map[string]any{"x": 0, "y": 0, "systems": coreSystems(g)}})
 		return
 	}
 	from, e1 := strconv.Atoi(r.URL.Query().Get("from"))

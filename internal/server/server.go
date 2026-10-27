@@ -140,6 +140,10 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("POST /api/market/global", a.globalMarket)
 	m.HandleFunc("POST /api/admin/tick", a.adminTick)
 	m.HandleFunc("POST /api/admin/teleport", a.adminTeleport)
+	m.HandleFunc("GET /api/admin/resources", a.adminResources)
+	m.HandleFunc("POST /api/admin/resources", a.adminResources)
+	m.HandleFunc("GET /api/planner", a.planner)
+	m.HandleFunc("POST /api/planner", a.planner)
 	m.HandleFunc("POST /api/admin/user", a.editUser)
 	m.HandleFunc("GET /api/galaxy", a.galaxy)
 	m.HandleFunc("GET /api/route", a.galaxy)
@@ -449,6 +453,10 @@ func (a *App) adminUsers(w http.ResponseWriter, r *http.Request) {
 	reply(w, 200, list)
 }
 func (a *App) internal(w http.ResponseWriter, err error) {
+	if strings.Contains(err.Error(), "Достигнут лимит 500 млрд CR") {
+		fail(w, 409, "Достигнут лимит 500 млрд CR")
+		return
+	}
 	log.Printf("request failed: %v", err)
 	fail(w, 500, "Внутренняя ошибка сервера")
 }

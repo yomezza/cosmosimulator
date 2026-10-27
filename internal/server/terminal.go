@@ -120,7 +120,7 @@ func (a *App) systemView(w http.ResponseWriter, r *http.Request) {
 	s.Planets = nil
 	s.Ports = nil
 	s.ResourceWeights = nil
-	reply(w, 200, map[string]any{"star": s, "region": regionName(s.Region), "surveyed": scanned, "sites": sites})
+	reply(w, 200, map[string]any{"star": s, "region": g.regionName(s.Region), "surveyed": scanned, "sites": sites})
 }
 func (a *App) profile(w http.ResponseWriter, r *http.Request) {
 	u, ok := a.user(w, r)
@@ -154,7 +154,7 @@ func (a *App) upgrade(w http.ResponseWriter, r *http.Request) {
 		a.internal(w, err)
 		return
 	}
-	tag, err := tx.Exec(r.Context(), `WITH changed AS(UPDATE users SET xp=xp-level*100,credits=credits-level*100,level=level+1 WHERE id=$1 AND level<100 AND xp>=level*100 AND credits>=level*100 RETURNING id,level) INSERT INTO game_events(user_id,kind,data) SELECT id,'level_up',jsonb_build_object('level',level) FROM changed`, u.ID)
+	tag, err := tx.Exec(r.Context(), `WITH changed AS(UPDATE users SET xp=xp-level*100,credits=credits-level*100,level=level+1 WHERE id=$1 AND level<1000000 AND xp>=level*100 AND credits>=level*100 RETURNING id,level) INSERT INTO game_events(user_id,kind,data) SELECT id,'level_up',jsonb_build_object('level',level) FROM changed`, u.ID)
 	if err != nil {
 		a.internal(w, err)
 		return
@@ -209,7 +209,7 @@ func (a *App) editUser(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &in) {
 		return
 	}
-	if (in.Role != "admin" && in.Role != "player") || in.Credits < 0 || in.Credits > 1000000000 || in.Level < 1 || in.Level > 100 || in.XP < 0 || in.XP > 1000000 {
+	if (in.Role != "admin" && in.Role != "player") || in.Credits < 0 || in.Credits > MaxCredits || in.Level < 1 || in.Level > 1000000 || in.XP < 0 || in.XP > 1000000000 {
 		fail(w, 400, "Некорректные данные пользователя")
 		return
 	}
@@ -355,7 +355,7 @@ func (a *App) companyList(w http.ResponseWriter, r *http.Request) {
 		a.internal(w, err)
 		return
 	}
-	rows, err := a.db.Query(r.Context(), `SELECT c.id,c.name,c.tag,c.color,c.flag,c.owner_id,c.starter,count(u.id)::int,c.founder,c.credits,c.flag_design FROM companies c LEFT JOIN users u ON u.company_id=c.id GROUP BY c.id ORDER BY c.starter DESC,c.id LIMIT 500`)
+	rows, err := a.db.Query(r.Context(), `SELECT c.id,c.name,c.tag,c.color,c.flag,c.owner_id,c.starter,count(u.id)::int,c.founder,c.credits,c.flag_design FROM companies c LEFT JOIN users u ON u.company_id=c.id GROUP BY c.id ORDER BY c.founder DESC,c.starter DESC,c.id LIMIT 500`)
 	if err != nil {
 		a.internal(w, err)
 		return
@@ -750,11 +750,12 @@ type MiningJob struct {
 }
 
 func completeMining(ctx context.Context, tx pgx.Tx, tick int64) error {
-	rows, err := tx.Query(ctx, `SELECT user_id,ship_id,resource,quantity FROM mining_jobs WHERE finish_tick<=$1 ORDER BY user_id`, tick)
+	rows, err := tx.Query(ctx, `SELECT user_id,ship_id,resource,quantity,automation_id FROM mining_jobs WHERE finish_tick<=$1 ORDER BY user_id`, tick)
 	if err != nil {
 		return err
 	}
 	type result struct {
+		Auto     *int64
 		id       int64
 		ship     int64
 		resource string
@@ -763,7 +764,7 @@ func completeMining(ctx context.Context, tx pgx.Tx, tick int64) error {
 	jobs := []result{}
 	for rows.Next() {
 		var j result
-		if err = rows.Scan(&j.id, &j.ship, &j.resource, &j.q); err != nil {
+		if err = rows.Scan(&j.id, &j.ship, &j.resource, &j.q, &j.Auto); err != nil {
 			rows.Close()
 			return err
 		}
@@ -783,6 +784,11 @@ func completeMining(ctx context.Context, tx pgx.Tx, tick int64) error {
 		}
 		if _, err = tx.Exec(ctx, `UPDATE users SET xp=xp+5 WHERE id=$1`, j.id); err != nil {
 			return err
+		}
+		if j.Auto != nil {
+			if _, err = tx.Exec(ctx, `UPDATE automation_tasks SET progress=progress+$2,carried=carried+$2,pending=0 WHERE id=$1`, *j.Auto, j.q); err != nil {
+				return err
+			}
 		}
 		if _, err = tx.Exec(ctx, `DELETE FROM mining_jobs WHERE ship_id=$1`, j.ship); err != nil {
 			return err

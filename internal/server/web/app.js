@@ -146,21 +146,22 @@ async function refreshData() {
     );
     $("location").textContent = expedition.ship.destination
       ? expedition.system.name +
-        " → ED-" +
-        String(expedition.ship.destination).padStart(4, "0")
+        " → " +
+        (window.MapData?.stars[expedition.ship.destination - 1]?.name ||
+          String(expedition.ship.destination))
       : expedition.system.name;
     $("overview-region").textContent = t(expedition.region);
     $("overview-level").textContent = profile.level;
     $("overview-xp").max = profile.required_xp;
     $("overview-xp").value = profile.xp;
     $("overview-xp").dataset.help =
-      "Опыт даётся за разведку (+10) и завершённый цикл добычи (+5). Уровень принадлежит игроку, не кораблю.";
+      "Опыт даётся за разведку (+10) и завершённый цикл добычи (+5). Стаж принадлежит игроку, не кораблю.";
     $("overview-xp-text").textContent =
       `${profile.xp} / ${profile.required_xp} XP`;
     $("overview-upgrade").disabled =
       profile.xp < profile.required_xp ||
       expedition.credits < profile.upgrade_cost ||
-      profile.level >= 100;
+      profile.level >= 1000000;
     $("overview-upgrade").dataset.help = `${profile.upgrade_cost} CR`;
     $("connection").textContent =
       t("Данные обновлены: ") + new Date().toLocaleTimeString(I18n.language);
@@ -229,7 +230,7 @@ $("overview-upgrade").onclick = async () => {
   try {
     await api("profile/upgrade", {});
     await refresh(true);
-    notify("Уровень повышен");
+    notify("Стаж повышен");
   } catch (e) {
     notify(e.message, "error");
   }

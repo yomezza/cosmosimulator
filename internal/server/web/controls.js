@@ -24,13 +24,20 @@
     .then((r) => (r.ok ? r.json() : Promise.reject()))
     .then(UI.serverStatus)
     .catch(() => {});
+  UI.shipName = (s) => {
+    const name =
+      s.spec?.name ||
+      gameData.workbench?.ship_classes?.find((c) => c.id === s.class)?.name;
+    return s.name === name ? tr(s.name) : s.name;
+  };
   UI.paintFlag = (badge, company) => {
     badge.replaceChildren();
     badge.style.color = company.color;
-    const flag = n("span", company.flag, "flag-mark"),
+    const flag = n("span", undefined, "flag-mark"),
       design = company.flag_design;
     if (design?.background)
       flag.style.background = `linear-gradient(135deg,${design.background} 35%,${design.stripe} 36%,${design.stripe} 48%,${design.background} 49%)`;
+    flag.append(n("span", company.flag, "flag-symbol"));
     badge.append(flag, n("span", "[" + company.tag + "]"));
   };
   UI.button = (label, run, disabled = false, reason = "") => {
@@ -190,7 +197,21 @@
         config.system ? "Название или ID системы" : "Поиск",
       );
       search.setAttribute("aria-label", search.placeholder);
-      pop.append(search, list, footer);
+      const favorites = n("div", undefined, "picker-favorites"),
+        columns = n("div", undefined, "picker-columns");
+      if (config.favorites) {
+        const all = n("div");
+        all.append(
+          n(
+            "div",
+            tr(config.station ? "Все станции" : "Все системы"),
+            "picker-column-title",
+          ),
+          list,
+        );
+        columns.append(all, favorites);
+        pop.append(search, columns, footer);
+      } else pop.append(search, list, footer);
       document.body.append(pop);
       button.setAttribute("aria-expanded", "true");
       const close = () => {
@@ -217,7 +238,7 @@
         list.replaceChildren();
         list.setAttribute("role", "listbox");
         footer.replaceChildren();
-        for (const o of filtered.slice((page - 1) * size, page * size)) {
+        const optionRow = (o, host) => {
           const b = UI.button("", () => {
             button.value = o.id;
             update();
@@ -231,7 +252,31 @@
           if (o.code) b.append(n("span", o.code, "system-id"));
           b.append(n("span", o.label, "picker-label"));
           if (o.extra) b.append(n("small", o.extra));
-          list.append(b);
+          if (config.favorites) {
+            const row = n("div", undefined, "picker-entry"),
+              fav = UI.button(
+                config.favorites.has(o.id) ? "★" : "☆",
+                async () => {
+                  await config.favorites.toggle(o.id);
+                  render();
+                },
+              );
+            fav.className = "favorite-toggle";
+            fav.dataset.help = "Избранное";
+            fav.setAttribute("aria-label", tr("Избранное") + ": " + o.label);
+            row.append(b, fav);
+            host.append(row);
+          } else host.append(b);
+        };
+        for (const o of filtered.slice((page - 1) * size, page * size))
+          optionRow(o, list);
+        if (config.favorites) {
+          favorites.replaceChildren(
+            n("div", tr("Избранное"), "picker-column-title"),
+          );
+          const saved = filtered.filter((o) => config.favorites.has(o.id));
+          for (const o of saved) optionRow(o, favorites);
+          if (!saved.length) UI.empty(favorites, "Нет избранных объектов");
         }
         if (!filtered.length) UI.empty(list, "Ничего не найдено");
         footer.append(
@@ -259,7 +304,10 @@
         const r = button.getBoundingClientRect();
         pop.style.width =
           Math.min(
-            Math.max(r.width, config.system ? 350 : 260),
+            Math.max(
+              r.width,
+              config.favorites ? 620 : config.system ? 350 : 260,
+            ),
             innerWidth - 16,
           ) + "px";
         pop.style.left =
@@ -313,6 +361,49 @@
     root.append(l);
     return picker;
   };
+  UI.bookmarks = (station) => {
+    const target = (id) =>
+      station
+        ? {
+            star: Number(String(id).split("|")[0]),
+            object: String(id).split("|")[1],
+          }
+        : { star: Number(id), object: "" };
+    const get = (id) => {
+      const t = target(id);
+      return gameData.workbench?.notes?.find(
+        (n) => n.star === t.star && n.object_id === t.object,
+      );
+    };
+    return {
+      has: (id) => !!get(id)?.bookmark,
+      toggle: async (id) => {
+        const t = target(id),
+          old = get(id);
+        await Game.command({
+          action: "note",
+          star: t.star,
+          target: t.object,
+          note: old?.note || "",
+          bookmark: !old?.bookmark,
+        });
+      },
+    };
+  };
+  UI.stationPicker = (root, ports, value, change) => {
+    const picker = UI.picker(
+      ports.map((p) => ({
+        id: p.star + "|" + (p.station || p.object_id),
+        code: String(p.star),
+        label: p.name + (p.specialization ? " · " + tr(p.specialization) : ""),
+      })),
+      value,
+      change,
+      { system: true, station: true, favorites: UI.bookmarks(true) },
+    );
+    root.append(picker);
+    return picker;
+  };
   UI.systems = (value, change) =>
     UI.picker(
       (window.MapData?.stars || []).map((s) => ({
@@ -325,7 +416,7 @@
       })),
       value,
       change,
-      { system: true },
+      { system: true, favorites: UI.bookmarks(false) },
     );
   UI.dirty = (form, save, cancel) => {
     const bar = n("div", undefined, "save-bar");

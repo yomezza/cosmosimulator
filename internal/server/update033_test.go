@@ -197,7 +197,7 @@ func Test033FleetStorageOrdersAndDelivery(t *testing.T) {
 	one, id1 := f.signup("fleet033")
 	two, id2 := f.signup("trade033")
 	f.req(one, "GET", "/api/workbench", nil, 200)
-	f.exec(`UPDATE users SET credits=100000 WHERE id=$1`, id1)
+	f.exec(`UPDATE users SET credits=100000,level=20 WHERE id=$1`, id1)
 	f.req(one, "POST", "/api/expedition", map[string]any{"action": "buy", "resource": "agni", "quantity": 1, "expected_price": 0}, 409)
 	if f.integer(`SELECT credits FROM users WHERE id=$1`, id1) != 100000 {
 		t.Fatal("stale quote debited balance")

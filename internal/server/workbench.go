@@ -50,12 +50,16 @@ func (a *App) routes033(m *http.ServeMux) {
 	m.HandleFunc("GET /api/admin/benchmark", a.benchmark)
 	m.HandleFunc("POST /api/admin/benchmark", a.benchmark)
 }
-func coreSystems(g *Galaxy) []int {
+func coreSystems(g *Galaxy, galaxies ...string) []int {
+	key := "edem"
+	if len(galaxies) > 0 {
+		key = galaxies[0]
+	}
 	list := append([]Star(nil), g.Stars...)
 	sort.Slice(list, func(i, j int) bool { return math.Hypot(list[i].X, list[i].Y) < math.Hypot(list[j].X, list[j].Y) })
 	out := []int{}
 	for _, s := range list {
-		if galaxyKey(s) != "edem" {
+		if galaxyKey(s) != key || s.Region < 0 {
 			continue
 		}
 		out = append(out, s.ID)
@@ -86,8 +90,15 @@ func ensureStations(ctx context.Context, tx pgx.Tx, g *Galaxy) error {
 		return err
 	}
 	core := map[int]bool{}
-	for _, id := range coreSystems(g) {
-		core[id] = true
+	for _, d := range g.Catalog {
+		for _, id := range coreSystems(g, d.ID) {
+			core[id] = true
+		}
+	}
+	if len(g.Catalog) == 0 {
+		for _, id := range coreSystems(g) {
+			core[id] = true
+		}
 	}
 	list := []map[string]any{}
 	for _, star := range g.Stars {
@@ -158,7 +169,7 @@ func (a *App) workbench(w http.ResponseWriter, r *http.Request) {
 		a.internal(w, err)
 		return
 	}
-	out := map[string]any{"universe_revision": g.Revision, "research": researchView(ctx, a.db, u.ID), "core_systems": coreSystems(g), "server_name": "Иггдрасиль", "ship_classes": shipClasses, "trade_profiles": tradeProfiles, "extractor_price": 250, "reservation_policy": "full_refund", "time": time.Now()}
+	out := map[string]any{"universe_revision": g.Revision, "research": researchView(ctx, a.db, u.ID), "core_systems": coreSystems(g), "portal_cores": portalCores(g), "server_name": "Иггдрасиль", "ship_classes": shipClasses, "trade_profiles": tradeProfiles, "extractor_price": 250, "reservation_policy": "full_refund", "time": time.Now()}
 	queries := []struct {
 		key, sql string
 		args     []any
@@ -276,6 +287,15 @@ func (a *App) command033(w http.ResponseWriter, r *http.Request) {
 		a.internal(w, err)
 		return
 	}
+	if isShipOperation(in.Action) {
+		if busy, e := automationBusy(ctx, tx, s.ID); e != nil {
+			a.internal(w, e)
+			return
+		} else if busy {
+			fail(w, 409, "Приостановите задачу планировщика")
+			return
+		}
+	}
 	handled, err := a.navigationCommand(ctx, tx, u, &s, g, in)
 	if !handled {
 		handled, err = a.economyCommand(ctx, tx, u, &s, g, in)
@@ -337,6 +357,8 @@ func idle(ctx context.Context, tx pgx.Tx, s Ship) error {
 }
 func (a *App) navigationCommand(ctx context.Context, tx pgx.Tx, u User, s *Ship, g *Galaxy, in Command) (bool, error) {
 	switch in.Action {
+	case "rename_ship":
+		return true, renameShip(ctx, tx, *s, in.Name)
 	case "select_ship":
 		_, err := tx.Exec(ctx, `UPDATE ships SET active=FALSE WHERE user_id=$1 AND active`, u.ID)
 		if err == nil {
@@ -539,4 +561,12 @@ func (a *App) notifications(w http.ResponseWriter, r *http.Request) {
 		items = []map[string]any{}
 	}
 	reply(w, 200, map[string]any{"items": items, "count": count, "unread": unread})
+}
+
+func isShipOperation(action string) bool {
+	switch action {
+	case "queue_route", "cancel_route", "explore", "rescue", "extractor", "portal_travel", "store", "withdraw", "delivery_accept", "delivery_finish", "company_store", "company_cargo_withdraw":
+		return true
+	}
+	return false
 }

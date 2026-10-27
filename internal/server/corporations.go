@@ -77,7 +77,7 @@ func (a *App) corporationCommand(ctx context.Context, tx pgx.Tx, u User, s *Ship
 	}
 	switch in.Action {
 	case "company_deposit", "company_withdraw":
-		if in.Amount < 1 || in.Amount > 1000000000 {
+		if in.Amount < 1 || in.Amount > MaxCredits {
 			return true, errors.New("Некорректная сумма")
 		}
 		amount := in.Amount
@@ -365,33 +365,46 @@ func (a *App) portalCommand(ctx context.Context, tx pgx.Tx, u User, s *Ship, g *
 		return err
 	}
 	if in.Action == "portal_travel" {
-		if !active {
-			return errors.New("Портал ещё не активирован")
+		current := galaxyKey(g.Stars[s.Star-1])
+		targetID := in.Target
+		if targetID == "" {
+			for _, d := range g.Catalog {
+				if d.Opened && d.ID != current {
+					targetID = d.ID
+					break
+				}
+			}
+		}
+		targetDefinition := g.definition(targetID)
+		if targetDefinition == nil || !targetDefinition.Opened || targetID == current {
+			return errors.New("Выберите другую открытую галактику")
 		}
 		near := false
-		target := 0
-		for _, id := range coreSystems(g) {
+		for _, id := range coreSystems(g, current) {
 			if s.Star == id {
 				near = true
 			}
-			if target == 0 {
-				target = id
-			}
 		}
-		if galaxyKey(g.Stars[s.Star-1]) == "asterion" {
-			near = g.Stars[s.Star-1].Number == 1
+		if current == "asterion" && g.Stars[s.Star-1].Number == 1 {
+			near = true
 		}
 		if !near {
 			return errors.New("Прибудьте в одну из систем у чёрной дыры")
 		}
-		if galaxyKey(g.Stars[s.Star-1]) == "edem" {
+		cores := coreSystems(g, targetID)
+		if len(cores) == 0 {
+			return errors.New("Нет входной системы")
+		}
+		target := cores[0]
+		if targetID == "asterion" {
 			for _, star := range g.Stars {
-				if galaxyKey(star) == "asterion" && star.Number == 1 {
+				if galaxyKey(star) == targetID && star.Number == 1 {
 					target = star.ID
 					break
 				}
 			}
 		}
+
 		_, err := tx.Exec(ctx, `UPDATE ships SET star=$2,object_id='entry',position_mode='approach',waypoints='[]',reserved_fuel=0 WHERE id=$1`, s.ID, target)
 		return err
 	}

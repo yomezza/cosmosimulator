@@ -35,7 +35,7 @@ func TestFleetProgression060(t *testing.T) {
 func TestFleetPurchases060(t *testing.T) {
 	f := newFixture033(t)
 	cookie, uid := f.signup("fleet060")
-	f.exec(`UPDATE users SET credits=50000000 WHERE id=$1`, uid)
+	f.exec(`UPDATE users SET credits=50000000,level=20 WHERE id=$1`, uid)
 	if n := f.integer(`SELECT count(DISTINCT ship_class) FROM shipyard_stock y JOIN stations s ON s.star=y.star AND s.object_id=y.station WHERE s.active AND s.shipyard AND y.quantity>0`); n != 15 {
 		t.Fatal("not all hulls are on sale", n)
 	}

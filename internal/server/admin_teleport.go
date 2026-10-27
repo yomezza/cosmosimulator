@@ -66,6 +66,13 @@ func (a *App) adminTeleport(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if busy, e := automationBusy(ctx, tx, s.ID); e != nil {
+		a.internal(w, e)
+		return
+	} else if busy {
+		fail(w, 409, "Приостановите задачу планировщика")
+		return
+	}
 	var busy bool
 	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM mining_jobs WHERE ship_id=$1) OR EXISTS(SELECT 1 FROM deliveries WHERE ship_id=$1 AND status='carrying')`, s.ID).Scan(&busy); err != nil {
 		a.internal(w, err)

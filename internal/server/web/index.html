@@ -13,12 +13,13 @@
     <script src="controls.js" defer></script>
     <script src="app.js" defer></script>
     <script src="galaxy-admin.js" defer></script>
+    <script src="operations070.js" defer></script>
     <script src="expedition.js" defer></script>
     <script src="galaxy.js" defer></script>
   </head>
   <body>
     <header>
-      <a class="brand" href="/">◈ COSMOSIMULATOR <small>EDEM / 0.6.0</small></a>
+      <a class="brand" href="/">◈ COSMOSIMULATOR <small>EDEM / 0.7.0</small></a>
       <div class="header-actions">
         <div id="window-switcher" aria-label="Открытые окна"></div>
         <button
@@ -45,6 +46,8 @@
               <span data-i18n="Галактики">Галактики</span></button
             ><button data-open="adminchanges">
               <span data-i18n="Журнал изменений">Журнал изменений</span></button
+            ><button data-open="resourcegrant">
+              <span data-i18n="Выдача ресурсов">Выдача ресурсов</span></button
             ><button data-open="users">
               <span data-i18n="Пользователи">Пользователи</span>
             </button>
@@ -137,9 +140,11 @@
         ><span class="nav-label"
           ><span data-i18n="Корпорация">Корпорация</span></span
         ></button
-      ><button data-open="tasks" data-nav="Задания">
+      ><button data-open="tasks" data-nav="Планировщик задач">
         <span class="nav-icon">≡</span
-        ><span class="nav-label" data-i18n="Задания">Задания</span></button
+        ><span class="nav-label" data-i18n="Планировщик задач"
+          >Планировщик задач</span
+        ></button
       ><button data-open="guide" data-nav="Руководство пилота">
         <span class="nav-icon">▤</span
         ><span class="nav-label" data-i18n="Руководство пилота"
@@ -227,12 +232,12 @@
             <div class="pilot-line">
               <h1 id="welcome-name"></h1>
               <div class="level-overview">
-                <small data-i18n="Уровень игрока">Уровень игрока</small
+                <small data-i18n="Стаж игрока">Стаж игрока</small
                 ><strong id="overview-level">1</strong
                 ><progress id="overview-xp" max="100" value="0"></progress
                 ><small id="overview-xp-text"></small
-                ><button id="overview-upgrade" data-i18n="Повысить уровень">
-                  Повысить уровень
+                ><button id="overview-upgrade" data-i18n="Повысить стаж">
+                  Повысить стаж
                 </button>
               </div>
             </div>
@@ -288,7 +293,7 @@
     <footer>
       <span id="server-status" class="signal"
         ><span data-i18n="● СЕРВЕР ОНЛАЙН">● СЕРВЕР ОНЛАЙН</span></span
-      ><span>COSMOSIMULATOR · v0.6.0</span>
+      ><span>COSMOSIMULATOR · v0.7.0</span>
     </footer>
     <div id="toast" role="status" hidden></div>
     <div id="tooltip" role="tooltip" hidden></div>

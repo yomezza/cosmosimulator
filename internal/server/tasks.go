@@ -193,7 +193,10 @@ func (a *App) activities(ctx context.Context) error {
 			return err
 		}
 	}
-	return a.advanceLogistics(ctx)
+	if err = a.advanceLogistics(ctx); err != nil {
+		return err
+	}
+	return a.advanceAutomation(ctx)
 }
 func (a *App) advancePlayer(ctx context.Context, uid int64, g *Galaxy) error {
 	tx, err := a.db.Begin(ctx)

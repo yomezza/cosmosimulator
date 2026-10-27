@@ -1,0 +1,509 @@
+package server
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"github.com/jackc/pgx/v5"
+	"net/http"
+	"time"
+)
+
+type AutomationTask struct {
+	ID           int64  `json:"id"`
+	User         int64  `json:"user"`
+	Ship         int64  `json:"ship"`
+	Kind         string `json:"kind"`
+	SourceStar   int    `json:"source_star"`
+	SourceObject string `json:"source_object"`
+	DestStar     int    `json:"dest_star"`
+	DestStation  string `json:"dest_station"`
+	Resource     string `json:"resource"`
+	Quantity     int    `json:"quantity"`
+	Progress     int    `json:"progress"`
+	Carried      int    `json:"carried"`
+	Pending      int    `json:"pending"`
+	Phase        string `json:"phase"`
+	Status       string `json:"status"`
+	Error        string `json:"error"`
+}
+
+func automationBusy(ctx context.Context, q querier, sid int64) (bool, error) {
+	var yes bool
+	err := q.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM automation_tasks WHERE ship_id=$1 AND status='running')`, sid).Scan(&yes)
+	return yes, err
+}
+
+func (a *App) planner(w http.ResponseWriter, r *http.Request) {
+	u, ok := a.user(w, r)
+	if !ok {
+		return
+	}
+	ctx := r.Context()
+	if r.Method == "GET" {
+		list, err := queryMaps(ctx, a.db, `SELECT t.*,s.name AS ship_name FROM automation_tasks t JOIN ships s ON s.id=t.ship_id WHERE t.user_id=$1 ORDER BY CASE WHEN t.status IN('queued','running','paused') THEN 0 ELSE 1 END,t.id DESC LIMIT 200`, u.ID)
+		if err != nil {
+			a.internal(w, err)
+			return
+		}
+		reply(w, 200, list)
+		return
+	}
+	var in struct {
+		AutomationTask
+		Action string `json:"action"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	tx, err := a.db.Begin(ctx)
+	if err != nil {
+		a.internal(w, err)
+		return
+	}
+	defer tx.Rollback(context.Background())
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(784218)`); err != nil {
+		a.internal(w, err)
+		return
+	}
+	if _, err = tx.Exec(ctx, `SELECT id FROM users WHERE id=$1 FOR UPDATE`, u.ID); err != nil {
+		a.internal(w, err)
+		return
+	}
+	if in.Action != "create" {
+		status := map[string]string{"pause": "paused", "resume": "queued", "cancel": "cancelled"}[in.Action]
+		if status == "" {
+			fail(w, 400, "Неизвестное действие")
+			return
+		}
+		tag, e := tx.Exec(ctx, `UPDATE automation_tasks SET status=$3,error='',pending=CASE WHEN $3='queued' AND NOT EXISTS(SELECT 1 FROM mining_jobs j WHERE j.ship_id=automation_tasks.ship_id) THEN 0 ELSE pending END,updated_at=now() WHERE id=$1 AND user_id=$2 AND status IN('queued','running','paused')`, in.ID, u.ID, status)
+		err = e
+		if err == nil && tag.RowsAffected() == 0 {
+			fail(w, 404, "Задача не найдена")
+			return
+		}
+	} else {
+		var owner int64
+		if err = tx.QueryRow(ctx, `SELECT user_id FROM ships WHERE id=$1`, in.Ship).Scan(&owner); err != nil || owner != u.ID {
+			fail(w, 404, "Корабль не найден")
+			return
+		}
+		g, e := a.loadUniverse(ctx)
+		if e != nil {
+			a.internal(w, e)
+			return
+		}
+		if _, ok := resource(in.Resource); !ok || in.Quantity < 1 || in.Quantity > 100000 || in.SourceStar < 1 || in.SourceStar > len(g.Stars) || in.DestStar < 1 || in.DestStar > len(g.Stars) || (in.Kind != "mine" && in.Kind != "haul") {
+			fail(w, 400, "Некорректная задача")
+			return
+		}
+		var count int
+		if err = tx.QueryRow(ctx, `SELECT count(*) FROM automation_tasks WHERE user_id=$1 AND status IN('queued','running','paused')`, u.ID).Scan(&count); err != nil {
+			a.internal(w, err)
+			return
+		}
+		if count >= 20 {
+			fail(w, 409, "В очереди уже 20 задач")
+			return
+		}
+		if in.Kind == "mine" {
+			valid := false
+			for _, site := range systemSites(g.Stars[in.SourceStar-1]) {
+				if site.ID == in.SourceObject {
+					for _, res := range site.Resources {
+						if res == in.Resource {
+							valid = true
+						}
+					}
+				}
+			}
+			var known bool
+			if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM surveys WHERE user_id=$1 AND star=$2)`, u.ID, in.SourceStar).Scan(&known); err != nil {
+				a.internal(w, err)
+				return
+			}
+			if !valid || !known {
+				fail(w, 400, "Исследуйте объект добычи и выберите ресурс")
+				return
+			}
+			if in.DestStation != "" && in.DestStar != in.SourceStar {
+				fail(w, 400, "Для добычи выберите склад в той же системе")
+				return
+			}
+		} else if in.SourceStar == in.DestStar && in.SourceObject == in.DestStation {
+			fail(w, 400, "Склады должны различаться")
+			return
+		}
+		for _, port := range []struct {
+			star     int
+			id       string
+			required bool
+		}{{in.SourceStar, in.SourceObject, in.Kind == "haul"}, {in.DestStar, in.DestStation, in.Kind == "haul" || in.DestStation != ""}} {
+			if !port.required {
+				continue
+			}
+			var exists bool
+			if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM stations WHERE star=$1 AND object_id=$2 AND active)`, port.star, port.id).Scan(&exists); err != nil {
+				a.internal(w, err)
+				return
+			}
+			if !exists {
+				fail(w, 400, "Станция не найдена")
+				return
+			}
+		}
+		if in.Kind == "haul" && len(g.path(in.SourceStar, in.DestStar)) == 0 {
+			fail(w, 400, "Нет допустимого маршрута")
+			return
+		}
+		_, err = tx.Exec(ctx, `INSERT INTO automation_tasks(user_id,ship_id,kind,source_star,source_object,dest_star,dest_station,resource,quantity) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, u.ID, in.Ship, in.Kind, in.SourceStar, in.SourceObject, in.DestStar, in.DestStation, in.Resource, in.Quantity)
+	}
+	if err != nil {
+		a.internal(w, err)
+		return
+	}
+	if err = tx.Commit(ctx); err != nil {
+		a.internal(w, err)
+		return
+	}
+	reply(w, 200, map[string]bool{"ok": true})
+}
+
+// Shared by manual mining and automation: visibility, extractor, cargo reservation
+// and global deposit quotas are enforced in exactly the same transaction.
+func beginExtraction(ctx context.Context, tx pgx.Tx, uid int64, s Ship, star Star, planet int, res string, limit int) (*MiningJob, error) {
+	var known, busy bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM surveys WHERE user_id=$1 AND star=$2),EXISTS(SELECT 1 FROM mining_jobs WHERE ship_id=$3)`, uid, s.Star, s.ID).Scan(&known, &busy); err != nil {
+		return nil, err
+	}
+	if busy {
+		return nil, errors.New("Добыча уже выполняется")
+	}
+	if !known {
+		return nil, errors.New("Сначала исследуйте систему")
+	}
+	source := ""
+	for _, site := range systemSites(star) {
+		if site.Planet == planet {
+			for _, id := range site.Resources {
+				if id == res {
+					source = site.ID
+				}
+			}
+		}
+	}
+	if source == "" {
+		return nil, errors.New("Ресурс отсутствует на планете")
+	}
+	if !nearObject(s, source) {
+		return nil, errors.New("Приблизьтесь к объекту добычи")
+	}
+	if !extractorAccepts(s.Extractor, res) {
+		return nil, errors.New("Установите подходящий добытчик")
+	}
+	count := extractorYield(s.Extractor, s.Star, planet) + s.hull().MiningBonus
+	if limit > 0 {
+		count = min(count, limit)
+	}
+	if s.capacity()-cargoSize(s.Cargo) < count {
+		return nil, errors.New("Трюм заполнен")
+	}
+	count, start, err := reserveExtraction(ctx, tx, s.Star, planet, res, count)
+	if err != nil {
+		return nil, err
+	}
+	if count == 0 {
+		return nil, errors.New("Лимит добычи исчерпан")
+	}
+	var tick int64
+	if err = tx.QueryRow(ctx, `SELECT tick FROM world WHERE id=1`).Scan(&tick); err != nil {
+		return nil, err
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO mining_jobs(user_id,star,planet,resource,quantity,finish_tick,quota_start,ship_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, uid, s.Star, planet, res, count, tick+1, start, s.ID)
+	return &MiningJob{Resource: res, Quantity: count, FinishTick: tick + 1, StartedAt: time.Now(), Planet: planet}, err
+}
+
+func taskFuel(s *Ship, needed int) error {
+	if needed > s.hull().Fuel {
+		return errors.New("Маршрут длиннее запаса топлива")
+	}
+	if s.Fuel+s.Cargo["agni"]*5 < needed {
+		return errors.New("Недостаточно топлива: добавьте Агни в трюм")
+	}
+	for s.Fuel < needed {
+		s.Cargo["agni"]--
+		s.Fuel = min(s.hull().Fuel, s.Fuel+5)
+	}
+	return nil
+}
+func taskNavigate(ctx context.Context, tx pgx.Tx, uid int64, s *Ship, g *Galaxy, star int, object string, dock bool) (bool, error) {
+	if s.Destination != nil || s.LocalTarget != nil || len(s.Waypoints) > 0 {
+		return false, nil
+	}
+	if s.Star != star {
+		path := g.path(s.Star, star)
+		if len(path) < 2 {
+			return false, errors.New("Нет допустимого маршрута")
+		}
+		cost := (len(path) - 1) * s.hull().JumpFuel
+		if err := taskFuel(s, cost); err != nil {
+			return false, err
+		}
+		s.Fuel -= cost
+		now := time.Now()
+		at := now.Add(time.Duration((len(path)-1)*s.hull().JumpSeconds) * time.Second)
+		s.Destination = &star
+		s.Departure = &now
+		s.Arrival = &at
+		s.Path = path
+		return false, saveShip(ctx, tx, uid, *s)
+	}
+	if dock {
+		var exists bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM stations WHERE star=$1 AND object_id=$2 AND active)`, star, object).Scan(&exists); err != nil {
+			return false, err
+		}
+		if !exists {
+			return false, errors.New("Станция не найдена")
+		}
+	}
+	mode := "approach"
+	if dock {
+		mode = "docked"
+	}
+	if s.ObjectID == object && s.PositionMode == mode {
+		return true, nil
+	}
+	if err := taskFuel(s, 1); err != nil {
+		return false, err
+	}
+	s.Fuel--
+	now := time.Now()
+	at := now.Add(5 * time.Second)
+	s.LocalTarget = &object
+	s.LocalMode = &mode
+	s.LocalStarted = &now
+	s.LocalArrival = &at
+	return false, saveShip(ctx, tx, uid, *s)
+}
+func taskStorage(ctx context.Context, tx pgx.Tx, t *AutomationTask, s *Ship, withdraw bool, amount int) error {
+	m, err := warehouse(ctx, tx, t.User, s.Star, s.ObjectID)
+	if err != nil {
+		return err
+	}
+	if withdraw {
+		if m[t.Resource] < amount {
+			return errors.New("Недостаточно товара на складе")
+		}
+		m[t.Resource] -= amount
+		s.Cargo[t.Resource] += amount
+	} else {
+		if s.Cargo[t.Resource] < amount {
+			return errors.New("Недостаточно груза")
+		}
+		if m[t.Resource] > 1000000000-amount {
+			return errors.New("Склад заполнен")
+		}
+		m[t.Resource] += amount
+		s.Cargo[t.Resource] -= amount
+	}
+	if err = putWarehouse(ctx, tx, t.User, s.Star, s.ObjectID, m); err != nil {
+		return err
+	}
+	return saveShip(ctx, tx, t.User, *s)
+}
+func stepAutomation(ctx context.Context, tx pgx.Tx, t *AutomationTask, s *Ship, g *Galaxy) error {
+	if s.Destination != nil || s.LocalTarget != nil || len(s.Waypoints) > 0 {
+		return nil
+	}
+	var mining bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM mining_jobs WHERE ship_id=$1)`, s.ID).Scan(&mining); err != nil {
+		return err
+	}
+	if mining {
+		return nil
+	}
+	if t.Pending > 0 {
+		return errors.New("Добыча была прервана. Возобновите задачу")
+	}
+	if t.Kind == "mine" {
+		remaining := t.Quantity - t.Progress
+		if t.Phase == "dest" || remaining == 0 && t.DestStation != "" && t.Carried > 0 {
+			arrived, err := taskNavigate(ctx, tx, t.User, s, g, t.DestStar, t.DestStation, true)
+			if err != nil || !arrived {
+				return err
+			}
+			if err = taskStorage(ctx, tx, t, s, false, t.Carried); err != nil {
+				return err
+			}
+			t.Carried = 0
+			t.Phase = "source"
+		}
+		if remaining == 0 {
+			t.Status = "completed"
+			return nil
+		}
+		planet := 0
+		for _, site := range systemSites(g.Stars[t.SourceStar-1]) {
+			if site.ID == t.SourceObject {
+				planet = site.Planet
+			}
+		}
+		count := min(remaining, extractorYield(s.Extractor, t.SourceStar, planet)+s.hull().MiningBonus)
+		if s.capacity()-cargoSize(s.Cargo) < count {
+			if t.DestStation == "" || t.Carried == 0 {
+				return errors.New("Трюм заполнен")
+			}
+			t.Phase = "dest"
+			return nil
+		}
+		arrived, err := taskNavigate(ctx, tx, t.User, s, g, t.SourceStar, t.SourceObject, false)
+		if err != nil || !arrived {
+			return err
+		}
+		job, err := beginExtraction(ctx, tx, t.User, *s, g.Stars[t.SourceStar-1], planet, t.Resource, remaining)
+		if err != nil {
+			return err
+		}
+		t.Pending = job.Quantity
+		if _, err = tx.Exec(ctx, `UPDATE mining_jobs SET automation_id=$2 WHERE ship_id=$1`, s.ID, t.ID); err != nil {
+			return err
+		}
+	} else {
+		if t.Phase == "source" {
+			arrived, err := taskNavigate(ctx, tx, t.User, s, g, t.SourceStar, t.SourceObject, true)
+			if err != nil || !arrived {
+				return err
+			}
+			amount := min(t.Quantity-t.Progress, s.capacity()-cargoSize(s.Cargo))
+			if amount < 1 {
+				return errors.New("Трюм заполнен")
+			}
+			if err = taskStorage(ctx, tx, t, s, true, amount); err != nil {
+				return err
+			}
+			t.Carried = amount
+			t.Phase = "dest"
+		} else {
+			arrived, err := taskNavigate(ctx, tx, t.User, s, g, t.DestStar, t.DestStation, true)
+			if err != nil || !arrived {
+				return err
+			}
+			if err = taskStorage(ctx, tx, t, s, false, t.Carried); err != nil {
+				return err
+			}
+			t.Progress += t.Carried
+			t.Carried = 0
+			t.Phase = "source"
+			if t.Progress == t.Quantity {
+				t.Status = "completed"
+			}
+		}
+	}
+	return nil
+}
+func (a *App) advanceAutomation(ctx context.Context) error {
+	rows, err := a.db.Query(ctx, `SELECT t.id FROM automation_tasks t WHERE t.status IN('queued','running') AND NOT EXISTS(SELECT 1 FROM automation_tasks prev WHERE prev.ship_id=t.ship_id AND prev.id<t.id AND prev.status IN('queued','running','paused')) ORDER BY t.updated_at,t.id LIMIT 100`)
+	if err != nil {
+		return err
+	}
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err = rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		ids = append(ids, id)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if err = a.advanceTask(ctx, id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+func (a *App) advanceTask(ctx context.Context, id int64) error {
+	tx, err := a.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(context.Background())
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(784218)`); err != nil {
+		return err
+	}
+	var t AutomationTask
+	err = tx.QueryRow(ctx, `SELECT id,user_id,ship_id,kind,source_star,source_object,dest_star,dest_station,resource,quantity,progress,carried,pending,phase,status,error FROM automation_tasks WHERE id=$1 FOR UPDATE`, id).Scan(&t.ID, &t.User, &t.Ship, &t.Kind, &t.SourceStar, &t.SourceObject, &t.DestStar, &t.DestStation, &t.Resource, &t.Quantity, &t.Progress, &t.Carried, &t.Pending, &t.Phase, &t.Status, &t.Error)
+	if err != nil {
+		return err
+	}
+	if t.Status != "queued" && t.Status != "running" {
+		return nil
+	}
+	var previous bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM automation_tasks WHERE ship_id=$1 AND id<$2 AND status IN('queued','running','paused'))`, t.Ship, t.ID).Scan(&previous); err != nil {
+		return err
+	}
+	if previous {
+		return nil
+	}
+	if _, err = tx.Exec(ctx, `SELECT id FROM users WHERE id=$1 FOR UPDATE`, t.User); err != nil {
+		return err
+	}
+	g, err := a.loadUniverse(ctx)
+	if err != nil {
+		return err
+	}
+	s, err := readShip(ctx, tx, t.Ship)
+	if err != nil {
+		return err
+	}
+	var busy bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM research_jobs WHERE ship_id=$1 AND NOT paused) OR EXISTS(SELECT 1 FROM deliveries WHERE ship_id=$1 AND status='carrying')`, s.ID).Scan(&busy); err != nil {
+		return err
+	}
+	if busy {
+		if _, err = tx.Exec(ctx, `UPDATE automation_tasks SET updated_at=now() WHERE id=$1`, id); err != nil {
+			return err
+		}
+		return tx.Commit(ctx)
+	}
+	original := t
+	t.Status = "running"
+	nested, err := tx.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	err = stepAutomation(ctx, nested, &t, &s, g)
+	if err != nil {
+		if e := nested.Rollback(ctx); e != nil {
+			return e
+		}
+		t = original
+		t.Status = "paused"
+		t.Error = err.Error()
+	} else if err = nested.Commit(ctx); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `UPDATE automation_tasks SET progress=$2,carried=$3,pending=$4,phase=$5,status=$6,error=$7,updated_at=now() WHERE id=$1`, t.ID, t.Progress, t.Carried, t.Pending, t.Phase, t.Status, t.Error); err != nil {
+		return err
+	}
+	if t.Status == "completed" || t.Status == "paused" {
+		level := "success"
+		message := "Задача выполнена"
+		if t.Status == "paused" {
+			level = "warning"
+			message = "Задача приостановлена"
+		}
+		raw, _ := json.Marshal(map[string]any{"task": t.ID, "ship_name": s.Name, "reason": t.Error})
+		if _, err = tx.Exec(ctx, `INSERT INTO notifications(user_id,kind,level,message,data) VALUES($1,'planner',$2,$3,$4)`, t.User, level, message, raw); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}

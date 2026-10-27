@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+const MaxCredits int64 = 500_000_000_000
+
 func warehouse(ctx context.Context, tx pgx.Tx, uid int64, star int, station string) (map[string]int, error) {
 	_, err := tx.Exec(ctx, `INSERT INTO warehouses(user_id,star,station) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`, uid, star, station)
 	if err != nil {
@@ -28,7 +30,7 @@ func putWarehouse(ctx context.Context, tx pgx.Tx, uid int64, star int, station s
 	return err
 }
 func debit(ctx context.Context, tx pgx.Tx, uid int64, n int64) error {
-	if n < 0 || n > 1000000000 {
+	if n < 0 || n > MaxCredits {
 		return errors.New("Некорректная сумма")
 	}
 	tag, err := tx.Exec(ctx, `UPDATE users SET credits=credits-$2 WHERE id=$1 AND credits>=$2`, uid, n)
@@ -38,14 +40,17 @@ func debit(ctx context.Context, tx pgx.Tx, uid int64, n int64) error {
 	return err
 }
 func credit(ctx context.Context, tx pgx.Tx, uid int64, n int64) error {
-	if n < 0 {
+	if n < 0 || n > MaxCredits {
 		return errors.New("Некорректная сумма")
 	}
-	_, err := tx.Exec(ctx, `UPDATE users SET credits=credits+$2 WHERE id=$1`, uid, n)
+	tag, err := tx.Exec(ctx, `UPDATE users SET credits=credits+$2::bigint WHERE id=$1 AND credits<=$3::bigint-$2::bigint`, uid, n, MaxCredits)
+	if err == nil && tag.RowsAffected() == 0 {
+		return errors.New("Достигнут лимит 500 млрд CR")
+	}
 	return err
 }
 func (a *App) economyCommand(ctx context.Context, tx pgx.Tx, u User, s *Ship, g *Galaxy, in Command) (bool, error) {
-	if in.Quantity < 0 || in.Quantity > 100000 || in.Price < 0 || in.Price > 1000000 || in.Amount < 0 || in.Amount > 1000000000 {
+	if in.Quantity < 0 || in.Quantity > 100000 || in.Price < 0 || in.Price > 1000000 || in.Amount < 0 || in.Amount > MaxCredits {
 		return true, errors.New("Некорректное количество или цена")
 	}
 	switch in.Action {
@@ -215,6 +220,9 @@ func (a *App) economyCommand(ctx context.Context, tx pgx.Tx, u User, s *Ship, g 
 		if !ok || in.Collateral < int64(in.Quantity*res.Price) || in.Collateral > 100000000 {
 			return true, errors.New("Обеспечение должно покрывать стоимость груза")
 		}
+		if in.Amount > MaxCredits-in.Collateral {
+			return true, errors.New("Достигнут лимит 500 млрд CR")
+		}
 		var dest bool
 		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM stations WHERE star=$1 AND object_id=$2 AND active)`, in.To, in.Station).Scan(&dest); err != nil {
 			return true, err
@@ -382,6 +390,11 @@ func (a *App) advanceLogistics(ctx context.Context) error {
 		return err
 	}
 	for _, d := range list {
+		if ok, e := walletRoom(ctx, tx, d.carrier, d.reward); e != nil {
+			return e
+		} else if !ok {
+			continue
+		}
 		if err = completeDelivery(ctx, tx, d.id, d.owner, d.carrier, d.star, d.station, d.res, d.q, d.reward); err != nil {
 			return err
 		}
@@ -411,6 +424,14 @@ func (a *App) advanceLogistics(ctx context.Context) error {
 	}
 	for _, d := range expiredList {
 		refund := d.reward
+		if d.status != "open" {
+			refund += d.collateral
+		}
+		if ok, e := walletRoom(ctx, tx, d.owner, refund); e != nil {
+			return e
+		} else if !ok {
+			continue
+		}
 		if d.status == "open" {
 			m, e := warehouse(ctx, tx, d.owner, d.star, d.station)
 			if e != nil {
@@ -420,8 +441,6 @@ func (a *App) advanceLogistics(ctx context.Context) error {
 			if err = putWarehouse(ctx, tx, d.owner, d.star, d.station, m); err != nil {
 				return err
 			}
-		} else {
-			refund += d.collateral
 		}
 		if err = credit(ctx, tx, d.owner, refund); err != nil {
 			return err
@@ -450,6 +469,11 @@ func (a *App) advanceLogistics(ctx context.Context) error {
 		return err
 	}
 	for _, d := range list {
+		if ok, e := walletRoom(ctx, tx, d.owner, d.reward); e != nil {
+			return e
+		} else if !ok {
+			continue
+		}
 		if _, err = tx.Exec(ctx, `UPDATE local_markets SET stock=jsonb_set(stock,ARRAY[$2::text],to_jsonb(COALESCE((stock->>$2)::int,0)+$3)) WHERE star=$1 AND station=$4`, d.star, d.res, d.q, d.station); err != nil {
 			return err
 		}
@@ -461,4 +485,10 @@ func (a *App) advanceLogistics(ctx context.Context) error {
 		}
 	}
 	return tx.Commit(ctx)
+}
+
+func walletRoom(ctx context.Context, tx pgx.Tx, uid, amount int64) (bool, error) {
+	var room bool
+	err := tx.QueryRow(ctx, `SELECT credits<=$2::bigint-$3::bigint FROM users WHERE id=$1`, uid, MaxCredits, amount).Scan(&room)
+	return room, err
 }
