@@ -969,5 +969,9 @@
   "Продуктовые станции и торговые узлы.": "Food stations and trade hubs.",
   "Агрокомплексы и химические станции.": "Agricultural and chemical complexes.",
   "Голограмма корабля": "Ship hologram",
-  "Голограмма": "Hologram"
+  "Голограмма": "Hologram",
+  "Телепортироваться": "Teleport",
+  "Телепортация выполнена": "Teleport complete",
+  "Завершите добычу или доставку перед телепортацией": "Complete mining or delivery before teleporting",
+  "teleport": "Teleportation"
 }

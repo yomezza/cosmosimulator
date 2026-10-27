@@ -149,6 +149,15 @@ func openDatabase(ctx context.Context, dsn, schema string) (*pgxpool.Pool, error
 			return nil, err
 		}
 	}
+	if arrangeFrontierRings(&existing) {
+		raw, err = json.Marshal(existing)
+		if err != nil {
+			return nil, err
+		}
+		if _, err = tx.Exec(ctx, `UPDATE galaxies SET data=$1 WHERE name='Edem'`, raw); err != nil {
+			return nil, err
+		}
+	}
 	if err = ensureStations(ctx, tx, &existing); err != nil {
 		return nil, err
 	}

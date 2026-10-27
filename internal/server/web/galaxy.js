@@ -1209,6 +1209,14 @@
             reason: "Система уже исследована",
             action: () => Game.explore(star.id),
           },
+          ...(gameData.state?.user.role === "admin"
+            ? [
+                {
+                  label: "Телепортироваться",
+                  action: () => Game.teleport(star.id),
+                },
+              ]
+            : []),
         ],
         event.clientX,
         event.clientY,

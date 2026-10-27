@@ -135,6 +135,7 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("GET /api/market/global", a.globalMarket)
 	m.HandleFunc("POST /api/market/global", a.globalMarket)
 	m.HandleFunc("POST /api/admin/tick", a.adminTick)
+	m.HandleFunc("POST /api/admin/teleport", a.adminTeleport)
 	m.HandleFunc("POST /api/admin/user", a.editUser)
 	m.HandleFunc("GET /api/galaxy", a.galaxy)
 	m.HandleFunc("GET /api/route", a.galaxy)

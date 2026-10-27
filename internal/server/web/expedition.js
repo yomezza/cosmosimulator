@@ -103,6 +103,13 @@
   const command = (body, message) => act("workbench", body, message);
   window.Game = {
     command,
+    teleport(to) {
+      return act(
+        "admin/teleport",
+        { to, ship: d().ship.id },
+        "Телепортация выполнена",
+      );
+    },
     async explore(to) {
       const plan = await api("estimate?to=" + to);
       const text =

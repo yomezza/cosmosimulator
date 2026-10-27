@@ -436,6 +436,7 @@ func (a *App) portalCommand(ctx context.Context, tx pgx.Tx, u User, s *Ship, g *
 			}
 			expanded.NamingVersion = 0
 			diversifySystemNames(&expanded)
+			arrangeFrontierRings(&expanded)
 			raw, _ = json.Marshal(expanded)
 			if _, err = tx.Exec(ctx, `UPDATE galaxies SET data=$1 WHERE name='Edem'`, raw); err != nil {
 				return err

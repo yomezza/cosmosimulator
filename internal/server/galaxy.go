@@ -27,13 +27,14 @@ type Lane struct {
 	To   int `json:"to"`
 }
 type Galaxy struct {
-	NamingVersion int      `json:"naming_version,omitempty"`
-	Name          string   `json:"name"`
-	Seed          int64    `json:"seed"`
-	Version       int      `json:"version"`
-	Stars         []Star   `json:"stars"`
-	Regions       []Region `json:"regions"`
-	Lanes         []Lane   `json:"lanes"`
+	RingLayoutVersion int      `json:"ring_layout_version,omitempty"`
+	NamingVersion     int      `json:"naming_version,omitempty"`
+	Name              string   `json:"name"`
+	Seed              int64    `json:"seed"`
+	Version           int      `json:"version"`
+	Stars             []Star   `json:"stars"`
+	Regions           []Region `json:"regions"`
+	Lanes             []Lane   `json:"lanes"`
 }
 
 // Stable IDs and a private seeded RNG keep world generation independent of ticks.
