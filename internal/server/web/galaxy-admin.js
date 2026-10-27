@@ -22,6 +22,7 @@
     user_edit: "Редактирование пользователя",
     teleport: "Телепортация",
     galaxy_update: "Изменение галактики",
+    galaxy_delete: "Удаление галактики",
   };
   window.GalaxyAdmin = {
     async render(root) {
@@ -105,6 +106,80 @@
       for (const [key, label] of Object.entries(labels))
         summary.append(n("span", `${tr(label)}: ${entry.stats[key]}`));
       editor.append(summary);
+      if (d.id !== "edem" && d.id !== "asterion")
+        editor.append(
+          UI.button("Удалить галактику", async () => {
+            const review = await api("admin/galaxies/delete-preview", {
+              id: d.id,
+            });
+            if (epoch !== authEpoch || !admin()) return;
+            const box = Modules.create(
+              "galaxy-delete",
+              "Удаление галактики",
+              600,
+              530,
+            );
+            box.replaceChildren(
+              n("h3", d.name),
+              n("p", tr("Системы") + ": " + review.systems),
+            );
+            const names = {
+              ships: "Корабли и маршруты",
+              warehouses: "Личные склады",
+              corporate_storage: "Корпоративные запасы",
+              stations: "Станции игроков",
+              projects: "Корпоративные проекты",
+              tasks: "Задачи планировщика",
+              deliveries: "Доставки",
+              reservations: "Бронирования",
+              offers: "Рыночные предложения",
+              research: "Исследование и добыча",
+              player_data: "Данные игроков",
+            };
+            const blocked = Object.entries(review.blockers).filter(
+              ([, v]) => v > 0,
+            );
+            box.append(
+              n(
+                "p",
+                tr(
+                  review.can_delete
+                    ? "Галактика будет удалена с карт и переходов. Остальные галактики сохранятся."
+                    : "Сначала освободите галактику от кораблей, имущества и данных игроков.",
+                ),
+                "muted",
+              ),
+            );
+            if (blocked.length)
+              box.append(
+                UI.table(
+                  ["Причина", "Количество"],
+                  blocked.map(([k, v]) => [tr(names[k] || k), v]),
+                ),
+              );
+            box.append(
+              UI.button(
+                "Удалить галактику",
+                async () => {
+                  await api("admin/galaxies/delete", {
+                    id: d.id,
+                    preview: review.preview,
+                  });
+                  Modules.close("galaxy-delete");
+                  selected = "edem";
+                  window.MapData = await api("galaxy");
+                  window.dispatchEvent(new Event("universechange"));
+                  await refresh(true);
+                  await GalaxyAdmin.render(root);
+                  notify(tr("Галактика удалена"));
+                },
+                !review.can_delete,
+              ),
+              UI.button("Отмена", () => Modules.close("galaxy-delete")),
+            );
+            Modules.open("galaxy-delete");
+          }),
+        );
       if (!d.opened) {
         UI.empty(editor, "Галактика откроется после активации портала");
         return;

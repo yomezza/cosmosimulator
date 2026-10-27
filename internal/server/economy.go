@@ -101,7 +101,7 @@ func (a *App) economyCommand(ctx context.Context, tx pgx.Tx, u User, s *Ship, g 
 				rows.Close()
 				return true, err
 			}
-			if id >= 1 && id <= len(g.Stars) && g.Stars[id-1].Region == in.Region {
+			if id >= 1 && id <= len(g.Stars) && !g.Stars[id-1].Deleted && g.Stars[id-1].Region == in.Region {
 				ids = append(ids, id)
 			}
 		}

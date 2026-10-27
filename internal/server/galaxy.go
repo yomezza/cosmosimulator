@@ -11,6 +11,7 @@ import (
 )
 
 type Star struct {
+	Deleted         bool           `json:"deleted,omitempty"`
 	Number          int            `json:"number,omitempty"`
 	Founder         string         `json:"founder,omitempty"`
 	Ports           *int           `json:"ports,omitempty"`
@@ -102,6 +103,9 @@ func generateGalaxy(count int, seed int64) Galaxy {
 	return g
 }
 func (g Galaxy) path(from, to int) []int {
+	if from >= 1 && to >= 1 && from <= len(g.Stars) && to <= len(g.Stars) && (g.Stars[from-1].Deleted || g.Stars[to-1].Deleted) {
+		return nil
+	}
 	if from < 1 || to < 1 || from > len(g.Stars) || to > len(g.Stars) {
 		return nil
 	}
@@ -148,6 +152,10 @@ func (a *App) galaxy(w http.ResponseWriter, r *http.Request) {
 		public := *g
 		public.Stars = append([]Star(nil), g.Stars...)
 		for i := range public.Stars {
+			if public.Stars[i].Deleted {
+				public.Stars[i] = Star{ID: public.Stars[i].ID, Galaxy: "deleted", Deleted: true}
+				continue
+			}
 			public.Stars[i].Planets = nil
 			public.Stars[i].ResourceWeights = nil
 			public.Stars[i].Ports = nil
@@ -157,7 +165,7 @@ func (a *App) galaxy(w http.ResponseWriter, r *http.Request) {
 			a.internal(w, e)
 			return
 		}
-		reply(w, 200, map[string]any{"name": public.Name, "seed": public.Seed, "version": public.Version, "revision": g.Revision, "galaxies": g.Catalog, "founders": founders, "stars": public.Stars, "regions": public.Regions, "lanes": public.Lanes, "black_holes": blackHoles(g), "black_hole": map[string]any{"x": 0, "y": 0, "systems": coreSystems(g)}})
+		reply(w, 200, map[string]any{"name": public.Name, "seed": public.Seed, "version": public.Version, "revision": g.Revision, "galaxies": visibleGalaxies(g), "founders": founders, "stars": public.Stars, "regions": public.Regions, "lanes": public.Lanes, "black_holes": blackHoles(g), "black_hole": map[string]any{"x": 0, "y": 0, "systems": coreSystems(g)}})
 		return
 	}
 	from, e1 := strconv.Atoi(r.URL.Query().Get("from"))

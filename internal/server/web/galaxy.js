@@ -313,6 +313,8 @@
   }
   function updateSystemPicker() {
     if (!galaxy) return;
+    if (galaxy.stars[selected - 1]?.deleted)
+      selected = gameData.expedition.ship.star;
     const picker = UI.systems(selected, (id) => {
       request++;
       selected = Number(id);
@@ -1064,11 +1066,8 @@
       );
     const chosen = local.sites.find((s) => s.id === selectedSite);
     if (chosen) {
-      const model = e("canvas");
-      model.width = 400;
-      model.height = 200;
-      model.className = "inspector-model";
-      Visuals.object(model.getContext("2d"), 200, 100, 65, chosen);
+      const model = UI.objectHologram(chosen, local.star);
+      model.classList.add("inspector-model");
       side.append(
         model,
         e("h3", chosen.name),
@@ -1194,7 +1193,7 @@
     pendingStar = id;
     if (!galaxy) return;
     const star = galaxy.stars.find((s) => s.id === id);
-    if (!star) return;
+    if (!star || star.deleted) return;
     request++;
     pendingStar = null;
     pendingFind = null;

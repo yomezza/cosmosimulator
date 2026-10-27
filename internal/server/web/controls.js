@@ -24,6 +24,55 @@
     .then((r) => (r.ok ? r.json() : Promise.reject()))
     .then(UI.serverStatus)
     .catch(() => {});
+  UI.objectModel = (site, star) => {
+    const types = {
+      Ледяная: "icy",
+      Каменистая: "rocky",
+      "Садовый мир": "garden",
+      "Газовый гигант": "gas",
+      Пустынная: "desert",
+      Лавовая: "lava",
+      "Орбитальная станция": "station",
+      "Пояс астероидов": "asteroids",
+      "Ледяное поле": "ice-field",
+      "Чёрная дыра": "black-hole",
+    };
+    let type = types[site.kind] || "rocky";
+    if (site.kind === "Звезда")
+      type =
+        "star-" +
+        (["O", "B", "A", "F", "G", "K", "M"].includes(star?.class)
+          ? star.class.toLowerCase()
+          : "g");
+    return "object-" + type + ".svg";
+  };
+  UI.objectHologram = (site, star) => {
+    const img = n("img");
+    img.className = "object-hologram";
+    img.src = UI.objectModel(site, star);
+    img.alt = tr(site.kind);
+    img.draggable = false;
+    return img;
+  };
+  UI.objectTag = (kind) => {
+    const colors = {
+      "Орбитальная станция": "#7cc8d2",
+      "Садовый мир": "#8bcf9e",
+      Ледяная: "#8ec6ee",
+      Каменистая: "#b0b1b3",
+      "Газовый гигант": "#d9b889",
+      Пустынная: "#d7bb83",
+      Лавовая: "#e58c72",
+      "Пояс астероидов": "#bfb29a",
+      "Ледяное поле": "#9fd7eb",
+      Звезда: "#efbd68",
+      "Чёрная дыра": "#b59ad4",
+    };
+    const tag = n("span", tr(kind), "object-kind-tag");
+    tag.dataset.kind = kind;
+    tag.style.color = colors[kind] || "#b4c4d0";
+    return tag;
+  };
   UI.shipName = (s) => {
     const name =
       s.spec?.name ||
@@ -406,14 +455,20 @@
   };
   UI.systems = (value, change) =>
     UI.picker(
-      (window.MapData?.stars || []).map((s) => ({
-        id: s.id,
-        code: String(s.id),
-        label: s.name,
-        extra:
-          (gameData.workbench?.known.some((v) => v.star === s.id) ? "✓ " : "") +
-          (gameData.fleet?.ships.some((ship) => ship.star === s.id) ? "◇" : ""),
-      })),
+      (window.MapData?.stars || [])
+        .filter((s) => !s.deleted)
+        .map((s) => ({
+          id: s.id,
+          code: String(s.id),
+          label: s.name,
+          extra:
+            (gameData.workbench?.known.some((v) => v.star === s.id)
+              ? "✓ "
+              : "") +
+            (gameData.fleet?.ships.some((ship) => ship.star === s.id)
+              ? "◇"
+              : ""),
+        })),
       value,
       change,
       { system: true, favorites: UI.bookmarks(false) },

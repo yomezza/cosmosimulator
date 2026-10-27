@@ -59,7 +59,7 @@ func coreSystems(g *Galaxy, galaxies ...string) []int {
 	sort.Slice(list, func(i, j int) bool { return math.Hypot(list[i].X, list[i].Y) < math.Hypot(list[j].X, list[j].Y) })
 	out := []int{}
 	for _, s := range list {
-		if galaxyKey(s) != key || s.Region < 0 {
+		if s.Deleted || galaxyKey(s) != key || s.Region < 0 {
 			continue
 		}
 		out = append(out, s.ID)
@@ -102,6 +102,9 @@ func ensureStations(ctx context.Context, tx pgx.Tx, g *Galaxy) error {
 	}
 	list := []map[string]any{}
 	for _, star := range g.Stars {
+		if star.Deleted {
+			continue
+		}
 		sites := systemSites(star)
 		if star.Ports == nil && core[star.ID] && !hasStation(star.ID) {
 			sites = append(sites, Site{ID: "station", Name: star.Name + " · CORE", Kind: "Орбитальная станция", Orbit: 1})
@@ -178,7 +181,7 @@ func (a *App) workbench(w http.ResponseWriter, r *http.Request) {
 		{"shipyards", `SELECT y.*,s.name AS station_name,s.specialization FROM shipyard_stock y JOIN stations s ON s.star=y.star AND s.object_id=y.station WHERE s.shipyard AND s.active ORDER BY y.star,y.station,y.ship_class`, nil},
 		{"known", `SELECT star,received_at,source FROM surveys WHERE user_id=$1 ORDER BY star`, []any{u.ID}},
 		{"notes", `SELECT star,object_id,note,bookmark FROM navigation_notes WHERE user_id=$1`, []any{u.ID}},
-		{"stations", `SELECT s.*,c.name AS founder_name,c.color AS founder_color,COALESCE(r.points,0) AS reputation,CASE WHEN c.founder_key='founder-02' AND COALESCE(r.points,0)<20 THEN 2 ELSE 0 END AS fee_percent FROM stations s LEFT JOIN companies c ON c.id=s.founder LEFT JOIN reputation r ON r.company_id=s.founder AND r.user_id=$1 WHERE s.active ORDER BY s.star,s.object_id`, []any{u.ID}},
+		{"stations", `SELECT s.*,c.name AS founder_name,c.color AS founder_color,COALESCE(o.name,c.name) AS owner_name,COALESCE(o.tag,c.tag) AS owner_tag,COALESCE(o.color,c.color) AS owner_color,CASE WHEN s.company_id IS NOT NULL THEN 'company' WHEN s.founder IS NOT NULL THEN 'founder' ELSE 'neutral' END AS owner_kind,COALESCE(r.points,0) AS reputation,CASE WHEN c.founder_key='founder-02' AND COALESCE(r.points,0)<20 THEN 2 ELSE 0 END AS fee_percent FROM stations s LEFT JOIN companies c ON c.id=s.founder LEFT JOIN companies o ON o.id=s.company_id LEFT JOIN reputation r ON r.company_id=s.founder AND r.user_id=$1 WHERE s.active ORDER BY s.star,s.object_id`, []any{u.ID}},
 		{"data_offers", `SELECT o.*,u.username AS seller_name,(SELECT count(*) FROM unnest(o.systems) s WHERE NOT EXISTS(SELECT 1 FROM surveys v WHERE v.user_id=$1 AND v.star=s)) AS new_systems FROM survey_offers o JOIN users u ON u.id=o.seller ORDER BY o.id DESC LIMIT 500`, []any{u.ID}},
 		{"warehouses", `SELECT * FROM warehouses WHERE user_id=$1 ORDER BY star,station`, []any{u.ID}},
 		{"orders", `SELECT o.*,u.username AS seller_name FROM sell_orders o JOIN users u ON u.id=o.seller WHERE quantity>0 ORDER BY id DESC LIMIT 500`, nil},
@@ -203,6 +206,24 @@ func (a *App) workbench(w http.ResponseWriter, r *http.Request) {
 		}
 		if v == nil {
 			v = []map[string]any{}
+		}
+		if q.key == "known" || q.key == "notes" {
+			visible := v[:0]
+			for _, row := range v {
+				id := 0
+				switch x := row["star"].(type) {
+				case int32:
+					id = int(x)
+				case int64:
+					id = int(x)
+				case int:
+					id = x
+				}
+				if id > 0 && id <= len(g.Stars) && !g.Stars[id-1].Deleted {
+					visible = append(visible, row)
+				}
+			}
+			v = visible
 		}
 		out[q.key] = v
 	}

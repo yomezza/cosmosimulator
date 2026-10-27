@@ -10,6 +10,9 @@ import (
 )
 
 type AutomationTask struct {
+	SourceKind   string `json:"source_kind"`
+	DestKind     string `json:"dest_kind"`
+	Company      int64  `json:"company"`
 	ID           int64  `json:"id"`
 	User         int64  `json:"user"`
 	Ship         int64  `json:"ship"`
@@ -95,6 +98,10 @@ func (a *App) planner(w http.ResponseWriter, r *http.Request) {
 		}
 		if _, ok := resource(in.Resource); !ok || in.Quantity < 1 || in.Quantity > 100000 || in.SourceStar < 1 || in.SourceStar > len(g.Stars) || in.DestStar < 1 || in.DestStar > len(g.Stars) || (in.Kind != "mine" && in.Kind != "haul") {
 			fail(w, 400, "Некорректная задача")
+			return
+		}
+		if g.Stars[in.SourceStar-1].Deleted || g.Stars[in.DestStar-1].Deleted {
+			fail(w, 400, "Система удалена")
 			return
 		}
 		var count int
@@ -223,11 +230,15 @@ func beginExtraction(ctx context.Context, tx pgx.Tx, uid int64, s Ship, star Sta
 	return &MiningJob{Resource: res, Quantity: count, FinishTick: tick + 1, StartedAt: time.Now(), Planet: planet}, err
 }
 
-func taskFuel(s *Ship, needed int) error {
+func taskFuel(s *Ship, needed int, protected ...int) error {
+	reserve := 0
+	if len(protected) > 0 {
+		reserve = protected[0]
+	}
 	if needed > s.hull().Fuel {
 		return errors.New("Маршрут длиннее запаса топлива")
 	}
-	if s.Fuel+s.Cargo["agni"]*5 < needed {
+	if s.Fuel+max(0, s.Cargo["agni"]-reserve)*5 < needed {
 		return errors.New("Недостаточно топлива: добавьте Агни в трюм")
 	}
 	for s.Fuel < needed {
@@ -236,7 +247,7 @@ func taskFuel(s *Ship, needed int) error {
 	}
 	return nil
 }
-func taskNavigate(ctx context.Context, tx pgx.Tx, uid int64, s *Ship, g *Galaxy, star int, object string, dock bool) (bool, error) {
+func taskNavigate(ctx context.Context, tx pgx.Tx, uid int64, s *Ship, g *Galaxy, star int, object string, dock bool, protected ...int) (bool, error) {
 	if s.Destination != nil || s.LocalTarget != nil || len(s.Waypoints) > 0 {
 		return false, nil
 	}
@@ -246,7 +257,7 @@ func taskNavigate(ctx context.Context, tx pgx.Tx, uid int64, s *Ship, g *Galaxy,
 			return false, errors.New("Нет допустимого маршрута")
 		}
 		cost := (len(path) - 1) * s.hull().JumpFuel
-		if err := taskFuel(s, cost); err != nil {
+		if err := taskFuel(s, cost, protected...); err != nil {
 			return false, err
 		}
 		s.Fuel -= cost
@@ -274,7 +285,7 @@ func taskNavigate(ctx context.Context, tx pgx.Tx, uid int64, s *Ship, g *Galaxy,
 	if s.ObjectID == object && s.PositionMode == mode {
 		return true, nil
 	}
-	if err := taskFuel(s, 1); err != nil {
+	if err := taskFuel(s, 1, protected...); err != nil {
 		return false, err
 	}
 	s.Fuel--
@@ -287,7 +298,15 @@ func taskNavigate(ctx context.Context, tx pgx.Tx, uid int64, s *Ship, g *Galaxy,
 	return false, saveShip(ctx, tx, uid, *s)
 }
 func taskStorage(ctx context.Context, tx pgx.Tx, t *AutomationTask, s *Ship, withdraw bool, amount int) error {
-	m, err := warehouse(ctx, tx, t.User, s.Star, s.ObjectID)
+	kind := t.DestKind
+	if withdraw {
+		kind = t.SourceKind
+	}
+	if kind == "" {
+		kind = "personal"
+	}
+	loc := CargoLocation{Kind: kind, Star: s.Star, Station: s.ObjectID, Company: t.Company}
+	m, err := storageAccess(ctx, tx, t.User, loc, withdraw)
 	if err != nil {
 		return err
 	}
@@ -307,12 +326,22 @@ func taskStorage(ctx context.Context, tx pgx.Tx, t *AutomationTask, s *Ship, wit
 		m[t.Resource] += amount
 		s.Cargo[t.Resource] -= amount
 	}
-	if err = putWarehouse(ctx, tx, t.User, s.Star, s.ObjectID, m); err != nil {
+	if err = writeStorage(ctx, tx, t.User, loc, m); err != nil {
 		return err
 	}
 	return saveShip(ctx, tx, t.User, *s)
 }
 func stepAutomation(ctx context.Context, tx pgx.Tx, t *AutomationTask, s *Ship, g *Galaxy) error {
+	navigate := func(star int, object string, dock bool) (bool, error) {
+		reserve := 0
+		if t.Resource == "agni" {
+			reserve = t.Carried
+			if t.Kind == "unload" {
+				reserve = t.Quantity
+			}
+		}
+		return taskNavigate(ctx, tx, t.User, s, g, star, object, dock, reserve)
+	}
 	if s.Destination != nil || s.LocalTarget != nil || len(s.Waypoints) > 0 {
 		return nil
 	}
@@ -326,10 +355,40 @@ func stepAutomation(ctx context.Context, tx pgx.Tx, t *AutomationTask, s *Ship, 
 	if t.Pending > 0 {
 		return errors.New("Добыча была прервана. Возобновите задачу")
 	}
+	if t.Kind == "load" {
+		arrived, e := navigate(t.SourceStar, t.SourceObject, true)
+		if e != nil || !arrived {
+			return e
+		}
+		if cargoSize(s.Cargo)+t.Quantity > s.capacity() {
+			return errors.New("Трюм заполнен")
+		}
+		if e = taskStorage(ctx, tx, t, s, true, t.Quantity); e != nil {
+			return e
+		}
+		t.Progress = t.Quantity
+		t.Status = "completed"
+		return nil
+	}
+	if t.Kind == "unload" {
+		if s.Cargo[t.Resource] < t.Quantity {
+			return errors.New("Недостаточно груза")
+		}
+		arrived, e := navigate(t.DestStar, t.DestStation, true)
+		if e != nil || !arrived {
+			return e
+		}
+		if e = taskStorage(ctx, tx, t, s, false, t.Quantity); e != nil {
+			return e
+		}
+		t.Progress = t.Quantity
+		t.Status = "completed"
+		return nil
+	}
 	if t.Kind == "mine" {
 		remaining := t.Quantity - t.Progress
 		if t.Phase == "dest" || remaining == 0 && t.DestStation != "" && t.Carried > 0 {
-			arrived, err := taskNavigate(ctx, tx, t.User, s, g, t.DestStar, t.DestStation, true)
+			arrived, err := navigate(t.DestStar, t.DestStation, true)
 			if err != nil || !arrived {
 				return err
 			}
@@ -357,7 +416,7 @@ func stepAutomation(ctx context.Context, tx pgx.Tx, t *AutomationTask, s *Ship, 
 			t.Phase = "dest"
 			return nil
 		}
-		arrived, err := taskNavigate(ctx, tx, t.User, s, g, t.SourceStar, t.SourceObject, false)
+		arrived, err := navigate(t.SourceStar, t.SourceObject, false)
 		if err != nil || !arrived {
 			return err
 		}
@@ -371,7 +430,7 @@ func stepAutomation(ctx context.Context, tx pgx.Tx, t *AutomationTask, s *Ship, 
 		}
 	} else {
 		if t.Phase == "source" {
-			arrived, err := taskNavigate(ctx, tx, t.User, s, g, t.SourceStar, t.SourceObject, true)
+			arrived, err := navigate(t.SourceStar, t.SourceObject, true)
 			if err != nil || !arrived {
 				return err
 			}
@@ -385,7 +444,7 @@ func stepAutomation(ctx context.Context, tx pgx.Tx, t *AutomationTask, s *Ship, 
 			t.Carried = amount
 			t.Phase = "dest"
 		} else {
-			arrived, err := taskNavigate(ctx, tx, t.User, s, g, t.DestStar, t.DestStation, true)
+			arrived, err := navigate(t.DestStar, t.DestStation, true)
 			if err != nil || !arrived {
 				return err
 			}
@@ -438,7 +497,7 @@ func (a *App) advanceTask(ctx context.Context, id int64) error {
 		return err
 	}
 	var t AutomationTask
-	err = tx.QueryRow(ctx, `SELECT id,user_id,ship_id,kind,source_star,source_object,dest_star,dest_station,resource,quantity,progress,carried,pending,phase,status,error FROM automation_tasks WHERE id=$1 FOR UPDATE`, id).Scan(&t.ID, &t.User, &t.Ship, &t.Kind, &t.SourceStar, &t.SourceObject, &t.DestStar, &t.DestStation, &t.Resource, &t.Quantity, &t.Progress, &t.Carried, &t.Pending, &t.Phase, &t.Status, &t.Error)
+	err = tx.QueryRow(ctx, `SELECT id,user_id,ship_id,kind,source_star,source_object,dest_star,dest_station,resource,quantity,progress,carried,pending,phase,status,error,source_kind,dest_kind,COALESCE(company_id,0) FROM automation_tasks WHERE id=$1 FOR UPDATE`, id).Scan(&t.ID, &t.User, &t.Ship, &t.Kind, &t.SourceStar, &t.SourceObject, &t.DestStar, &t.DestStation, &t.Resource, &t.Quantity, &t.Progress, &t.Carried, &t.Pending, &t.Phase, &t.Status, &t.Error, &t.SourceKind, &t.DestKind, &t.Company)
 	if err != nil {
 		return err
 	}

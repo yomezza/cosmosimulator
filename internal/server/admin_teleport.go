@@ -24,7 +24,7 @@ func (a *App) adminTeleport(w http.ResponseWriter, r *http.Request) {
 		a.internal(w, err)
 		return
 	}
-	if in.To < 1 || in.To > len(g.Stars) {
+	if in.To < 1 || in.To > len(g.Stars) || g.Stars[in.To-1].Deleted {
 		fail(w, 400, "Некорректная система")
 		return
 	}

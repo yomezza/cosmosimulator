@@ -75,6 +75,10 @@ func (a *App) systemView(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s := g.Stars[id-1]
+	if s.Deleted {
+		fail(w, 404, "Система удалена")
+		return
+	}
 	var scanned bool
 	if err = a.db.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM surveys WHERE user_id=$1 AND star=$2)`, u.ID, id).Scan(&scanned); err != nil {
 		a.internal(w, err)

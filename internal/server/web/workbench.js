@@ -78,18 +78,19 @@
       Modules.open("confirm");
     },
   };
-  function renderObject(root, site, star) {
-    const scroll = root.scrollTop;
-    root.replaceChildren();
-    const canvas = node("canvas");
-    canvas.className = "object-model";
-    canvas.width = 900;
-    canvas.height = 420;
-    const ctx = canvas.getContext("2d");
-    ctx.fillStyle = "#0b1520";
-    ctx.fillRect(0, 0, 900, 420);
-    Visuals.object(ctx, 450, 205, 100, site, 1);
-    root.append(canvas, node("h2", site.name), node("p", tr(site.kind)));
+  function renderObject(container, site, star) {
+    const scroll = container.scrollTop;
+    let model = container.querySelector(":scope > .object-hologram"),
+      root = container.querySelector(":scope > .object-information");
+    if (!model) {
+      container.replaceChildren();
+      model = UI.objectHologram(site, star);
+      root = node("div", undefined, "object-information");
+      container.append(model, root);
+    }
+    const asset = UI.objectModel(site, star);
+    if (model.getAttribute("src") !== asset) model.src = asset;
+    root.replaceChildren(node("h2", site.name), UI.objectTag(site.kind));
     if (site.details) {
       const p = site.details;
       const params = node("p");
@@ -176,7 +177,15 @@
       );
       if (port) {
         UI.row(root, "Специализация", tr(port.specialization));
-        UI.row(root, "Владелец", tr(port.founder_name || "Корпорация игрока"));
+        UI.row(
+          root,
+          "Владелец",
+          port.owner_name
+            ? port.owner_kind === "founder"
+              ? tr(port.owner_name)
+              : port.owner_name
+            : tr("Нейтральная станция"),
+        );
         UI.row(root, "Тариф", port.fee_percent + "%");
         UI.row(root, "Репутация", port.reputation);
         if (port.shipyard)
@@ -233,12 +242,17 @@
         }),
       ),
     );
-    root.scrollTop = scroll;
+    container.scrollTop = scroll;
   }
   window.addEventListener("gamedata", async () => {
     const epoch = authEpoch,
       cache = new Map();
     for (const [key, entry] of objects) {
+      if (window.MapData?.stars[entry.star.id - 1]?.deleted) {
+        Modules.close(key);
+        objects.delete(key);
+        continue;
+      }
       if (
         !Modules.isOpen(key) ||
         (entry.root.contains(document.activeElement) &&

@@ -211,6 +211,15 @@
       [
         { heading: res(id)?.name || id },
         { label: "Информация", action: () => UI.resource(id) },
+        {
+          label: "Переместить ресурс",
+          action: () =>
+            Logistics.chooseDestination(
+              { kind: "ship", ship: d().ship.id },
+              id,
+              q,
+            ),
+        },
         { label: "Руководство пилота", action: () => Game.openGuide(id) },
         {
           label: "Заправить",
@@ -231,34 +240,13 @@
               performExpedition({ action: "sell", resource: id, quantity }),
             ),
         },
-        {
-          label: "На склад",
-          disabled: !d().docked,
-          reason: "Стыкуйтесь со станцией",
-          action: () =>
-            actionAmount("На склад", "Количество", q, (quantity) =>
-              command({ action: "store", resource: id, quantity }),
-            ),
-        },
-        {
-          label: "На корпоративный склад",
-          disabled: !d().docked || !gameData.profile.company_id,
-          reason: "Завершите проект корпоративного склада",
-          action: () =>
-            actionAmount(
-              "На корпоративный склад",
-              "Количество",
-              q,
-              (quantity) =>
-                command({ action: "company_store", resource: id, quantity }),
-            ),
-        },
       ],
       e.clientX || r.x,
       e.clientY || r.bottom,
     );
   }
   function renderCargo() {
+    if (window.Logistics?.dragging) return;
     const root = roots.cargo;
     reset(root);
     Modules.title("cargo", tr("Трюм") + " · " + UI.shipName(d().ship));
@@ -315,9 +303,16 @@
       tile.dataset.resource = id;
       tile.append(n("small", tr(r.kind)), n("b", r.code), n("span", num(q)));
       tile.oncontextmenu = (e) => cargoMenu(id, q, tile, e);
+      window.Logistics?.draggable(
+        tile,
+        { kind: "ship", ship: d().ship.id },
+        id,
+        q,
+      );
       grid.append(tile);
     }
     if (!items.length) UI.empty(grid, "Трюм пуст");
+    window.Logistics?.dropzone(root, { kind: "ship", ship: d().ship.id });
     root.append(
       grid,
       b(
@@ -840,7 +835,9 @@
                 ? "На верфи нет доступных кораблей"
                 : gameData.profile.level < c.required_level
                   ? "Недостаточный стаж для покупки"
-                  : "Недостаточно кредитов",
+                  : d().credits < offer.price
+                    ? "Недостаточно кредитов"
+                    : "",
           ),
         );
         cards.append(card);
@@ -968,7 +965,7 @@
         ["local", "Локальный рынок"],
         ["global", "Глобальный рынок"],
         ["orders", "Предложения игроков"],
-        ["warehouse", "Склады"],
+
         ["data", "Разведданные"],
         ["delivery", "Перевозки"],
         ["shipyards", "Верфи"],
@@ -1119,46 +1116,8 @@
       );
     }
     if (tab === "warehouse") {
-      const stores = w().warehouses || [];
-      if (!stores.length) UI.empty(root, "На складах пока нет ресурсов");
-      for (const store of stores) {
-        root.append(n("h3", String(store.star) + " · " + store.station));
-        const here =
-          d().docked &&
-          store.star === d().ship.star &&
-          store.station === d().ship.object_id;
-        root.append(
-          UI.table(
-            ["Ресурс", "Количество", "Действие"],
-            Object.entries(store.cargo)
-              .filter(([, q]) => q > 0)
-              .map(([id, q]) => [
-                resourceName(id),
-                num(q),
-                b(
-                  "В трюм",
-                  () =>
-                    actionAmount(
-                      "В трюм",
-                      "Количество",
-                      Math.min(q, cargoCapacity()),
-                      (quantity) =>
-                        command({ action: "withdraw", resource: id, quantity }),
-                    ),
-                  !here,
-                  "Прибудьте на станцию хранения",
-                ),
-              ]),
-          ),
-        );
-      }
-      root.append(
-        b("Открыть трюм", () => {
-          Modules.link("ship", "cargo", false);
-          Modules.open("cargo");
-          Modules.adjacent("cargo", "market");
-        }),
-      );
+      UI.empty(root, "Управление запасами перенесено в логистику");
+      root.append(b("Открыть логистику", () => Modules.open("logistics")));
     }
     if (tab === "orders") {
       const layout = n("div", undefined, "master-detail"),
@@ -2726,13 +2685,7 @@
             }),
           );
       } else {
-        const canvas = n("canvas");
-        canvas.width = 650;
-        canvas.height = 300;
-        canvas.className = "object-model";
-        Visuals.object(canvas.getContext("2d"), 325, 150, 95, {
-          kind: item.kind,
-        });
+        const canvas = UI.objectHologram({ kind: item.kind });
         article.append(
           canvas,
           n("p", tr(item.desc)),

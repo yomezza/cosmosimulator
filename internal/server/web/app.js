@@ -5,7 +5,10 @@ let signedIn = false,
   pending = false,
   mode = "login",
   authEpoch = 0,
-  lastPoll = 0;
+  lastPoll = 0,
+  balanceOwner = null,
+  previousBalance = null,
+  balanceTimer;
 window.gameData = {};
 async function api(path, body) {
   const r = await fetch("/api/" + path, {
@@ -38,6 +41,10 @@ function authMode(value) {
   );
 }
 function showAuth() {
+  balanceOwner = null;
+  previousBalance = null;
+  clearTimeout(balanceTimer);
+  $("balance-change")?.replaceChildren();
   authEpoch++;
   pending = false;
   signedIn = false;
@@ -139,7 +146,30 @@ async function refreshData() {
         : profile.company || t("Без компании");
     company.dataset.help = company.dataset.helpRaw;
     company.tabIndex = 0;
-    $("credits").textContent = expedition.credits.toLocaleString(I18n.language);
+    const balance = Number(expedition.credits),
+      indicator = $("balance-change");
+    if (
+      balanceOwner === state.user.id &&
+      previousBalance !== null &&
+      balance !== previousBalance
+    ) {
+      const delta = balance - previousBalance;
+      clearTimeout(balanceTimer);
+      const text = document.createElement("span");
+      text.className = "balance-delta " + (delta > 0 ? "income" : "expense");
+      text.textContent =
+        (delta > 0 ? "+" : "-") +
+        Math.abs(delta).toLocaleString(I18n.language) +
+        " CR";
+      indicator.replaceChildren(text);
+      balanceTimer = setTimeout(() => indicator.replaceChildren(), 3200);
+    } else if (balanceOwner !== state.user.id) {
+      clearTimeout(balanceTimer);
+      indicator.replaceChildren();
+    }
+    balanceOwner = state.user.id;
+    previousBalance = balance;
+    $("credits").textContent = balance.toLocaleString(I18n.language);
     $("star-date").textContent = state.date.replace(
       "ЭД",
       I18n.language === "en" ? "ED" : "ЭД",

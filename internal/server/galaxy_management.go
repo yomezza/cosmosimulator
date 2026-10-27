@@ -26,6 +26,7 @@ type GalaxySettings struct {
 	ResourceWeights map[string]int `json:"resource_weights"`
 }
 type GalaxyDefinition struct {
+	Deleted     bool               `json:"deleted,omitempty"`
 	ID          string             `json:"id"`
 	Name        string             `json:"name"`
 	Shape       string             `json:"shape"`
@@ -64,7 +65,7 @@ func (g *Galaxy) definition(id string) *GalaxyDefinition {
 func galaxyStars(g *Galaxy, id string) []Star {
 	list := []Star{}
 	for _, s := range g.Stars {
-		if galaxyKey(s) == id {
+		if galaxyKey(s) == id && !s.Deleted {
 			list = append(list, s)
 		}
 	}
@@ -496,7 +497,7 @@ func protectedPorts(ctx context.Context, tx pgx.Tx) (map[string]bool, error) {
  OR EXISTS(SELECT 1 FROM reservations r WHERE r.star=s.star AND r.station=s.object_id AND r.status='reserved')
  OR EXISTS(SELECT 1 FROM sell_orders o WHERE o.star=s.star AND o.station=s.object_id AND o.quantity>0)
  OR EXISTS(SELECT 1 FROM survey_offers o WHERE o.star=s.star AND o.station=s.object_id)
- OR EXISTS(SELECT 1 FROM automation_tasks t WHERE t.status IN('queued','running','paused') AND ((t.kind='haul' AND t.source_star=s.star AND t.source_object=s.object_id) OR (t.dest_star=s.star AND t.dest_station=s.object_id)))
+ OR EXISTS(SELECT 1 FROM automation_tasks t WHERE t.status IN('queued','running','paused') AND ((t.kind IN('haul','load') AND t.source_star=s.star AND t.source_object=s.object_id) OR (t.dest_star=s.star AND t.dest_station=s.object_id)))
  OR EXISTS(SELECT 1 FROM deliveries d WHERE d.status IN('open','carrying','bot') AND ((d.from_star=s.star AND d.from_station=s.object_id) OR (d.to_star=s.star AND d.to_station=s.object_id)))`)
 	if err != nil {
 		return nil, err
@@ -516,9 +517,17 @@ func protectedPorts(ctx context.Context, tx pgx.Tx) (map[string]bool, error) {
 func plannedPorts(g *Galaxy, protected map[string]bool) map[string]bool {
 	out := map[string]bool{}
 	for key := range protected {
+		var id int
+		fmt.Sscanf(key, "%d/", &id)
+		if id > 0 && id <= len(g.Stars) && g.Stars[id-1].Deleted {
+			continue
+		}
 		out[key] = true
 	}
 	for _, s := range g.Stars {
+		if s.Deleted {
+			continue
+		}
 		for _, site := range systemSites(s) {
 			if site.Kind == "Орбитальная станция" {
 				out[fmt.Sprintf("%d/%s", s.ID, site.ID)] = true
@@ -596,7 +605,7 @@ type GalaxyEdit struct {
 func validateGalaxyEdit(in GalaxyEdit, g *Galaxy) error {
 	d := g.definition(in.ID)
 	if in.Create {
-		if d != nil || len(g.Catalog) >= 24 || len(in.ID) < 3 || len(in.ID) > 40 || strings.ContainsFunc(in.ID, func(r rune) bool { return !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-') }) {
+		if d != nil || len(visibleGalaxies(g)) >= 24 || len(in.ID) < 3 || len(in.ID) > 40 || strings.ContainsFunc(in.ID, func(r rune) bool { return !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-') }) {
 			return errors.New("Некорректная новая галактика")
 		}
 		if in.Systems < 50 || len(g.Stars)+in.Systems > 50000 {
@@ -605,14 +614,14 @@ func validateGalaxyEdit(in GalaxyEdit, g *Galaxy) error {
 		if in.Shape != "spiral" && in.Shape != "rings" && in.Shape != "elliptical" && in.Shape != "irregular" {
 			return errors.New("Неизвестная форма галактики")
 		}
-	} else if d == nil || !d.Opened {
+	} else if d == nil || !d.Opened || d.Deleted {
 		return errors.New("Галактика не открыта")
 	}
 	if strings.TrimSpace(in.Name) == "" || utf8.RuneCountInString(in.Name) > 48 {
 		return errors.New("Название должно содержать от 1 до 48 символов")
 	}
 	for _, other := range g.Catalog {
-		if other.ID != in.ID && strings.EqualFold(other.Name, strings.TrimSpace(in.Name)) {
+		if !other.Deleted && other.ID != in.ID && strings.EqualFold(other.Name, strings.TrimSpace(in.Name)) {
 			return errors.New("Название галактики уже используется")
 		}
 	}
@@ -767,6 +776,9 @@ func (a *App) adminGalaxies(w http.ResponseWriter, r *http.Request) {
 		}
 		list := []map[string]any{}
 		for _, d := range g.Catalog {
+			if d.Deleted {
+				continue
+			}
 			list = append(list, map[string]any{"definition": d, "stats": galaxyStatistics(&g, d.ID, ports)})
 		}
 		reply(w, 200, map[string]any{"galaxies": list, "revision": g.Revision})
@@ -848,4 +860,14 @@ func (g *Galaxy) regionName(id int) string {
 		}
 	}
 	return regionName(id)
+}
+
+func visibleGalaxies(g *Galaxy) []GalaxyDefinition {
+	list := []GalaxyDefinition{}
+	for _, d := range g.Catalog {
+		if !d.Deleted {
+			list = append(list, d)
+		}
+	}
+	return list
 }

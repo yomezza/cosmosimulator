@@ -220,7 +220,14 @@
             "b",
             (ship ? UI.shipName(ship) : task.ship_name) +
               " · " +
-              tr(task.kind === "mine" ? "Добыча" : "Перевозка между складами"),
+              tr(
+                {
+                  mine: "Добыча",
+                  haul: "Перевозка между складами",
+                  load: "Получение со склада",
+                  unload: "Доставка на склад",
+                }[task.kind] || task.kind,
+              ),
           ),
           n(
             "p",

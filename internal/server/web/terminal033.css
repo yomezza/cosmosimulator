@@ -1941,3 +1941,283 @@ button.primary-action:hover,
   min-width: 26px;
   width: 26px;
 }
+.object-kind-tag {
+  display: inline-flex;
+  align-items: center;
+  width: max-content;
+  max-width: 100%;
+  padding: 3px 8px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  background: #ffffff08;
+  font: 11px var(--font, system-ui);
+  line-height: 1.4;
+  vertical-align: middle;
+}
+.overview-stats article:has(#credits) {
+  position: relative;
+}
+#balance-change {
+  position: absolute;
+  right: 16px;
+  bottom: 12px;
+  pointer-events: none;
+  font:
+    12px ui-monospace,
+    monospace;
+  font-variant-numeric: tabular-nums;
+}
+.balance-delta {
+  display: inline-block;
+  animation: balance-delta 3.2s ease-out forwards;
+}
+.balance-delta.income {
+  color: #81d8a3;
+}
+.balance-delta.expense {
+  color: #ed9090;
+}
+@keyframes balance-delta {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  12%,
+  75% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+}
+.object-hologram {
+  display: block;
+  width: 100%;
+  height: 240px;
+  object-fit: contain;
+  background: transparent;
+  pointer-events: none;
+  user-select: none;
+}
+.map-inspector .object-hologram {
+  height: 180px;
+  min-height: 0;
+}
+.object-information h2 {
+  margin-top: 4px;
+}
+.object-information > .object-kind-tag {
+  margin-bottom: 10px;
+}
+.logistics-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.logistics-toolbar {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.logistics-toolbar label {
+  margin: 0;
+  min-width: 150px;
+  flex: 1;
+}
+.logistics-toolbar input {
+  margin: 0;
+}
+.logistics-toolbar button {
+  margin: 0;
+}
+.logistics-layout {
+  display: grid;
+  grid-template-columns: minmax(225px, 0.8fr) minmax(0, 2fr);
+  gap: 14px;
+  min-height: 0;
+  flex: 1;
+}
+.logistics-hold {
+  background: #11212b;
+  border: 1px solid #345460;
+  border-radius: 5px;
+  padding: 12px;
+  overflow: auto;
+}
+.logistics-hold h3 {
+  margin-top: 0;
+}
+.logistics-hold .cargo-grid {
+  grid-template-columns: repeat(auto-fill, minmax(65px, 1fr));
+}
+.storage-tree {
+  overflow: auto;
+  min-width: 0;
+  padding-right: 3px;
+}
+.storage-count {
+  color: var(--muted);
+  margin: 0 0 8px !important;
+}
+.storage-station {
+  margin: 0 0 7px;
+  border: 1px solid #344651;
+  border-radius: 5px;
+  background: #17232c;
+}
+.storage-station > summary {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px;
+  cursor: pointer;
+  list-style: none;
+}
+.storage-station > summary::-webkit-details-marker {
+  display: none;
+}
+.storage-station > summary::before {
+  content: "›";
+  color: #86a8b4;
+  font-size: 18px;
+  transition: transform 0.15s;
+}
+.storage-station[open] > summary::before {
+  transform: rotate(90deg);
+}
+.station-symbol {
+  color: #7cc8d2;
+}
+.storage-station-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  gap: 3px;
+}
+.storage-station-name b {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.storage-station-name small,
+.storage-location {
+  font-size: 10px;
+  color: var(--muted);
+}
+.storage-location {
+  padding: 3px 5px;
+  background: #22343d;
+  border-radius: 3px;
+}
+.storage-total {
+  font:
+    12px ui-monospace,
+    monospace;
+  min-width: 22px;
+  text-align: right;
+  color: #bdd5d7;
+}
+.storage-contents {
+  border-top: 1px solid #344651;
+  padding: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+}
+.storage-inventory {
+  background: #101b24;
+  border: 1px dashed #344c56;
+  border-radius: 4px;
+  padding: 9px;
+  min-width: 0;
+}
+.storage-inventory h4 {
+  font-size: 11px;
+  color: #b8d3d8;
+  margin: 0 0 8px;
+}
+.storage-inventory .cargo-grid {
+  grid-template-columns: repeat(auto-fill, minmax(65px, 1fr));
+  gap: 6px;
+}
+.cargo-drop-hint {
+  grid-column: 1/-1;
+  min-height: 62px;
+  display: grid;
+  place-items: center;
+  padding: 6px;
+  text-align: center;
+  color: #839daa;
+  font-size: 10px !important;
+}
+.cargo-draggable {
+  cursor: grab;
+}
+.cargo-draggable:active {
+  cursor: grabbing;
+}
+.cargo-drag-source {
+  opacity: 0.45;
+}
+.cargo-drop-ready {
+  outline: 2px solid #80cbbb;
+  outline-offset: -2px;
+  background-color: #1d393d !important;
+}
+.cargo-dragging .cargo-dropzone {
+  transition: background-color 0.1s;
+}
+.logistics-history {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+.logistics-history summary {
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.logistics-history p {
+  font-size: 10px !important;
+  color: #a2b7c3;
+  padding: 5px;
+  border-bottom: 1px solid #24343f;
+}
+.transfer-target {
+  color: #91d0bd;
+}
+.logistics-hold .cargo-tile,
+.storage-inventory .cargo-tile {
+  min-height: 72px;
+  padding: 6px;
+  margin: 0 !important;
+}
+.storage-inventory .cargo-tile b,
+.logistics-hold .cargo-tile b {
+  font-size: 14px;
+}
+.storage-inventory .cargo-tile small,
+.logistics-hold .cargo-tile small {
+  font-size: 9px;
+}
+@container (max-width:740px) {
+  .logistics-layout {
+    grid-template-columns: 1fr;
+    display: block;
+    overflow: auto;
+  }
+  .logistics-hold {
+    margin-bottom: 12px;
+    max-height: 260px;
+  }
+  .storage-tree {
+    overflow: visible;
+  }
+  .storage-location {
+    display: none;
+  }
+}
