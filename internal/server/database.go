@@ -118,6 +118,30 @@ func openDatabase(ctx context.Context, dsn, schema string) (*pgxpool.Pool, error
 			return nil, err
 		}
 	}
+	oldNames := make(map[int]string, len(existing.Stars))
+	for _, star := range existing.Stars {
+		oldNames[star.ID] = star.Name
+	}
+	if diversifySystemNames(&existing) {
+		renames := []map[string]any{}
+		for _, star := range existing.Stars {
+			if oldNames[star.ID] != star.Name {
+				renames = append(renames, map[string]any{"id": star.ID, "old": oldNames[star.ID], "name": star.Name})
+			}
+		}
+		labels, _ := json.Marshal(renames)
+		if _, err = tx.Exec(ctx, `UPDATE stations s SET name=m.name||substr(s.name,length(m.old)+1) FROM jsonb_to_recordset($1) AS m(id int,old text,name text) WHERE s.star=m.id AND s.name IN(m.old||' · PORT 1',m.old||' · PORT 2',m.old||' · PORT 3',m.old||' · CORE')`, labels); err != nil {
+			return nil, err
+		}
+
+		raw, err = json.Marshal(existing)
+		if err != nil {
+			return nil, err
+		}
+		if _, err = tx.Exec(ctx, `UPDATE galaxies SET data=$1 WHERE name='Edem'`, raw); err != nil {
+			return nil, err
+		}
+	}
 	// Complete metadata for a v0.3.1 flight without changing its route or ETA.
 	rows, err := tx.Query(ctx, `SELECT user_id,star,destination,arrival FROM ships WHERE destination IS NOT NULL AND jsonb_array_length(travel_path)<2`)
 	if err != nil {

@@ -2,6 +2,28 @@
 (() => {
   const tr = (s) => I18n.t(s),
     n = UI.node;
+  UI.serverStatus = (info) => {
+    const target = document.getElementById("server-status");
+    target.dataset.help = "Сервер";
+    target.tabIndex = 0;
+    target.dataset.helpRaw =
+      I18n.t("Сервер") +
+      ": " +
+      I18n.t(info.name || "Иггдрасиль") +
+      "\n" +
+      I18n.t("Игроки онлайн") +
+      ": " +
+      info.players +
+      "\n" +
+      I18n.t("Боты") +
+      ": " +
+      info.bots;
+  };
+  I18n.ready
+    .then(() => fetch("/api/server-status"))
+    .then((r) => (r.ok ? r.json() : Promise.reject()))
+    .then(UI.serverStatus)
+    .catch(() => {});
   UI.paintFlag = (badge, company) => {
     badge.replaceChildren();
     badge.style.color = company.color;
@@ -150,6 +172,10 @@
       update();
     };
     button.onclick = () => {
+      if (current?.button === button) {
+        current.close();
+        return;
+      }
       current?.close();
       const pop = n("div", undefined, "picker-popover"),
         search = n("input"),
@@ -171,7 +197,7 @@
         document.removeEventListener("pointerdown", outside);
         current = null;
       };
-      current = { close };
+      current = { close, button };
       const outside = (e) => {
         if (!pop.contains(e.target) && !button.contains(e.target)) close();
       };

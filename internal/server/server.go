@@ -115,6 +115,7 @@ func (a *App) routes() http.Handler {
 		}
 		reply(w, 200, map[string]string{"status": "ok"})
 	})
+	m.HandleFunc("GET /api/server-status", a.serverStatus)
 	m.HandleFunc("POST /api/register", a.register)
 	m.HandleFunc("POST /api/login", a.login)
 	m.HandleFunc("POST /api/logout", a.logout)

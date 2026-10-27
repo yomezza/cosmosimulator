@@ -507,7 +507,7 @@
             ? `${tr("В пути")} · ${ship.star} → ${ship.destination}`
             : galaxy.stars[ship.star - 1].name,
         ),
-        UI.button("⌖", () => findShip(ship.id)),
+        UI.button("Найти на карте", () => findShip(ship.id)),
       );
       if (ship.id !== gameData.expedition.ship.id)
         card.append(

@@ -27,12 +27,13 @@ type Lane struct {
 	To   int `json:"to"`
 }
 type Galaxy struct {
-	Name    string   `json:"name"`
-	Seed    int64    `json:"seed"`
-	Version int      `json:"version"`
-	Stars   []Star   `json:"stars"`
-	Regions []Region `json:"regions"`
-	Lanes   []Lane   `json:"lanes"`
+	NamingVersion int      `json:"naming_version,omitempty"`
+	Name          string   `json:"name"`
+	Seed          int64    `json:"seed"`
+	Version       int      `json:"version"`
+	Stars         []Star   `json:"stars"`
+	Regions       []Region `json:"regions"`
+	Lanes         []Lane   `json:"lanes"`
 }
 
 // Stable IDs and a private seeded RNG keep world generation independent of ticks.
@@ -89,6 +90,7 @@ func generateGalaxy(count int, seed int64) Galaxy {
 	g.Regions = regions
 	enrichGalaxy(&g)
 	upgradeGeology(&g)
+	diversifySystemNames(&g)
 	return g
 }
 func (g Galaxy) path(from, to int) []int {

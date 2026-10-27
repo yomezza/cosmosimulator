@@ -442,7 +442,9 @@
         ),
       );
     }
-    root.append(
+    const shipActions = n("div", undefined, "inline-controls ship-actions");
+    root.append(shipActions);
+    shipActions.append(
       b(
         "Эвакуация",
         () =>
@@ -2260,41 +2262,77 @@
         code: r.code,
         desc: r.description,
         resource: r,
+        category: "Ресурсы",
+        subcategory: r.kind,
       })),
       ...objectArticles.map(([id, name, kind, desc]) => ({
         id,
         name,
         kind,
         desc,
+        category: "Космические объекты",
+        subcategory:
+          kind === "Орбитальная станция"
+            ? "Станции"
+            : kind === "Звезда"
+              ? "Звёзды"
+              : kind === "Чёрная дыра"
+                ? "Особые объекты"
+                : kind === "Пояс астероидов" || kind === "Ледяное поле"
+                  ? "Месторождения"
+                  : "Планеты",
       })),
     ];
     const drawList = () => {
       left.querySelector(".guide-list")?.remove();
       const list = n("div", undefined, "guide-list"),
         q = search.value.toLowerCase();
-      for (const item of all.filter((item) =>
-        [tr(item.name), item.code || "", tr(item.desc)].some((s) =>
-          s.toLowerCase().includes(q),
-        ),
-      )) {
-        const button = b("", () => {
-            guideID = item.id;
-            renderArticle();
-            drawList();
-          }),
-          label = tr(item.name),
-          at = q ? label.toLowerCase().indexOf(q) : -1;
-        if (at >= 0) {
-          button.append(
-            document.createTextNode(label.slice(0, at)),
-            n("mark", label.slice(at, at + q.length)),
-            document.createTextNode(label.slice(at + q.length)),
-          );
-        } else button.textContent = label;
-        button.classList.toggle("selected", guideID === item.id);
-        if (item.code) button.append(n("small", item.code));
-        list.append(button);
+      const matched = all.filter((item) =>
+        [
+          tr(item.name),
+          item.code || "",
+          tr(item.desc),
+          tr(item.category),
+          tr(item.subcategory),
+        ].some((value) => value.toLowerCase().includes(q)),
+      );
+      for (const category of ["Ресурсы", "Космические объекты"]) {
+        const entries = matched.filter((item) => item.category === category);
+        if (!entries.length) continue;
+        const group = n("details", undefined, "guide-category");
+        group.open = true;
+        group.append(n("summary", tr(category) + " · " + entries.length));
+        for (const subcategory of new Set(
+          entries.map((item) => item.subcategory),
+        )) {
+          const section = n("section");
+          section.append(n("h4", tr(subcategory)));
+          for (const item of entries.filter(
+            (item) => item.subcategory === subcategory,
+          )) {
+            const button = b("", () => {
+                guideID = item.id;
+                renderArticle();
+                drawList();
+              }),
+              label = tr(item.name),
+              at = q ? label.toLowerCase().indexOf(q) : -1;
+            if (at >= 0) {
+              button.append(
+                document.createTextNode(label.slice(0, at)),
+                n("mark", label.slice(at, at + q.length)),
+                document.createTextNode(label.slice(at + q.length)),
+              );
+            } else button.textContent = label;
+            button.classList.toggle("selected", guideID === item.id);
+            if (item.code) button.append(n("small", item.code));
+            section.append(button);
+          }
+          group.append(section);
+        }
+        list.append(group);
       }
+      if (!matched.length) UI.empty(list, "Ничего не найдено");
       left.append(list);
     };
     const renderArticle = () => {
@@ -2797,15 +2835,17 @@
     notificationBadge();
     renderVisible();
     const population = w().population?.[0];
+    document.getElementById("server-status").dataset.help = "Сервер";
+    document.getElementById("server-status").tabIndex = 0;
     document.getElementById("server-status").dataset.helpRaw =
       tr("Сервер") +
       ": " +
       tr(w().server_name || "Иггдрасиль") +
-      " · " +
+      "\n" +
       tr("Игроки онлайн") +
       ": " +
       (population?.players || 0) +
-      " · " +
+      "\n" +
       tr("Боты") +
       ": " +
       (population?.bots || 0);
