@@ -45,6 +45,7 @@
     cargoCategory = "all",
     cargoSort = "name",
     noticeCursor = null,
+    marketRequestID = 0,
     requestID = 0;
   const d = () => gameData.expedition,
     w = () => gameData.workbench || {},
@@ -660,7 +661,27 @@
     update();
   }
   async function renderMarket() {
-    const root = roots.market;
+    const root = roots.market,
+      key = ++marketRequestID,
+      epoch = authEpoch,
+      tab = marketTab,
+      current = () =>
+        key === marketRequestID &&
+        epoch === authEpoch &&
+        signedIn &&
+        Modules.isOpen("market") &&
+        tab === marketTab;
+    let globalMarket;
+    if (tab === "global") {
+      try {
+        globalMarket = await api("market/global");
+      } catch (error) {
+        if (!current()) return false;
+        throw error;
+      }
+    }
+    // Keep the current table while loading; only the latest render may replace it.
+    if (!current()) return false;
     reset(root);
     const port = station();
     root.append(
@@ -680,13 +701,13 @@
         ["data", "Разведданные"],
         ["delivery", "Перевозки"],
       ],
-      marketTab,
+      tab,
       (id) => {
         marketTab = id;
         renderMarket();
       },
     );
-    if (marketTab === "local") {
+    if (tab === "local") {
       if (!d().docked) {
         UI.empty(root, "Для локальной торговли пристыкуйтесь к порту.");
         return;
@@ -725,10 +746,8 @@
       if (offer) tradeForm(layout, offer);
       root.append(layout);
     }
-    if (marketTab === "global") {
-      const epoch = authEpoch,
-        result = await api("market/global");
-      if (epoch !== authEpoch || marketTab !== "global") return;
+    if (tab === "global") {
+      const result = globalMarket;
       const eligible = result.ports.sort((a, b) => a.star - b.star);
       let target = Number(root.dataset.target || d().ship.star);
       if (!eligible.some((p) => p.star === target)) target = eligible[0]?.star;
@@ -810,7 +829,7 @@
         ),
       );
     }
-    if (marketTab === "warehouse") {
+    if (tab === "warehouse") {
       const stores = w().warehouses || [];
       if (!stores.length) UI.empty(root, "На складах пока нет ресурсов");
       for (const store of stores) {
@@ -851,7 +870,7 @@
         }),
       );
     }
-    if (marketTab === "orders") {
+    if (tab === "orders") {
       const layout = n("div", undefined, "master-detail"),
         list = n("section"),
         side = n("aside", undefined, "detail-panel");
@@ -943,7 +962,7 @@
       );
       root.append(layout);
     }
-    if (marketTab === "data") {
+    if (tab === "data") {
       const list = n("section");
       for (const offer of w().data_offers || []) {
         const card = n("article", undefined, "data-offer");
@@ -1056,7 +1075,7 @@
       layout.append(list, side);
       root.append(layout);
     }
-    if (marketTab === "delivery") {
+    if (tab === "delivery") {
       renderDeliveries(root);
     }
   }
@@ -2801,8 +2820,8 @@
           (el) => ({ key: el.dataset.field, value: el.value }),
         );
       Promise.resolve(render())
-        .then(() => {
-          if (epoch !== authEpoch) return;
+        .then((accepted) => {
+          if (accepted === false || epoch !== authEpoch) return;
           root.scrollTop = scroll;
           if (!force) {
             for (const value of inputs) {
@@ -2865,6 +2884,9 @@
     loadNotifications().catch(() => {}),
   );
   window.addEventListener("languagechange", () => renderVisible(true));
+  window.addEventListener("moduleclose", (e) => {
+    if (e.detail === "market") marketRequestID++;
+  });
   window.addEventListener("signedout", () => {
     noticeCursor = null;
     notifySelected.clear();
@@ -2872,9 +2894,11 @@
     selectedCorp = null;
     userQuery = "";
     userPage = 1;
+    marketRequestID++;
     requestID++;
   });
   window.addEventListener("stationmarket", () => {
+    marketRequestID++;
     marketTab = "local";
   });
   setInterval(() => {
