@@ -20,7 +20,7 @@
   </head>
   <body>
     <header>
-      <a class="brand" href="/">◈ COSMOSIMULATOR <small>EDEM / 0.8.0</small></a>
+      <a class="brand" href="/">◈ COSMOSIMULATOR <small>EDEM / 0.8.1</small></a>
       <div class="header-actions">
         <div id="window-switcher" aria-label="Открытые окна"></div>
         <button
@@ -75,12 +75,22 @@
       </div>
     </header>
     <aside id="sidebar" hidden>
-      <button id="sidebar-toggle" aria-expanded="true">
-        ☰
-        <span class="nav-label"
-          ><span data-i18n="Модули">Модули</span></span
-        ></button
-      ><button
+      <div class="sidebar-heading">
+        <span class="sidebar-title" data-i18n="Модули">Модули</span>
+        <button
+          id="sidebar-toggle"
+          type="button"
+          aria-expanded="true"
+          aria-label="Свернуть панель"
+          data-help="Свернуть панель"
+        >
+          <svg viewBox="0 0 20 20" aria-hidden="true">
+            <path d="M12 5l-5 5 5 5" />
+          </svg>
+        </button>
+      </div>
+      <div class="sidebar-divider" aria-hidden="true"></div>
+      <button
         type="button"
         data-open="galaxy"
         data-nav="Галактическая карта"
@@ -302,7 +312,7 @@
     <footer>
       <span id="server-status" class="signal"
         ><span data-i18n="● СЕРВЕР ОНЛАЙН">● СЕРВЕР ОНЛАЙН</span></span
-      ><span>COSMOSIMULATOR · v0.8.0</span>
+      ><span>COSMOSIMULATOR · v0.8.1</span>
     </footer>
     <div id="toast" role="status" hidden></div>
     <div id="tooltip" role="tooltip" hidden></div>

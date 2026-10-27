@@ -12,6 +12,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"net/netip"
 	"os"
 	"strings"
 	"sync"
@@ -27,15 +28,16 @@ import (
 var assets embed.FS
 
 type App struct {
-	db           *pgxpool.Pool
-	universeMu   sync.Mutex
-	universe     *Galaxy
-	stationMu    sync.Mutex
-	stationCount int
-	secure       bool
-	origin       string
-	mu           sync.Mutex
-	attempts     map[string]attempt
+	trustedProxies []netip.Prefix
+	db             *pgxpool.Pool
+	universeMu     sync.Mutex
+	universe       *Galaxy
+	stationMu      sync.Mutex
+	stationCount   int
+	secure         bool
+	origin         string
+	mu             sync.Mutex
+	attempts       map[string]attempt
 }
 type attempt struct {
 	count int
@@ -62,7 +64,11 @@ func Run(ctx context.Context) error {
 		return err
 	}
 	defer db.Close()
-	a := &App{db: db, secure: os.Getenv("COOKIE_SECURE") == "true", origin: strings.TrimRight(os.Getenv("PUBLIC_ORIGIN"), "/"), attempts: make(map[string]attempt)}
+	proxies, err := parseTrustedProxies(os.Getenv("TRUSTED_PROXIES"))
+	if err != nil {
+		return err
+	}
+	a := &App{trustedProxies: proxies, db: db, secure: os.Getenv("COOKIE_SECURE") == "true", origin: strings.TrimRight(os.Getenv("PUBLIC_ORIGIN"), "/"), attempts: make(map[string]attempt)}
 	if err = a.bootstrap(ctx); err != nil {
 		return err
 	}
@@ -186,6 +192,14 @@ func (a *App) routes() http.Handler {
 				fail(w, 415, "Ожидается application/json")
 				return
 			}
+			if !bufferJSON(w, r) {
+				return
+			}
+		}
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			bounded, cancel := apiDeadline(r)
+			defer cancel()
+			r = bounded
 		}
 		m.ServeHTTP(w, r)
 	}))
@@ -228,10 +242,10 @@ func (a *App) allow(r *http.Request) bool {
 			delete(a.attempts, k)
 		}
 	}
-	// Use the direct peer, never trust a client-supplied forwarded address.
-	host := r.RemoteAddr
-	if i := strings.LastIndex(host, ":"); i >= 0 {
-		host = host[:i]
+	// Forwarded addresses are accepted only from explicitly trusted proxies.
+	host := r.URL.Path + "/" + a.clientAddress(r)
+	if a.attempts == nil {
+		a.attempts = map[string]attempt{}
 	}
 	v := a.attempts[host]
 	if v.count >= 20 {

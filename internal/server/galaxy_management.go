@@ -197,6 +197,9 @@ func appendGalaxySystems(g *Galaxy, id string, target int) error {
 		for j := range s.Planets {
 			s.Planets[j].Name = fmt.Sprintf("%s-%c", s.Name, 'b'+j)
 		}
+		if g.DiscoverySecret != "" {
+			sealStar(&s, g.DiscoverySecret, false)
+		}
 		g.Stars = append(g.Stars, s)
 	}
 	d.Opened = true

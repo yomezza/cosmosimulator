@@ -77,6 +77,9 @@ func enrichGalaxy(g *Galaxy) {
 			continue
 		}
 		rng := rand.New(rand.NewSource(g.Seed + int64(s.ID)*7919))
+		if s.DiscoverySeed != "" {
+			rng = discoveryRNG(s.DiscoverySeed, "planets")
+		}
 		mass := map[string]float64{"O": 20, "B": 5, "A": 1.8, "F": 1.2, "G": 1, "K": .7, "M": .25}[s.Class]
 		if mass == 0 {
 			mass = 1

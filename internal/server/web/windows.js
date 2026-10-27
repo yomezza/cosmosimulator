@@ -548,13 +548,29 @@
   });
   const sidebar = document.getElementById("sidebar");
   sidebar.classList.toggle("collapsed", read("sidebar-collapsed", false));
-  document.getElementById("sidebar-toggle").onclick = () => {
+  const sidebarToggle = document.getElementById("sidebar-toggle");
+  const updateSidebar = () => {
+    const collapsed = sidebar.classList.contains("collapsed");
+    sidebarToggle.setAttribute("aria-expanded", String(!collapsed));
+    sidebarToggle.setAttribute(
+      "aria-label",
+      I18n.t(collapsed ? "Развернуть панель" : "Свернуть панель"),
+    );
+    sidebarToggle.dataset.help = collapsed
+      ? "Развернуть панель"
+      : "Свернуть панель";
+  };
+  sidebarToggle.onclick = () => {
     sidebar.classList.toggle("collapsed");
     localStorage.setItem(
       "sidebar-collapsed",
       JSON.stringify(sidebar.classList.contains("collapsed")),
     );
+    updateSidebar();
   };
+  window.addEventListener("languagechange", updateSidebar);
+  updateSidebar();
+  I18n.ready.then(updateSidebar);
   window.notify = (text, level = "success", persist = false) => {
     const toast = document.getElementById("toast");
     toast.replaceChildren(

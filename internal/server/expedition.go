@@ -63,9 +63,8 @@ func offers(star Star, stock map[string]int) []Offer {
 			}
 		}
 		price += star.ID % 5
-		if stock[r.ID] < 10 {
-			price += 5
-		}
+		// A reversible trade must never earn money by moving the stock across
+		// a price threshold. Regional quotes stay stable between both legs.
 		out = append(out, Offer{r.ID, stock[r.ID], price + 2, price})
 	}
 	return out
@@ -405,9 +404,6 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 						wallet -= cost
 					}
 				}
-				if problem == "" {
-					_, err = tx.Exec(ctx, `INSERT INTO reputation(user_id,company_id,points) SELECT $1,founder,1 FROM stations WHERE star=$2 AND object_id=$3 AND founder IS NOT NULL ON CONFLICT(user_id,company_id) DO UPDATE SET points=reputation.points+1`, u.ID, ship.Star, ship.ObjectID)
-				}
 			case "mine":
 				job, err = beginExtraction(ctx, tx, u.ID, ship, star, in.Planet, in.Resource, 0)
 				if err != nil {
@@ -466,8 +462,7 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 	if !surveyed {
 		star.Planets = nil
 	}
-	star.ResourceWeights = nil
-	star.Ports = nil
+	star = publicStar(star)
 	if err = tx.Commit(ctx); err != nil {
 		a.internal(w, err)
 		return

@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"math/rand"
+	"strconv"
 )
 
 type ResourceDetails struct {
@@ -53,36 +54,25 @@ func variedResources(star, object int, kind string) []string {
 func variedStarResources(s Star, object int, kind string) []string {
 	star := s.ID
 	rng := rand.New(rand.NewSource(int64(star)*104729 + int64(object)*7919))
+	if s.DiscoverySeed != "" {
+		rng = discoveryRNG(s.DiscoverySeed, "resources/"+strconv.Itoa(object))
+	}
 	out := []string{}
 	add := func(id string, chance float64) {
 		if s.ResourceWeights != nil {
 			chance *= float64(s.ResourceWeights[id]) / 100
 		}
-		if rng.Float64() < chance {
+		chance = max(0, min(1, chance))
+		roll := rng.Float64()
+		if saved, ok := s.ResourceRolls[strconv.Itoa(object)][id]; ok {
+			roll = saved
+		}
+		if roll < chance {
 			out = append(out, id)
 		}
 	}
-	switch kind {
-	case "Ледяная", "Ледяное поле":
-		add("water", .85)
-		add("carbon", .3)
-		add("agni", .65)
-		add("azoth", .18)
-	case "Газовый гигант":
-		add("agni", .85)
-		add("carbon", .6)
-		add("azoth", .25)
-	case "Садовый мир":
-		add("water", .8)
-		add("manna", .85)
-		add("carbon", .5)
-		add("ambrosia", .12)
-	default:
-		add("iron", .7)
-		add("silicon", .55)
-		add("carbon", .4)
-		add("orichalcum", .12)
-		add("vajra", .06)
+	for _, item := range resourceChances(kind) {
+		add(item.id, item.chance)
 	}
 	if len(out) == 0 && s.ResourceWeights == nil {
 		if kind == "Ледяная" || kind == "Ледяное поле" {
@@ -116,8 +106,26 @@ func upgradeGeology(g *Galaxy) {
 			if p.Kind == "Каменистая" && p.Temperature > 700 {
 				p.Kind = "Вулканическая"
 			}
-			p.Resources = variedResources(g.Stars[i].ID, p.ID, p.Kind)
+			p.Resources = variedStarResources(g.Stars[i], p.ID, p.Kind)
 		}
 	}
 	g.Version = 3
+}
+
+type resourceChance struct {
+	id     string
+	chance float64
+}
+
+func resourceChances(kind string) []resourceChance {
+	switch kind {
+	case "Ледяная", "Ледяное поле":
+		return []resourceChance{{"water", .85}, {"carbon", .3}, {"agni", .65}, {"azoth", .18}}
+	case "Газовый гигант":
+		return []resourceChance{{"agni", .85}, {"carbon", .6}, {"azoth", .25}}
+	case "Садовый мир":
+		return []resourceChance{{"water", .8}, {"manna", .85}, {"carbon", .5}, {"ambrosia", .12}}
+	default:
+		return []resourceChance{{"iron", .7}, {"silicon", .55}, {"carbon", .4}, {"orichalcum", .12}, {"vajra", .06}}
+	}
 }

@@ -32,6 +32,7 @@
       "Газовый гигант": "gas",
       Пустынная: "desert",
       Лавовая: "lava",
+      Вулканическая: "lava",
       "Орбитальная станция": "station",
       "Пояс астероидов": "asteroids",
       "Ледяное поле": "ice-field",
@@ -63,6 +64,7 @@
       "Газовый гигант": "#d9b889",
       Пустынная: "#d7bb83",
       Лавовая: "#e58c72",
+      Вулканическая: "#e58c72",
       "Пояс астероидов": "#bfb29a",
       "Ледяное поле": "#9fd7eb",
       Звезда: "#efbd68",
@@ -92,6 +94,8 @@
   UI.button = (label, run, disabled = false, reason = "") => {
     const b = n("button", tr(label));
     b.type = "button";
+    if (typeof label === "string" && label.length > 1)
+      b.classList.add("terminal-action");
     b.disabled = !!disabled;
     if (reason) b.dataset.help = reason;
     b.onclick = async (e) => {
@@ -216,6 +220,7 @@
     const update = () => {
       const selected = opts.find((o) => o.id === button.value);
       button.replaceChildren();
+      button.classList.toggle("picker-has-code", !!selected?.code);
       if (selected?.code) button.append(n("span", selected.code, "system-id"));
       button.append(
         n("span", selected?.label || tr("Выберите значение"), "picker-label"),
@@ -296,6 +301,8 @@
             change?.(button.value);
             button.onchange?.({ target: button });
           });
+          b.classList.add("picker-option");
+          b.classList.toggle("picker-has-code", !!o.code);
           b.setAttribute("role", "option");
           b.setAttribute("aria-selected", String(o.id === button.value));
           if (o.code) b.append(n("span", o.code, "system-id"));

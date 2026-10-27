@@ -121,9 +121,8 @@ func (a *App) systemView(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	s = publicStar(s)
 	s.Planets = nil
-	s.Ports = nil
-	s.ResourceWeights = nil
 	reply(w, 200, map[string]any{"star": s, "region": g.regionName(s.Region), "surveyed": scanned, "sites": sites})
 }
 func (a *App) profile(w http.ResponseWriter, r *http.Request) {

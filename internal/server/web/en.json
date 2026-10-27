@@ -1213,5 +1213,7 @@
   "Удалять можно только галактики, созданные администратором": "Only administrator-created galaxies can be deleted",
   "Удалённый склад": "Remote warehouse",
   "Управление запасами перенесено в логистику": "Inventory management has moved to Logistics",
-  "Этот запрос уже использован для другого переноса": "This request was already used for a different transfer"
+  "Этот запрос уже использован для другого переноса": "This request was already used for a different transfer",
+  "Свернуть панель": "Collapse sidebar",
+  "Развернуть панель": "Expand sidebar"
 }

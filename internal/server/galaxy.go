@@ -11,27 +11,30 @@ import (
 )
 
 type Star struct {
-	Deleted         bool           `json:"deleted,omitempty"`
-	Number          int            `json:"number,omitempty"`
-	Founder         string         `json:"founder,omitempty"`
-	Ports           *int           `json:"ports,omitempty"`
-	ResourceWeights map[string]int `json:"resource_weights,omitempty"`
-	Galaxy          string         `json:"galaxy,omitempty"`
-	ID              int            `json:"id"`
-	Name            string         `json:"name"`
-	X               float64        `json:"x"`
-	Y               float64        `json:"y"`
-	Region          int            `json:"region"`
-	Class           string         `json:"class"`
-	Mass            float64        `json:"mass"`
-	Luminosity      float64        `json:"luminosity"`
-	Planets         []Planet       `json:"planets,omitempty"`
+	DiscoverySeed   string                        `json:"discovery_seed,omitempty"`
+	ResourceRolls   map[string]map[string]float64 `json:"resource_rolls,omitempty"`
+	Deleted         bool                          `json:"deleted,omitempty"`
+	Number          int                           `json:"number,omitempty"`
+	Founder         string                        `json:"founder,omitempty"`
+	Ports           *int                          `json:"ports,omitempty"`
+	ResourceWeights map[string]int                `json:"resource_weights,omitempty"`
+	Galaxy          string                        `json:"galaxy,omitempty"`
+	ID              int                           `json:"id"`
+	Name            string                        `json:"name"`
+	X               float64                       `json:"x"`
+	Y               float64                       `json:"y"`
+	Region          int                           `json:"region"`
+	Class           string                        `json:"class"`
+	Mass            float64                       `json:"mass"`
+	Luminosity      float64                       `json:"luminosity"`
+	Planets         []Planet                      `json:"planets,omitempty"`
 }
 type Lane struct {
 	From int `json:"from"`
 	To   int `json:"to"`
 }
 type Galaxy struct {
+	DiscoverySecret   string             `json:"discovery_secret,omitempty"`
 	SettlementVersion int                `json:"settlement_version,omitempty"`
 	Revision          int64              `json:"revision,omitempty"`
 	Catalog           []GalaxyDefinition `json:"galaxies,omitempty"`
@@ -156,16 +159,15 @@ func (a *App) galaxy(w http.ResponseWriter, r *http.Request) {
 				public.Stars[i] = Star{ID: public.Stars[i].ID, Galaxy: "deleted", Deleted: true}
 				continue
 			}
+			public.Stars[i] = publicStar(public.Stars[i])
 			public.Stars[i].Planets = nil
-			public.Stars[i].ResourceWeights = nil
-			public.Stars[i].Ports = nil
 		}
 		founders, e := queryMaps(r.Context(), a.db, `SELECT id,name,tag,color,flag,founder_key FROM companies WHERE founder ORDER BY founder_key`)
 		if e != nil {
 			a.internal(w, e)
 			return
 		}
-		reply(w, 200, map[string]any{"name": public.Name, "seed": public.Seed, "version": public.Version, "revision": g.Revision, "galaxies": visibleGalaxies(g), "founders": founders, "stars": public.Stars, "regions": public.Regions, "lanes": public.Lanes, "black_holes": blackHoles(g), "black_hole": map[string]any{"x": 0, "y": 0, "systems": coreSystems(g)}})
+		reply(w, 200, map[string]any{"name": public.Name, "version": public.Version, "revision": g.Revision, "galaxies": publicGalaxies(g), "founders": founders, "stars": public.Stars, "regions": public.Regions, "lanes": public.Lanes, "black_holes": blackHoles(g), "black_hole": map[string]any{"x": 0, "y": 0, "systems": coreSystems(g)}})
 		return
 	}
 	from, e1 := strconv.Atoi(r.URL.Query().Get("from"))
