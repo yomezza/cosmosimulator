@@ -36,6 +36,7 @@
     yardQuery = "",
     yardLocation = "",
     yardClass = "all",
+    yardRole = "all",
     yardPage = 1,
     corpTab = "overview",
     corpScope = "all",
@@ -419,6 +420,7 @@
     );
     root.append(meters);
     row(root, "Класс корабля", tr(s.spec.role));
+    row(root, "Длина корпуса", s.spec.length + " " + tr("м"));
     row(root, "Время перехода", s.spec.jump_seconds + " s");
     row(root, "Расход за переход", s.spec.jump_fuel);
     if (s.spec.mining_bonus)
@@ -640,6 +642,7 @@
   }
   function shipStats(root, c) {
     row(root, "Класс корабля", tr(c.role));
+    row(root, "Длина корпуса", c.length + " " + tr("м"));
     row(root, "Вместимость", c.cargo);
     row(root, "Топливный бак", c.fuel);
     row(root, "Время перехода", c.jump_seconds + " s");
@@ -687,6 +690,20 @@
     left.append(list, pagination);
     const classes = w().ship_classes || [],
       yards = new Map();
+    choice(
+      left,
+      "Назначение корабля",
+      [
+        ["all", "Все назначения"],
+        ...[...new Set(classes.map((c) => c.role))].map((role) => [role, role]),
+      ],
+      yardRole,
+      (value) => {
+        yardRole = value;
+        yardPage = 1;
+        draw();
+      },
+    );
     for (const offer of w().shipyards || []) {
       const key = offer.star + "|" + offer.station;
       if (!yards.has(key))
@@ -709,7 +726,11 @@
             .map((o) => classes.find((c) => c.id === o.ship_class))
             .filter(Boolean);
           return (
-            (yardClass === "all" || models.some((c) => c.id === yardClass)) &&
+            models.some(
+              (c) =>
+                (yardClass === "all" || c.id === yardClass) &&
+                (yardRole === "all" || c.role === yardRole),
+            ) &&
             [
               y.name,
               String(y.star),
@@ -780,7 +801,12 @@
       right.append(cards);
       for (const offer of y.offers) {
         const c = classes.find((c) => c.id === offer.ship_class);
-        if (!c || (yardClass !== "all" && c.id !== yardClass)) continue;
+        if (
+          !c ||
+          (yardClass !== "all" && c.id !== yardClass) ||
+          (yardRole !== "all" && c.role !== yardRole)
+        )
+          continue;
         const card = n("article", undefined, "shipyard-card"),
           model = n("img");
         model.src = c.model;
@@ -2645,6 +2671,7 @@
         article.append(
           b("Найти верфь", () => {
             yardClass = item.ship.id;
+            yardRole = "all";
             yardQuery = "";
             Game.openShipyards();
           }),
@@ -3196,6 +3223,7 @@
     yardQuery = "";
     yardLocation = "";
     yardClass = "all";
+    yardRole = "all";
     yardPage = 1;
     userQuery = "";
     userPage = 1;

@@ -99,6 +99,12 @@ func openDatabase(ctx context.Context, dsn, schema string) (*pgxpool.Pool, error
 	if _, e = tx.Exec(ctx, string(upgrade050)); e != nil {
 		return nil, fmt.Errorf("upgrade 0.5.0: %w", e)
 	}
+	if _, err = tx.Exec(ctx, `ALTER TABLE stations ADD COLUMN IF NOT EXISTS hull_catalogue_version INTEGER NOT NULL DEFAULT 0`); err != nil {
+		return nil, err
+	}
+	if err = ensureShipHullConstraint(ctx, tx); err != nil {
+		return nil, fmt.Errorf("upgrade hull catalogue: %w", err)
+	}
 	var galaxyExists bool
 	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM galaxies WHERE name='Edem')`).Scan(&galaxyExists); err != nil {
 		return nil, err

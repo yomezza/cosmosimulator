@@ -1,4 +1,4 @@
-"""Build the five production holograms: transparent, line-only, 16 s orbit.
+"""Build the production fleet holograms: transparent, line-only, 16 s orbit.
 
 Uses the standard-library mesh/projector from the approved design studies.
 Run from any directory. The generated SVGs are committed and embedded by Go;
@@ -88,17 +88,135 @@ def hermes():
     return m
 
 
+def scout(tier):
+    m = Mesh()
+    m.loft([(0, -4.7 - tier * .3, .1, .10, .12),
+            (0, -2.6, .1, .40 + tier * .12, .32),
+            (0, .3, .1, .65 + tier * .10, .48),
+            (0, 3.4, .1, .50, .38)])
+    m.loft([(0, -2.8, .50, .22, .13), (0, -1.1, .67, .38, .18)], sides=4, part="canopy")
+    for sign in (-1, 1):
+        if tier == 1:  # Split forward sensor booms and short rear wings.
+            m.loft([(sign * .85, -4.3, .05, .07, .08),
+                    (sign * .85, -.6, .05, .14, .15)], sides=4, part="sensor")
+            m.prism([(sign * .4, -.5), (sign * 2.1, .8),
+                     (sign * 1.7, 2.1), (sign * .4, 1)], -.1, .14)
+        elif tier == 2:  # Long delta wings and outboard scan pods.
+            m.prism([(sign * .35, -2.5), (sign * 2.5, 1.5),
+                     (sign * 2.0, 2.4), (sign * .5, .7)], -.15, .15)
+            m.loft([(sign * 2.1, -.7, .12, .18, .25),
+                    (sign * 2.1, 1.8, .12, .18, .25)], part="sensor")
+        else:  # Forked prow, raised bridge, and a transverse sensor collar.
+            m.prism([(sign * .45, -2), (sign * 2.35, -3.4),
+                     (sign * 2.1, -.9), (sign * .55, .2)], -.15, .17)
+            m.loft([(sign * 1.0, -4.8, .2, .08, .1),
+                    (sign * 1.0, -1.7, .2, .28, .3)], part="sensor")
+        engine(m, sign * (1.2 + tier * .15), .9, 3.8, .25 + tier * .03, .34)
+    if tier == 3:
+        # A thin annular sensor array, oriented across the spine.
+        sides = 12
+        for i in range(sides):
+            a, b = 2 * math.pi * i / sides, 2 * math.pi * (i + 1) / sides
+            m.prism([(2.1 * math.cos(a), -.5 + 2.1 * math.sin(a)),
+                     (2.1 * math.cos(b), -.5 + 2.1 * math.sin(b)),
+                     (1.93 * math.cos(b), -.5 + 1.93 * math.sin(b)),
+                     (1.93 * math.cos(a), -.5 + 1.93 * math.sin(a))], .45, .58, part="sensor")
+    return m
+
+
+def miner(tier):
+    m = Mesh()
+    m.loft([(0, -3.5, .25, .5, .5), (0, -1.6, .25, 1.2, .85),
+            (0, 2.8, .25, 1.2, .85), (0, 4, .25, .8, .65)], sides=8)
+    m.loft([(0, -2.5, 1.1, .36, .2), (0, -.5, 1.3, .5, .26)], sides=4, part="canopy")
+    for sign in (-1, 1):
+        m.prism([(sign * .7, -1.8), (sign * 2.7, -2.7),
+                 (sign * 2.8, 2.4), (sign * .7, 2.9)], -.4, -.05)
+        for z in ((-.25,) if tier == 1 else (-.65, .75)):
+            m.loft([(sign * 2.25, -3.7, z, .15, .18),
+                    (sign * 2.25, -.1, z, .45, .40)], sides=4, part="tool")
+            m.loft([(sign * 2.25, -4.6, z, .04, .05),
+                    (sign * 2.25, -3.7, z, .48, .45)], sides=6, part="tool")
+        for y in ((-.4,) if tier == 1 else (-1.2, .8)):
+            m.loft([(sign * 1.35, y, .2, .55, .6),
+                    (sign * 1.35, y + 1.4, .2, .55, .6)], sides=4, part="cargo")
+        engine(m, sign * 2.2, 1.6, 4.0, .48, .50)
+    if tier == 2:
+        engine(m, 0, 3.4, 4.6, .55, .50, -.15)
+        m.loft([(0, .3, 1.5, .3, .35), (0, 1.4, 1.5, .3, .35)], sides=6, part="sensor")
+    return m
+
+
+def freighter(tier):
+    m = Mesh()
+    m.loft([(0, -5.8, .4, .3, .4), (0, -4.4, .4, .8, .7),
+            (0, 4.6, .4, .8, .7), (0, 5.5, .4, .6, .55)], sides=4)
+    m.loft([(0, -5.0, 1.1, .35, .16), (0, -3.6, 1.3, .55, .2)], sides=4, part="canopy")
+    for sign in (-1, 1):
+        m.prism([(sign * .6, -3.8), (sign * 2.65, -3.5),
+                 (sign * 2.65, 4.7), (sign * .6, 4.9)], -.55, -.22)
+        for y in (-3.8, -1.8, .2, 2.2):
+            m.loft([(sign * 1.65, y, .5, .8, .75),
+                    (sign * 1.65, y + 1.7, .5, .8, .75)], sides=4, part="cargo")
+        engine(m, sign * 1.8, 4.0, 5.4, .52, .55)
+    if tier == 2:
+        for y in (-2.8, -.8, 1.2):
+            m.loft([(0, y, 1.7, .70, .55),
+                    (0, y + 1.7, 1.7, .70, .55)], sides=4, part="cargo")
+        engine(m, 0, 4.5, 6.0, .65, .65, -.1)
+    return m
+
+
+def courier(tier):
+    m = Mesh()
+    m.loft([(0, -5.0 - tier * .3, .05, .07, .1),
+            (0, -2.8, .05, .5, .4), (0, .0, .05, .9, .55),
+            (0, 3.2, .05, .65, .45)], sides=8)
+    m.loft([(0, -2.8, .55, .25, .13), (0, -1.0, .75, .4, .2)], sides=4, part="canopy")
+    for sign in (-1, 1):
+        if tier == 1:  # Wide twin nacelles linked by a shallow forward sweep.
+            wing = [(sign * .4, -.2), (sign * 2.2, -1.8),
+                    (sign * 2.5, 1.8), (sign * .6, 1.1)]
+        elif tier == 2:  # Crescent wings with a cut-back trailing edge.
+            wing = [(sign * .3, -2.8), (sign * 2.8, .4),
+                    (sign * 2.5, 2.7), (sign * 1.8, 1.2), (sign * .5, .4)]
+        else:  # Double-delta express with a larger engine block.
+            wing = [(sign * .35, -3.3), (sign * 1.35, -1.3),
+                    (sign * 2.9, .5), (sign * 2.4, 2.8), (sign * .6, 1.8)]
+        m.prism(wing, -.16, .12)
+        engine(m, sign * (1.5 + tier * .2), -.3, 3.8, .3 + tier * .03, .4)
+        m.loft([(sign * .7, -.6, -.45, .3, .3),
+                (sign * .7, 1.8, -.45, .3, .3)], sides=4, part="cargo")
+    if tier >= 2:
+        engine(m, 0, 2.5, 4.7, .4, .42, -.1)
+    if tier == 3:
+        for sign in (-1, 1):
+            m.prism([(sign * .45, .4), (sign * .9, 2.8),
+                     (sign * .4, 3.8)], .5, 1.05, part="fin")
+    return m
+
+
 MODELS = {
-    "pilgrim": ("Pilgrim", geometry.pilgrim, "#71d8bb", "#c5ffe9", 28),
-    "wanderer": ("Wanderer", wanderer, "#79decb", "#badfff", 26),
-    "forge": ("Forge", forge, "#7bd9ad", "#e6c080", 30),
-    "ark": ("Ark", ark, "#93d8ae", "#d9e9a8", 28),
-    "hermes": ("Hermes", hermes, "#74e7d0", "#cefff6", 25),
+    "pilgrim": ("Pilgrim", geometry.pilgrim, "#71d8bb", "#c5ffe9", 28, 22),
+    "wanderer": ("Wanderer", wanderer, "#79decb", "#badfff", 26, 24),
+    "forge": ("Forge", forge, "#7bd9ad", "#e6c080", 30, 40),
+    "ark": ("Ark", ark, "#93d8ae", "#d9e9a8", 28, 60),
+    "hermes": ("Hermes", hermes, "#74e7d0", "#cefff6", 25, 32),
+    "vesper": ("Vesper", lambda: scout(1), "#7edfc6", "#bce8ff", 28, 28),
+    "astra": ("Astra", lambda: scout(2), "#75ddc9", "#9bd6ff", 27, 34),
+    "argus": ("Argus", lambda: scout(3), "#7ae3bd", "#e6f9ce", 30, 42),
+    "crucible": ("Crucible", lambda: miner(1), "#8dddab", "#f0d293", 30, 48),
+    "titan": ("Titan", lambda: miner(2), "#91dca5", "#ffd395", 32, 60),
+    "atlas": ("Atlas", lambda: freighter(1), "#89d9b7", "#d0e7a2", 28, 72),
+    "leviathan": ("Leviathan", lambda: freighter(2), "#83d9ad", "#e4ecc3", 30, 92),
+    "iris": ("Iris", lambda: courier(1), "#77dfcf", "#c3ecff", 26, 40),
+    "zephyr": ("Zephyr", lambda: courier(2), "#74e7cf", "#b7fff2", 27, 48),
+    "lightning": ("Lightning", lambda: courier(3), "#81ebc8", "#e4fff3", 28, 58),
 }
 
 
 def render(model_id, settings):
-    name, build, color, accent, elevation = settings
+    name, build, color, accent, elevation, length = settings
     mesh = build()
     edges = mesh.edges()
     important = {"engine", "canopy", "tool", "sensor"}
@@ -108,7 +226,8 @@ def render(model_id, settings):
     # Use one scale throughout the orbit, so the model does not grow/shrink as it turns.
     span_x = max(max(x for x, _ in frame) - min(x for x, _ in frame) for frame in raw_frames)
     span_y = max(max(y for _, y in frame) - min(y for _, y in frame) for frame in raw_frames)
-    scale = min(730 / span_x, 405 / span_y)
+    footprint = .48 + .52 * length / 92
+    scale = min(730 / span_x, 405 / span_y) * footprint
     frames = [geometry.project(mesh.points, -35 + i * 360 / 48, elevation, fixed_scale=scale)[0] for i in range(49)]
     assert all(math.isfinite(x) and math.isfinite(y) and 20 < x < 880 and 20 < y < 540 for f in frames for x, y in f)
     definitions = []
@@ -116,7 +235,7 @@ def render(model_id, settings):
         paths = [geometry.path_for(lines, frame) for frame in frames]
         assert paths[0] == paths[-1]
         definitions.append(f'<path id="{model_id}-{part}" d="{paths[0]}"><animate attributeName="d" values="{";".join(paths)}" dur="16s" repeatCount="indefinite" calcMode="linear"/></path>')
-    return f'''<svg xmlns="http://www.w3.org/2000/svg" width="900" height="560" viewBox="0 0 900 560" role="img" fill="none" aria-labelledby="{model_id}-title {model_id}-description">
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" width="900" height="560" viewBox="0 0 900 560" data-length="{length}" role="img" fill="none" aria-labelledby="{model_id}-title {model_id}-description">
 <title id="{model_id}-title">{name} hologram</title>
 <desc id="{model_id}-description">Transparent wireframe spacecraft. Full spatial orbit in 16 seconds, soft green glow and moving light pulses.</desc>
 <defs><filter id="{model_id}-glow" x="-25%" y="-25%" width="150%" height="150%"><feGaussianBlur stdDeviation="1.2"/></filter>{"".join(definitions)}</defs>

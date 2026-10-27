@@ -69,22 +69,19 @@ func stockForStation(star Star, goods []string) map[string]int {
 // Executed once for each station, including stations constructed by players.
 // Legacy balances/stock are retained; only the advertised catalogue is restricted.
 func seedCommerce(ctx context.Context, tx pgx.Tx) error {
-	rows, err := tx.Query(ctx, `SELECT star,object_id,specialization,company_id,shipyard,ship_stock,yard_seeded,goods IS NULL FROM stations WHERE goods IS NULL OR (shipyard AND NOT yard_seeded) ORDER BY star,object_id`)
+	rows, err := tx.Query(ctx, `SELECT star,object_id,specialization,company_id FROM stations WHERE goods IS NULL AND active ORDER BY star,object_id`)
 	if err != nil {
 		return err
 	}
 	type port struct {
-		star            int
-		id, spec        string
-		company         *int64
-		yard            bool
-		stock           int
-		seeded, missing bool
+		star     int
+		id, spec string
+		company  *int64
 	}
 	var list []port
 	for rows.Next() {
 		var p port
-		if err = rows.Scan(&p.star, &p.id, &p.spec, &p.company, &p.yard, &p.stock, &p.seeded, &p.missing); err != nil {
+		if err = rows.Scan(&p.star, &p.id, &p.spec, &p.company); err != nil {
 			rows.Close()
 			return err
 		}
@@ -97,46 +94,21 @@ func seedCommerce(ctx context.Context, tx pgx.Tx) error {
 	}
 	batch := &pgx.Batch{}
 	for _, p := range list {
-		if p.missing {
-			if p.company == nil {
-				p.spec = stationProfile(p.star, p.id)
-			} else if p.spec == "general" {
-				p.spec = "trade"
-			} else if p.spec == "refinery" {
-				p.spec = "industry"
-			}
-			batch.Queue(`UPDATE stations SET specialization=$3,goods=$4 WHERE star=$1 AND object_id=$2 AND active`, p.star, p.id, p.spec, stationGoods(p.star, p.id, p.spec))
+		if p.company == nil {
+			p.spec = stationProfile(p.star, p.id)
+		} else if p.spec == "general" {
+			p.spec = "trade"
+		} else if p.spec == "refinery" {
+			p.spec = "industry"
 		}
-		if p.yard && !p.seeded {
-			models := map[string]bool{"pilgrim": true}
-			h := int(catalogueHash(p.star, p.id))
-			models[shipClasses[1+h%4].ID] = true
-			models[shipClasses[1+(h/7)%4].ID] = true
-			if p.star == 1 && p.id == "station" {
-				models = map[string]bool{"pilgrim": true, "wanderer": true}
-			}
-			if p.star == 5 && p.id == "station" {
-				models = map[string]bool{"pilgrim": true, "forge": true}
-			}
-			for _, c := range shipClasses {
-				if !models[c.ID] {
-					continue
-				}
-				q := 1 + (h+len(c.ID))%3
-				price := c.Price * int64(95+h%11) / 100
-				if c.ID == "pilgrim" {
-					q = p.stock
-					price = c.Price
-				}
-				batch.Queue(`INSERT INTO shipyard_stock(star,station,ship_class,quantity,price) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING`, p.star, p.id, c.ID, q, price)
-			}
-			batch.Queue(`UPDATE stations SET yard_seeded=TRUE WHERE star=$1 AND object_id=$2 AND active`, p.star, p.id)
+		batch.Queue(`UPDATE stations SET specialization=$3,goods=$4 WHERE star=$1 AND object_id=$2 AND active`, p.star, p.id, p.spec, stationGoods(p.star, p.id, p.spec))
+	}
+	if batch.Len() > 0 {
+		if err := tx.SendBatch(ctx, batch).Close(); err != nil {
+			return err
 		}
 	}
-	if batch.Len() == 0 {
-		return nil
-	}
-	return tx.SendBatch(ctx, batch).Close()
+	return seedShipyards(ctx, tx)
 }
 func marketAt(ctx context.Context, tx pgx.Tx, star Star, id string) (map[string]int, int64, error) {
 	var goods []string

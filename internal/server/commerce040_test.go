@@ -71,7 +71,7 @@ func TestShipClasses040(t *testing.T) {
 	if n := f.integer(`SELECT count(DISTINCT ship_class) FROM shipyard_stock`); n != int64(len(shipClasses)) {
 		t.Fatal("some hulls cannot be bought", n)
 	}
-	if n := f.integer(`SELECT count(*) FROM (SELECT star,station FROM shipyard_stock GROUP BY star,station HAVING count(*)>=5) y`); n != 0 {
+	if n := f.integer(`SELECT count(*) FROM (SELECT star,station FROM shipyard_stock GROUP BY star,station HAVING count(*)>=15) y`); n != 0 {
 		t.Fatal("a yard offers every model")
 	}
 	f.exec(`UPDATE users SET credits=1000000 WHERE id=$1`, uid)
@@ -139,7 +139,7 @@ func TestLastHullPurchase040(t *testing.T) {
 	f := newFixture033(t)
 	one, uid1 := f.signup("last040one")
 	two, uid2 := f.signup("last040two")
-	f.exec(`UPDATE users SET credits=100000 WHERE id IN($1,$2)`, uid1, uid2)
+	f.exec(`UPDATE users SET credits=1000000 WHERE id IN($1,$2)`, uid1, uid2)
 	f.exec(`UPDATE shipyard_stock SET quantity=1 WHERE star=1 AND station='station' AND ship_class='wanderer'`)
 	var wg sync.WaitGroup
 	wg.Add(2)
