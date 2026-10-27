@@ -33,7 +33,7 @@ func TestManagedGalaxyPreviewAndApply(t *testing.T) {
 	if cross < 4 || len(g.path(1, 2)) == 0 {
 		t.Fatal("arms have no bridges", cross)
 	}
-	if n := f.integer(`SELECT count(DISTINCT star) FROM stations WHERE active`); n < 100 || n > 900 {
+	if n := f.integer(`SELECT count(DISTINCT star) FROM stations WHERE active`); n < 10 || n > 300 {
 		t.Fatal("station percentage wrong", n)
 	}
 	// Protect existing property at an otherwise undesired port, including custom IDs.

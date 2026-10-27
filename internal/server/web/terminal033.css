@@ -1748,3 +1748,16 @@ input[aria-invalid="true"] {
     grid-template-columns: 1fr;
   }
 }
+
+.ledger-income {
+  color: #7bd9a2;
+  font-variant-numeric: tabular-nums;
+}
+.ledger-expense {
+  color: #f08a8a;
+  font-variant-numeric: tabular-nums;
+}
+.ledger-neutral {
+  color: inherit;
+  font-variant-numeric: tabular-nums;
+}

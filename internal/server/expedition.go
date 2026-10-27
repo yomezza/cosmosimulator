@@ -182,6 +182,7 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Method == "POST" {
 		var in struct {
+			Ship          int64  `json:"ship"`
 			Action        string `json:"action"`
 			To            int    `json:"to"`
 			Resource      string `json:"resource"`
@@ -192,6 +193,10 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 			ExpectedPrice *int   `json:"expected_price"`
 		}
 		if !decode(w, r, &in) {
+			return
+		}
+		if in.Ship > 0 && in.Ship != ship.ID {
+			fail(w, 409, "Активный корабль изменился. Повторите действие")
 			return
 		}
 		if err = reason(ctx, tx, in.Action); err != nil {

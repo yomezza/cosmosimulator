@@ -12,6 +12,8 @@
     cross_links: "Связи между рукавами",
     station_systems: "Системы со станциями",
     stations: "Станции",
+    founder_systems: "Системы основателей",
+    neutral_systems: "Нейтральные системы",
   };
   const actions = {
     tick: "Пропустить тик",
@@ -144,7 +146,7 @@
       }
       const ports = section("Распределение станций");
       for (const [id, label, min, max] of [
-        ["station_percent", "Системы со станциями, %", 0, 100],
+        ["station_percent", "Частота станций в центре, %", 0, 100],
         ["max_ports", "Максимум портов в системе", 1, 5],
       ]) {
         const field = UI.field(
@@ -159,6 +161,15 @@
         field.required = true;
         fields[id] = field;
       }
+      form.append(
+        n(
+          "p",
+          tr(
+            "К окраинам частота уменьшается до нуля. Владения основателей — небольшие колонии вокруг станций; между ними остаются нейтральные системы.",
+          ),
+          "muted",
+        ),
+      );
       form.append(
         n(
           "p",
@@ -266,6 +277,28 @@
         const ctx = canvas.getContext("2d"),
           scale = 250 / proposal.radius,
           points = new Map(proposal.stars.map((s) => [s.id, s]));
+        for (const area of proposal.territories || []) {
+          const center = points.get(area.anchor),
+            owner = window.MapData?.founders?.find(
+              (c) => c.founder_key === area.founder,
+            );
+          if (!center || !owner) continue;
+          ctx.beginPath();
+          ctx.arc(
+            500 + center.x * scale,
+            280 + center.y * scale,
+            area.radius * scale,
+            0,
+            Math.PI * 2,
+          );
+          ctx.fillStyle = owner.color;
+          ctx.globalAlpha = 0.1;
+          ctx.fill();
+          ctx.strokeStyle = owner.color;
+          ctx.globalAlpha = 0.3;
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
         ctx.strokeStyle = "#324657";
         ctx.lineWidth = 0.55;
         ctx.beginPath();

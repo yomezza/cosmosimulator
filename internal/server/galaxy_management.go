@@ -26,13 +26,14 @@ type GalaxySettings struct {
 	ResourceWeights map[string]int `json:"resource_weights"`
 }
 type GalaxyDefinition struct {
-	ID       string         `json:"id"`
-	Name     string         `json:"name"`
-	Shape    string         `json:"shape"`
-	Seed     int64          `json:"seed"`
-	Opened   bool           `json:"opened"`
-	Radius   float64        `json:"radius"`
-	Settings GalaxySettings `json:"settings"`
+	ID          string             `json:"id"`
+	Name        string             `json:"name"`
+	Shape       string             `json:"shape"`
+	Seed        int64              `json:"seed"`
+	Opened      bool               `json:"opened"`
+	Radius      float64            `json:"radius"`
+	Settings    GalaxySettings     `json:"settings"`
+	Territories []FounderTerritory `json:"territories,omitempty"`
 }
 
 func defaultGalaxySettings() GalaxySettings {
@@ -73,7 +74,7 @@ func initializeGalaxyCatalog(g *Galaxy) {
 		return
 	}
 	arrangeFrontierRings(g)
-	g.Catalog = []GalaxyDefinition{{"edem", "Edem", "spiral", g.Seed, true, 3600, defaultGalaxySettings()}, {"asterion", "Астерион", "rings", 20261027, false, 1250, defaultGalaxySettings()}}
+	g.Catalog = []GalaxyDefinition{{ID: "edem", Name: "Edem", Shape: "spiral", Seed: g.Seed, Opened: true, Radius: 3600, Settings: defaultGalaxySettings()}, {ID: "asterion", Name: "Астерион", Shape: "rings", Seed: 20261027, Radius: 1250, Settings: defaultGalaxySettings()}}
 	serials := map[string]int{}
 	for i := range g.Stars {
 		s := &g.Stars[i]
@@ -83,9 +84,6 @@ func initializeGalaxyCatalog(g *Galaxy) {
 		s.Number = serials[id]
 		if id == "asterion" {
 			g.Catalog[1].Opened = true
-		}
-		if s.Region >= 0 {
-			s.Founder = fmt.Sprintf("founder-%02d", 1+(s.Region%4)/2)
 		}
 		if id == "edem" {
 			s.X *= 3
@@ -127,11 +125,6 @@ func appendGalaxySystems(g *Galaxy, id string, target int) error {
 			if id == "asterion" {
 				s.Region = -2
 			}
-		}
-		if s.Region >= 0 {
-			s.Founder = fmt.Sprintf("founder-%02d", 1+(region%4)/2)
-		} else {
-			s.Founder = ""
 		}
 		radius := 300 + math.Sqrt(rng.Float64())*2400
 		angle := float64(region%4)*math.Pi/2 + radius/1110 + (rng.Float64()-.5)*.5
@@ -203,7 +196,7 @@ func assignGalaxyContent(g *Galaxy, id string) {
 			continue
 		}
 		n := 0
-		if stablePercent(d.Seed, s.ID, 1) < d.Settings.StationPercent {
+		if stablePercent(d.Seed, s.ID, 1) < founderStationChance(*d, *s) {
 			n = 1 + stablePercent(d.Seed, s.ID, 2)%d.Settings.MaxPorts
 		}
 		if core[s.ID] {
@@ -218,6 +211,7 @@ func assignGalaxyContent(g *Galaxy, id string) {
 			s.Planets[j].Resources = variedStarResources(*s, s.Planets[j].ID, s.Planets[j].Kind)
 		}
 	}
+	assignFounderTerritories(g, id)
 }
 func stablePercent(seed int64, id, salt int) int {
 	return int(uint64(seed+int64(id)*104729+int64(salt)*7919)*6364136223846793005>>32) % 100
@@ -511,6 +505,19 @@ func reconcileStations(ctx context.Context, tx pgx.Tx, g *Galaxy) error {
 	if err = ensureStations(ctx, tx, g); err != nil {
 		return err
 	}
+	// Protected old ports keep their inventories and obligations. A public port
+	// outside today's colonies becomes neutral rather than claiming the frontier.
+	owners := make([]map[string]any, 0, len(g.Stars))
+	for _, s := range g.Stars {
+		owners = append(owners, map[string]any{"star": s.ID, "founder_key": s.Founder})
+	}
+	raw, err := json.Marshal(owners)
+	if err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `UPDATE stations s SET founder=c.id FROM jsonb_to_recordset($1) AS x(star int,founder_key text) LEFT JOIN companies c ON c.founder_key=x.founder_key WHERE s.star=x.star AND s.company_id IS NULL`, raw); err != nil {
+		return err
+	}
 	keys := []string{}
 	for key := range plannedPorts(g, protected) {
 		keys = append(keys, key)
@@ -538,6 +545,7 @@ func upgradeManagedGalaxies(ctx context.Context, tx pgx.Tx, g *Galaxy) (bool, er
 		}
 	}
 	g.Revision = 1
+	g.SettlementVersion = 1
 	if err = repriceQueuedRoutes(ctx, tx, g); err != nil {
 		return false, err
 	}
@@ -615,6 +623,12 @@ func previewDigest(g *Galaxy, ports map[string]bool) string {
 }
 func galaxyStatistics(g *Galaxy, id string, ports map[string]bool) map[string]any {
 	stars := galaxyStars(g, id)
+	claimed := 0
+	for _, s := range stars {
+		if s.Founder != "" {
+			claimed++
+		}
+	}
 	lanes, cross, stationSystems, stationCount := 0, 0, map[int]bool{}, 0
 	for _, e := range g.Lanes {
 		if galaxyKey(g.Stars[e.From-1]) == id {
@@ -644,7 +658,7 @@ func galaxyStatistics(g *Galaxy, id string, ports map[string]bool) map[string]an
 			resourceSystems[r]++
 		}
 	}
-	return map[string]any{"systems": len(stars), "lanes": lanes, "cross_links": cross, "station_systems": len(stationSystems), "stations": stationCount, "resources": resourceSystems}
+	return map[string]any{"systems": len(stars), "lanes": lanes, "cross_links": cross, "station_systems": len(stationSystems), "stations": stationCount, "resources": resourceSystems, "founder_systems": claimed, "neutral_systems": len(stars) - claimed}
 }
 func (a *App) adminGalaxies(w http.ResponseWriter, r *http.Request) {
 	u, ok := a.user(w, r)
@@ -718,7 +732,7 @@ func (a *App) adminGalaxies(w http.ResponseWriter, r *http.Request) {
 				lanes = append(lanes, e)
 			}
 		}
-		reply(w, 200, map[string]any{"preview": digest, "before": galaxyStatistics(&g, in.ID, ports), "after": galaxyStatistics(next, in.ID, ports), "stars": points, "lanes": lanes, "protected_ports": len(ports), "radius": next.definition(in.ID).Radius})
+		reply(w, 200, map[string]any{"preview": digest, "before": galaxyStatistics(&g, in.ID, ports), "after": galaxyStatistics(next, in.ID, ports), "stars": points, "lanes": lanes, "protected_ports": len(ports), "radius": next.definition(in.ID).Radius, "territories": next.definition(in.ID).Territories})
 		return
 	}
 	if in.Preview == "" || in.Preview != digest {

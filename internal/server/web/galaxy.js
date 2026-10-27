@@ -102,58 +102,32 @@
     if (territorySource === galaxy) return;
     territorySource = galaxy;
     territories = [];
-    const groups = new Map();
-    for (const s of galaxy.stars) {
-      if (!s.founder) continue;
-      const key = s.galaxy + "/" + s.region;
-      const group = groups.get(key) || [];
-      group.push(s);
-      groups.set(key, group);
-    }
-    const cross = (a, b, c) =>
-      (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
-    for (const points of groups.values()) {
-      const sorted = [...points].sort((a, b) => a.x - b.x || a.y - b.y),
-        lower = [],
-        upper = [];
-      for (const p of sorted) {
-        while (lower.length > 1 && cross(lower.at(-2), lower.at(-1), p) <= 0)
-          lower.pop();
-        lower.push(p);
+    for (const definition of galaxy.galaxies || [])
+      for (const area of definition.territories || []) {
+        const center = galaxy.stars[area.anchor - 1],
+          owner = galaxy.founders?.find((c) => c.founder_key === area.founder);
+        if (center && owner)
+          territories.push({
+            galaxy: definition.id,
+            center,
+            radius: area.radius,
+            color: owner.color,
+          });
       }
-      for (const p of [...sorted].reverse()) {
-        while (upper.length > 1 && cross(upper.at(-2), upper.at(-1), p) <= 0)
-          upper.pop();
-        upper.push(p);
-      }
-      const hull = lower.slice(0, -1).concat(upper.slice(0, -1)),
-        owner = galaxy.founders?.find(
-          (c) => c.founder_key === points[0].founder,
-        );
-      if (hull.length >= 3 && owner)
-        territories.push({
-          galaxy: points[0].galaxy,
-          points: hull,
-          color: owner.color,
-        });
-    }
   }
   function drawTerritories() {
     if (!flags.territories) return;
     ctx.save();
     for (const area of territories) {
       if (area.galaxy !== viewedGalaxy) continue;
-      const points = area.points.map(galaxyPoint);
+      const p = galaxyPoint(area.center),
+        edge = galaxyPoint({
+          x: area.center.x + area.radius,
+          y: area.center.y,
+        }),
+        radius = Math.abs(edge.x - p.x);
       ctx.beginPath();
-      const first = points[0],
-        last = points.at(-1);
-      ctx.moveTo((last.x + first.x) / 2, (last.y + first.y) / 2);
-      for (let i = 0; i < points.length; i++) {
-        const p = points[i],
-          next = points[(i + 1) % points.length];
-        ctx.quadraticCurveTo(p.x, p.y, (p.x + next.x) / 2, (p.y + next.y) / 2);
-      }
-      ctx.closePath();
+      ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
       ctx.fillStyle = area.color;
       ctx.globalAlpha = 0.065;
       ctx.fill();

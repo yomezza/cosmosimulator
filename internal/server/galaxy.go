@@ -31,6 +31,7 @@ type Lane struct {
 	To   int `json:"to"`
 }
 type Galaxy struct {
+	SettlementVersion int                `json:"settlement_version,omitempty"`
 	Revision          int64              `json:"revision,omitempty"`
 	Catalog           []GalaxyDefinition `json:"galaxies,omitempty"`
 	RingLayoutVersion int                `json:"ring_layout_version,omitempty"`

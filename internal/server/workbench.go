@@ -66,18 +66,19 @@ func coreSystems(g *Galaxy) []int {
 	return out
 }
 func ensureStations(ctx context.Context, tx pgx.Tx, g *Galaxy) error {
-	var founders []int64
-	rows, err := tx.Query(ctx, `SELECT id FROM companies WHERE founder_key IN('founder-01','founder-02') ORDER BY founder_key`)
+	founders := map[string]int64{}
+	rows, err := tx.Query(ctx, `SELECT id,founder_key FROM companies WHERE founder_key IN('founder-01','founder-02') ORDER BY founder_key`)
 	if err != nil {
 		return err
 	}
 	for rows.Next() {
 		var id int64
-		if err = rows.Scan(&id); err != nil {
+		var key string
+		if err = rows.Scan(&id, &key); err != nil {
 			rows.Close()
 			return err
 		}
-		founders = append(founders, id)
+		founders[key] = id
 	}
 	err = rows.Err()
 	rows.Close()
@@ -100,8 +101,7 @@ func ensureStations(ctx context.Context, tx pgx.Tx, g *Galaxy) error {
 			}
 			spec := stationProfile(star.ID, s.ID)
 			var founder *int64
-			if len(founders) > 0 && star.Region >= 0 {
-				x := founders[max(0, star.Region%4)/2]
+			if x, ok := founders[star.Founder]; ok {
 				founder = &x
 			}
 			yard := star.ID == 1 || star.ID == 5 || star.ID%17 == 0

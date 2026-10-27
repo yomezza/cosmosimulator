@@ -1037,5 +1037,15 @@
   "Полные данные": "Full details",
   "Номер фазы": "Phase number",
   "Галактика": "Galaxy",
-  "Класс звезды": "Stellar class"
+  "Класс звезды": "Stellar class",
+  "Доход": "Income",
+  "Расход": "Expense",
+  "Системы основателей": "Founder systems",
+  "Нейтральные системы": "Neutral systems",
+  "Частота станций в центре, %": "Station frequency at the center, %",
+  "К окраинам частота уменьшается до нуля. Владения основателей — небольшие колонии вокруг станций; между ними остаются нейтральные системы.": "Station frequency falls to zero toward the outskirts. Founder territories are small colonies around stations, with neutral systems between them.",
+  "Агни в трюме": "Agni in cargo",
+  "1 Агни = до 5 единиц топлива": "1 Agni restores up to 5 fuel units",
+  "Нужен Агни в трюме выбранного корабля": "Agni is needed in the selected ship’s cargo hold",
+  "Активный корабль изменился. Повторите действие": "The active ship changed. Try the action again"
 }

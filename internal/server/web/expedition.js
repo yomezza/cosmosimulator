@@ -165,7 +165,7 @@
   window.performExpedition = (body) =>
     act(
       "expedition",
-      body,
+      { ship: d().ship.id, ...body },
       body.action === "mine"
         ? "Добыча запущена: груз поступит на следующем тике"
         : "Действие выполнено",
@@ -218,7 +218,7 @@
           reason:
             id !== "agni"
               ? "Этот ресурс не является топливом"
-              : "Манёвр недоступен",
+              : refuelReason(d().ship),
           action: () => performExpedition({ action: "refuel" }),
         },
         {
@@ -371,6 +371,12 @@
     Modules.arrangeShip();
     Modules.focus("ship");
   }
+  function refuelReason(ship) {
+    if (fly(ship)) return "Корабль в пути";
+    if (ship.fuel >= ship.spec.fuel) return "Бак полон";
+    if (!ship.cargo.agni) return "Нужен Агни в трюме выбранного корабля";
+    return "1 Агни = до 5 единиц топлива";
+  }
   function renderShip() {
     const root = roots.ship;
     reset(root);
@@ -436,6 +442,11 @@
         tr("Точка гиперперехода"),
     );
     row(root, "Зарезервировано топлива", s.reserved_fuel);
+    row(
+      root,
+      "Агни в трюме",
+      `${s.cargo.agni || 0} · ${tr("1 Агни = до 5 единиц топлива")}`,
+    );
     const tools = n("div", undefined, "inline-controls");
     tools.append(
       b("Трюм", () => {
@@ -449,10 +460,10 @@
         Modules.open("galaxy");
       }),
       b(
-        "Заправить",
-        () => performExpedition({ action: "refuel" }),
+        s.fuel >= s.spec.fuel ? "Бак полон" : "Заправить",
+        () => performExpedition({ action: "refuel", ship: s.id }),
         fly(s) || s.fuel >= s.spec.fuel || !s.cargo.agni,
-        "Нужен Агни в трюме",
+        refuelReason(s),
       ),
     );
     root.append(tools);
@@ -1707,7 +1718,7 @@
             (w().company_finance || []).map((f) => [
               fmtTime(f.created_at),
               f.username,
-              money(f.amount),
+              ledgerAmount(f.amount),
             ]),
           ),
         );
@@ -2767,6 +2778,20 @@
         ),
       );
   }
+  function ledgerAmount(value) {
+    const amount = Number(value),
+      span = n(
+        "span",
+        (amount > 0 ? "+" : "") + money(amount),
+        amount > 0
+          ? "ledger-income"
+          : amount < 0
+            ? "ledger-expense"
+            : "ledger-neutral",
+      );
+    if (amount !== 0) span.dataset.help = amount > 0 ? "Доход" : "Расход";
+    return span;
+  }
   function renderFinance() {
     const root = roots.finance;
     reset(root);
@@ -2776,7 +2801,7 @@
         (w().ledger || []).map((item) => [
           fmtTime(item.created_at),
           tr(item.reason),
-          money(item.amount),
+          ledgerAmount(item.amount),
           money(item.balance),
         ]),
       ),
