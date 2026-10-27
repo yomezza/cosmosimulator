@@ -881,19 +881,19 @@ tr:hover td {
 }
 #toast {
   display: flex;
-  gap: 10px;
+  gap: 7px;
   align-items: center;
   overflow: hidden;
-  border-radius: 10px;
-  min-width: 260px;
-  max-width: 470px;
-  padding: 13px 18px 16px;
+  border-radius: 0;
+  min-width: 0;
+  max-width: min(380px, calc(100vw - 28px));
+  padding: 7px 10px 10px;
   bottom: 44px;
   left: auto;
   right: 14px;
   transform: none;
   font-size: 12px;
-  background: #20313fef;
+  background: rgba(32, 49, 63, 0.83);
   border-color: #4e756e;
 }
 #toast[data-level="error"] {
@@ -903,7 +903,7 @@ tr:hover td {
   border-color: #be9459;
 }
 .toast-icon {
-  font-size: 20px;
+  font-size: 16px;
   color: #9dd5bc;
   flex-shrink: 0;
 }
@@ -1409,4 +1409,64 @@ input[aria-invalid="true"] {
 }
 #tooltip {
   white-space: pre-line;
+}
+/* Joined, compact system selectors; other pickers keep their shared spacing. */
+.system-picker,
+.map-toolbar .system-picker,
+.map-inspector > .system-picker,
+.system-popover .picker-list > button {
+  height: 26px;
+  min-height: 26px;
+  padding: 0;
+  gap: 0;
+  border-radius: 0;
+  background: linear-gradient(90deg, #443824, #202b34);
+  font-size: 11px;
+}
+.system-picker,
+.map-toolbar .system-picker,
+.map-inspector > .system-picker {
+  align-items: stretch;
+  height: 28px;
+  min-height: 28px;
+}
+.system-popover .picker-list > button {
+  margin: 0;
+}
+.system-picker .system-id,
+.system-popover .system-id {
+  align-self: stretch;
+  height: auto;
+  min-height: 26px;
+  padding: 0;
+}
+.system-picker .picker-label,
+.system-popover .picker-label {
+  padding: 0 7px;
+  line-height: 26px;
+}
+.system-picker .picker-chevron,
+.system-popover .picker-list small {
+  padding-right: 7px;
+  align-self: center;
+}
+.system-popover {
+  padding: 0;
+  border-radius: 0;
+}
+.system-popover > input {
+  width: calc(100% - 12px);
+  min-height: 28px;
+  height: 28px;
+  margin: 6px;
+  padding: 3px 7px;
+}
+.system-popover .pagination {
+  margin: 0;
+  padding: 4px 6px;
+}
+.system-picker:hover,
+.system-popover .picker-list > button:hover,
+.system-popover .picker-list > button[aria-selected="true"] {
+  background: linear-gradient(90deg, #615030, #2e414d);
 }

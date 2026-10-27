@@ -512,7 +512,13 @@ func (a *App) notifications(w http.ResponseWriter, r *http.Request) {
 				fail(w, 400, "Некорректное уведомление")
 				return
 			}
-			_, err = a.db.Exec(ctx, `INSERT INTO notifications(user_id,kind,level,message) VALUES($1,'message',$2,$3)`, u.ID, in.Level, in.Message)
+			// Older clients persisted these transient acknowledgements on every click.
+			switch strings.TrimSpace(in.Message) {
+			case "Действие выполнено", "Тик выполнен", "Action completed", "Tick advanced":
+				break
+			default:
+				_, err = a.db.Exec(ctx, `INSERT INTO notifications(user_id,kind,level,message) VALUES($1,'message',$2,$3)`, u.ID, in.Level, in.Message)
+			}
 		default:
 			fail(w, 400, "Неизвестное действие")
 			return

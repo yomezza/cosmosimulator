@@ -1285,7 +1285,7 @@
     const my = c.id === gameData.profile.company_id;
     if (!my) {
       row(side, "Сокращение", c.tag);
-      row(side, "Участников", c.members);
+      if (!c.founder) row(side, "Участников", c.members);
       if (c.founder) {
         const rep = w().reputation?.find((r) => r.company_id === c.id);
         row(side, "Репутация", rep?.points || 0);
@@ -1324,7 +1324,7 @@
       },
     );
     if (corpTab === "overview") {
-      row(side, "Участников", c.members);
+      if (!c.founder) row(side, "Участников", c.members);
       row(
         side,
         "Владелец",
@@ -2254,7 +2254,9 @@
     const layout = n("div", undefined, "guide-layout"),
       left = n("aside"),
       article = n("article", undefined, "guide-article"),
-      search = field(left, "Поиск", "guide-search", guideQuery, "search");
+      search = field(left, "Поиск", "guide-search", guideQuery, "search"),
+      expandedCategories = new Set();
+    let previousQuery = search.value.toLowerCase().trim();
     const all = [
       ...d().resources.map((r) => ({
         id: r.id,
@@ -2284,9 +2286,17 @@
       })),
     ];
     const drawList = () => {
-      left.querySelector(".guide-list")?.remove();
+      const previousList = left.querySelector(".guide-list");
+      if (!previousQuery) {
+        previousList?.querySelectorAll(".guide-category").forEach((group) => {
+          if (group.open) expandedCategories.add(group.dataset.category);
+          else expandedCategories.delete(group.dataset.category);
+        });
+      }
+      previousList?.remove();
       const list = n("div", undefined, "guide-list"),
-        q = search.value.toLowerCase();
+        q = search.value.toLowerCase().trim();
+      previousQuery = q;
       const matched = all.filter((item) =>
         [
           tr(item.name),
@@ -2300,7 +2310,8 @@
         const entries = matched.filter((item) => item.category === category);
         if (!entries.length) continue;
         const group = n("details", undefined, "guide-category");
-        group.open = true;
+        group.dataset.category = category;
+        group.open = !!q || expandedCategories.has(category);
         group.append(n("summary", tr(category) + " · " + entries.length));
         for (const subcategory of new Set(
           entries.map((item) => item.subcategory),

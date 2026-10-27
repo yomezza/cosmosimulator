@@ -438,7 +438,7 @@
       JSON.stringify(sidebar.classList.contains("collapsed")),
     );
   };
-  window.notify = (text, level = "success", persist = true) => {
+  window.notify = (text, level = "success", persist = false) => {
     const toast = document.getElementById("toast");
     toast.replaceChildren(
       node(

@@ -65,6 +65,8 @@ DROP TRIGGER IF EXISTS credits_ledger ON users;
 CREATE TRIGGER credits_ledger AFTER UPDATE OF credits ON users FOR EACH ROW EXECUTE FUNCTION ledger_credit_change();
 CREATE TABLE IF NOT EXISTS notifications(id BIGSERIAL PRIMARY KEY,user_id BIGINT NOT NULL REFERENCES users ON DELETE CASCADE,kind TEXT NOT NULL,level TEXT NOT NULL DEFAULT 'success',message TEXT NOT NULL DEFAULT '',data JSONB NOT NULL DEFAULT '{}',seen BOOLEAN NOT NULL DEFAULT FALSE,created_at TIMESTAMPTZ NOT NULL DEFAULT now());
 CREATE INDEX IF NOT EXISTS notifications_user ON notifications(user_id,id DESC);
+-- 0.3.5: remove old UI acknowledgements without touching gameplay events.
+DELETE FROM notifications WHERE kind='message' AND btrim(message) IN('Действие выполнено','Тик выполнен','Action completed','Tick advanced');
 CREATE OR REPLACE FUNCTION event_notification() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
  IF NEW.kind IN('arrival','mining_complete','research_complete','delivery_complete','company_invitation','project_complete','portal_open') THEN INSERT INTO notifications(user_id,kind,data) VALUES(NEW.user_id,NEW.kind,NEW.data); END IF; RETURN NEW; END $$;
 DROP TRIGGER IF EXISTS event_notifications ON game_events;

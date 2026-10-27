@@ -152,6 +152,7 @@
       ),
       button = UI.button("", () => {});
     button.classList.add("picker-button");
+    if (config.system) button.classList.add("system-picker");
     button.setAttribute("role", "combobox");
     button.setAttribute("aria-expanded", "false");
     button.setAttribute("aria-haspopup", "listbox");
@@ -181,6 +182,7 @@
         search = n("input"),
         list = n("div", undefined, "picker-list"),
         footer = n("div", undefined, "pagination");
+      if (config.system) pop.classList.add("system-popover");
       let page = 1,
         focusIndex = -1;
       search.type = "search";
