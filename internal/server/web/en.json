@@ -1290,5 +1290,11 @@
   "Добыча за цикл в базовой комплектации. Установленный добытчик может изменить значение.": "Output per cycle with the standard equipment. Installing another extractor may change this value.",
   "Промышленный корпус с усиленной добывающей установкой.": "An industrial hull with reinforced mining equipment.",
   "Добывающий корабль с парными буровыми захватами и защищёнными рудными отсеками.": "Mining ship with paired drilling claws and protected ore bays.",
-  "Крупный промышленный корабль с четырьмя добывающими узлами и увеличенным рудным трюмом.": "Large industrial ship with four extraction heads and a larger ore hold."
+  "Крупный промышленный корабль с четырьмя добывающими узлами и увеличенным рудным трюмом.": "Large industrial ship with four extraction heads and a larger ore hold.",
+  "ТЕРМИНАЛ ЭДЕМА": "EDEM TERMINAL",
+  "Подключение к серверу": "Connecting to server",
+  "Проверяем сессию и загружаем данные пилота…": "Checking your session and loading pilot data…",
+  "Повторить подключение": "Retry connection",
+  "Не удалось подключиться": "Unable to connect",
+  "Сервер пока не отвечает. Проверьте соединение и повторите попытку.": "The server is not responding. Check your connection and try again."
 }

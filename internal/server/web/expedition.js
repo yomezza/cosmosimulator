@@ -429,11 +429,6 @@
         tr("Точка гиперперехода"),
     );
     row(root, "Зарезервировано топлива", s.reserved_fuel);
-    row(
-      root,
-      "Водород в трюме",
-      `${s.cargo.agni || 0} · ${tr("1 ед. водорода = до 5 единиц топлива")}`,
-    );
     const tools = n("div", undefined, "inline-controls");
     tools.append(
       b("Трюм", () => {

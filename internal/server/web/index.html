@@ -20,8 +20,36 @@
     <script src="galaxy.js" defer></script>
   </head>
   <body>
+    <div
+      id="startup-screen"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      <section class="startup-card" aria-labelledby="startup-title">
+        <div class="startup-mark" aria-hidden="true"></div>
+        <p class="startup-label" data-i18n="ТЕРМИНАЛ ЭДЕМА">ТЕРМИНАЛ ЭДЕМА</p>
+        <h1 id="startup-title" data-i18n="Подключение к серверу">
+          Подключение к серверу
+        </h1>
+        <p
+          id="startup-message"
+          data-i18n="Проверяем сессию и загружаем данные пилота…"
+        >
+          Проверяем сессию и загружаем данные пилота…
+        </p>
+        <button
+          id="startup-retry"
+          type="button"
+          hidden
+          data-i18n="Повторить подключение"
+        >
+          Повторить подключение
+        </button>
+      </section>
+    </div>
     <header>
-      <a class="brand" href="/">◈ COSMOSIMULATOR <small>EDEM / 0.9.2</small></a>
+      <a class="brand" href="/">◈ COSMOSIMULATOR <small>EDEM / 0.9.3</small></a>
       <div class="header-actions">
         <div id="window-switcher" aria-label="Открытые окна"></div>
         <button
@@ -188,7 +216,7 @@
       </button>
     </aside>
     <main>
-      <section id="auth" class="auth">
+      <section id="auth" class="auth" hidden>
         <div class="intro">
           <p class="eyebrow">
             <span data-i18n="ЭКОНОМИЧЕСКАЯ КОСМИЧЕСКАЯ ПЕСОЧНИЦА"
@@ -329,7 +357,7 @@
     <footer>
       <span id="server-status" class="signal"
         ><span data-i18n="● СЕРВЕР ОНЛАЙН">● СЕРВЕР ОНЛАЙН</span></span
-      ><span>COSMOSIMULATOR · v0.9.2</span>
+      ><span>COSMOSIMULATOR · v0.9.3</span>
     </footer>
     <div id="toast" role="status" hidden></div>
     <div id="tooltip" role="tooltip" hidden></div>

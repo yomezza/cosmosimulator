@@ -11,6 +11,68 @@ body {
   font-size: 13px;
   line-height: 1.5;
 }
+#startup-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 20000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: var(--bg);
+}
+.startup-card {
+  width: min(340px, 100%);
+  padding: 26px 24px;
+  border: 1px solid #405966;
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 16px 60px #0005;
+  text-align: center;
+}
+.startup-mark {
+  width: 28px;
+  height: 28px;
+  margin: 0 auto 18px;
+  border: 2px solid #344650;
+  border-top-color: var(--focus);
+  border-radius: 50%;
+  animation: startup-spin 1s linear infinite;
+}
+.startup-label {
+  color: var(--focus);
+  font:
+    9px/1.5 ui-monospace,
+    monospace;
+  letter-spacing: 1.8px;
+  margin: 0 0 8px;
+}
+.startup-card h1 {
+  font-size: 16px;
+  font-weight: 500;
+  margin: 0 0 10px;
+}
+#startup-message {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0;
+}
+#startup-retry {
+  margin-top: 18px;
+}
+.startup-failed .startup-mark {
+  animation: none;
+  border-color: var(--accent);
+}
+.resource-card .resource-fuel {
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  color: var(--focus);
+}
+@keyframes startup-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 header {
   height: var(--header);
   padding: 0 20px;

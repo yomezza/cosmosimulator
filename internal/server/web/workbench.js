@@ -283,6 +283,10 @@
       node("p", tr(r.sources), "muted"),
       node("p", tr(r.origin), "muted"),
     );
+    if (r.id === "agni")
+      box.append(
+        node("p", tr("1 ед. водорода = до 5 единиц топлива"), "resource-fuel"),
+      );
     const tags = node("div", undefined, "resource-tags");
     for (const text of [r.rarity, ...(r.uses || [])])
       tags.append(node("span", tr(text)));

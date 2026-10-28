@@ -2,6 +2,7 @@
 const $ = (id) => document.getElementById(id),
   t = (s) => I18n.t(s);
 let signedIn = false,
+  starting = true,
   pending = false,
   mode = "login",
   authEpoch = 0,
@@ -10,8 +11,9 @@ let signedIn = false,
   previousBalance = null,
   balanceTimer;
 window.gameData = {};
-async function api(path, body) {
+async function api(path, body, signal) {
   const r = await fetch("/api/" + path, {
+    signal,
     method: body === undefined ? "GET" : "POST",
     headers: body === undefined ? {} : { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -23,6 +25,22 @@ async function api(path, body) {
     throw e;
   }
   return data;
+}
+function startupStatus(failed = false) {
+  const title = failed ? "Не удалось подключиться" : "Подключение к серверу",
+    message = failed
+      ? "Сервер пока не отвечает. Проверьте соединение и повторите попытку."
+      : "Проверяем сессию и загружаем данные пилота…";
+  $("startup-title").dataset.i18n = title;
+  $("startup-title").textContent = t(title);
+  $("startup-message").dataset.i18n = message;
+  $("startup-message").textContent = t(message);
+  $("startup-screen").classList.toggle("startup-failed", failed);
+  $("startup-retry").hidden = !failed;
+}
+function finishStartup() {
+  starting = false;
+  $("startup-screen").hidden = true;
 }
 function authMode(value) {
   mode = value;
@@ -62,6 +80,7 @@ function showAuth() {
   ])
     $(id).hidden = true;
   $("auth").hidden = false;
+  finishStartup();
 }
 let ongoingRefresh = null;
 function refresh(force = false) {
@@ -77,18 +96,20 @@ function refresh(force = false) {
 async function refreshData() {
   if (pending) return;
   const epoch = authEpoch;
+  const controller = starting ? new AbortController() : null,
+    timeout = controller ? setTimeout(() => controller.abort(), 15000) : null;
   pending = true;
   lastPoll = Date.now();
   try {
     const [state, profile, expedition, fleet, clock, workbench, notifications] =
       await Promise.all([
-        api("state"),
-        api("profile"),
-        api("expedition"),
-        api("fleet"),
-        api("gameplay"),
-        api("workbench"),
-        api("notifications"),
+        api("state", undefined, controller?.signal),
+        api("profile", undefined, controller?.signal),
+        api("expedition", undefined, controller?.signal),
+        api("fleet", undefined, controller?.signal),
+        api("gameplay", undefined, controller?.signal),
+        api("workbench", undefined, controller?.signal),
+        api("notifications", undefined, controller?.signal),
       ]);
     if (epoch !== authEpoch) return;
     signedIn = true;
@@ -197,16 +218,25 @@ async function refreshData() {
       t("Данные обновлены: ") + new Date().toLocaleTimeString(I18n.language);
     $("server-status").textContent = t("● СЕРВЕР ОНЛАЙН");
     window.dispatchEvent(new Event("gamedata"));
+    finishStartup();
   } catch (e) {
     if (epoch !== authEpoch) return;
     if (e.status === 401) showAuth();
     else {
       $("server-status").textContent = t("Переподключение…");
+      if (starting) startupStatus(true);
     }
   } finally {
+    clearTimeout(timeout);
+    controller?.abort();
     if (epoch === authEpoch) pending = false;
   }
 }
+$("startup-retry").onclick = () => {
+  if (!starting || pending) return;
+  startupStatus();
+  refresh(true);
+};
 $("login-tab").onclick = () => authMode("login");
 $("register-tab").onclick = () => authMode("register");
 $("auth-form").onsubmit = async (e) => {
