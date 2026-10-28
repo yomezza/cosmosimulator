@@ -49,7 +49,13 @@ func regionName(id int) string {
 	}
 	return ""
 }
+
+var colonyCore = Resource{"colony_core", "Планетарное колонизационное ядро", "Технология", "Одноразовое ядро развёртывания планетарной колонии. Выдаётся администратором.", 0}
+
 func resource(id string) (Resource, bool) {
+	if id == colonyCore.ID {
+		return colonyCore, true
+	}
 	for _, r := range resources {
 		if r.ID == id {
 			return r, true

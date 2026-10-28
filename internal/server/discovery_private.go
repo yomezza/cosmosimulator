@@ -112,7 +112,7 @@ func secureDiscovery(ctx context.Context, tx pgx.Tx, g *Galaxy) (bool, error) {
 	}
 	g.DiscoverySecret = hex.EncodeToString(key)
 	// Existing observations and object-bound work must survive the upgrade.
-	rows, err := tx.Query(ctx, `SELECT star FROM surveys UNION SELECT star FROM research_jobs UNION SELECT star FROM mining_jobs UNION SELECT star FROM resource_quotas UNION SELECT star FROM ships UNION SELECT source_star FROM automation_tasks WHERE status IN('queued','running','paused') UNION SELECT star FROM navigation_notes WHERE object_id<>''`)
+	rows, err := tx.Query(ctx, `SELECT star FROM surveys UNION SELECT star FROM research_jobs UNION SELECT star FROM mining_jobs UNION SELECT star FROM resource_quotas UNION SELECT star FROM ships UNION SELECT source_star FROM automation_tasks WHERE status IN('queued','running','paused') UNION SELECT star FROM navigation_notes WHERE object_id<>'' UNION SELECT star FROM planet_surfaces`)
 	if err != nil {
 		return false, err
 	}

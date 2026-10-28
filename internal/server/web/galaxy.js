@@ -599,6 +599,7 @@
     }
   }
   function draw() {
+    if (root.classList.contains("planet-open")) return;
     if (mode !== "galaxy") hideSummary();
     zoomLabel.textContent = cam().zoom.toFixed(1) + "×";
     if (
@@ -1196,6 +1197,14 @@
       ];
     if (site.details)
       items.push({
+        label:
+          site.kind === "Садовый мир"
+            ? "Поверхность и колонизация"
+            : "Поверхность планеты",
+        action: () => UI.openPlanet(local.star.id, site.details.id),
+      });
+    if (site.details)
+      items.push({
         label: "Перейти на орбиту",
         disabled: blocked,
         action: () =>
@@ -1436,16 +1445,23 @@
     routePanel();
     draw();
   }
+  window.addEventListener("returntoplanetsystem", async (event) => {
+    if (!signedIn) return;
+    await load();
+    if (galaxy && signedIn) openSystem(event.detail);
+  });
   window.addEventListener("showcurrentsystem", () => {
+    window.PlanetUI?.dismiss(false);
     if (galaxy && signedIn) openSystem(gameData.expedition.ship.star);
     else {
       currentSystemRequested = true;
       load();
     }
   });
-  window.addEventListener("showstar", (event) =>
-    showStar(Number(event.detail)),
-  );
+  window.addEventListener("showstar", (event) => {
+    window.PlanetUI?.dismiss(false);
+    showStar(Number(event.detail));
+  });
   function findShip(id) {
     pendingFind = id;
     if (!galaxy) return;

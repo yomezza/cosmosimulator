@@ -1767,6 +1767,7 @@
         ["manage", "Управление участниками"],
         ["projects", "Создание проектов"],
         ["warehouse", "Выдача со склада"],
+        ["colonize", "Планетарная колонизация"],
       ];
       side.append(
         UI.table(
@@ -2296,6 +2297,21 @@
     );
     root.append(
       form,
+      b("Настройки колонизации", () =>
+        UI.loadPlanet().then((p) => {
+          const r = Modules.create(
+            "colony-settings",
+            "Настройки колонизации",
+            700,
+            720,
+          );
+          r.replaceChildren();
+          p.settings(r).then((ok) => {
+            if (ok && signedIn && gameData.state.user.role === "admin")
+              Modules.open("colony-settings");
+          });
+        }),
+      ),
       b("Восстановить квоты сейчас", () =>
         UI.confirm(
           "Восстановление квот",
@@ -2319,6 +2335,16 @@
   };
   function eventText(item) {
     const data = item.data || {};
+    if (item.kind === "colony")
+      return (
+        tr("Колонизация завершена") +
+        " · " +
+        data.planet +
+        " · " +
+        tr("Сектор") +
+        " " +
+        data.sector
+      );
     return (
       (item.message
         ? tr(item.message) +
@@ -2435,6 +2461,12 @@
           n("summary", eventText(item)),
           n("p", fmtTime(item.created_at), "muted"),
         );
+        if (item.kind === "colony")
+          detail.append(
+            b("Открыть проект", () =>
+              UI.loadPlanet().then((p) => p.project(item.data.project)),
+            ),
+          );
         if (item.data?.star)
           detail.append(
             b("На карте", () => {

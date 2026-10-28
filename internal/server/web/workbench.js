@@ -255,6 +255,12 @@
           UI.stationEditor(star.id, site.id),
         ),
       );
+    if (site.details)
+      actions.append(
+        UI.button("Поверхность планеты", () =>
+          UI.openPlanet(star.id, site.details.id),
+        ),
+      );
     root.append(actions);
     container.scrollTop = scroll;
   }

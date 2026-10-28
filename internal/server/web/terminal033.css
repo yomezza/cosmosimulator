@@ -3240,3 +3240,107 @@ button.picker-button.system-picker .picker-chevron {
 .shipyard-card > .hologram-surface {
   height: 150px;
 }
+.planet-open > :not(.planet-ui) {
+  display: none !important;
+}
+.planet-ui {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  animation: planet-zoom 0.2s ease-out;
+}
+@keyframes planet-zoom {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.planet-leaving {
+  opacity: 0;
+  transform: scale(0.92);
+  transition:
+    opacity 0.16s,
+    transform 0.16s;
+}
+.planet-toolbar,
+.planet-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 0;
+}
+.planet-toolbar strong {
+  flex: 1;
+}
+.planet-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 290px;
+  flex: 1;
+  min-height: 300px;
+  gap: 10px;
+}
+.planet-canvas-wrap {
+  min-width: 0;
+  min-height: 300px;
+  position: relative;
+  background: #0d1923;
+}
+#planet-map {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: grab;
+}
+#planet-map:active {
+  cursor: grabbing;
+}
+.planet-sector-card {
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid var(--border);
+}
+.planet-sector-card button {
+  margin: 4px 0;
+}
+.planet-legend {
+  font-size: 10px;
+  color: var(--muted);
+}
+.planet-legend span {
+  padding-left: 5px;
+}
+.colony-list-item,
+.colony-contribution {
+  border-bottom: 1px solid var(--border);
+  padding: 10px 0;
+}
+.colony-contribution {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+}
+.colony-history {
+  overflow-wrap: anywhere;
+  font-size: 10px;
+}
+@container (max-width:700px) {
+  .planet-workspace {
+    grid-template-columns: 1fr;
+    overflow: auto;
+  }
+  .planet-sector-card {
+    max-height: 330px;
+  }
+  .planet-ui {
+    overflow: auto;
+  }
+}

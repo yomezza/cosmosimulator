@@ -137,6 +137,13 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("GET /api/admin/galaxies", a.adminGalaxies)
 	m.HandleFunc("POST /api/admin/galaxies/preview", a.adminGalaxies)
 	m.HandleFunc("POST /api/admin/galaxies/apply", a.adminGalaxies)
+	m.HandleFunc("GET /api/planet/surface", a.planetSurface)
+	m.HandleFunc("GET /api/planet/state", a.planetState)
+	m.HandleFunc("GET /api/planet/projects", a.colonyList)
+	m.HandleFunc("GET /api/planet/project", a.colonyView)
+	m.HandleFunc("POST /api/planet/action", a.colonyAction)
+	m.HandleFunc("GET /api/admin/planet/settings", a.planetSettings)
+	m.HandleFunc("POST /api/admin/planet/settings", a.planetSettings)
 	m.HandleFunc("GET /api/system", a.systemView)
 	m.HandleFunc("GET /api/profile", a.profile)
 	m.HandleFunc("POST /api/profile/upgrade", a.upgrade)
@@ -526,6 +533,9 @@ func (a *App) advanceTick(ctx context.Context, force bool, actor ...int64) error
 		if _, err = tx.Exec(ctx, `UPDATE ships SET arrival=arrival-make_interval(secs=>$1),departure=departure-make_interval(secs=>$1),local_arrival=local_arrival-make_interval(secs=>$1),local_started=local_started-make_interval(secs=>$1) WHERE arrival IS NOT NULL OR local_arrival IS NOT NULL`, seconds); err != nil {
 			return err
 		}
+	}
+	if err = advanceColonies(ctx, tx, tick); err != nil {
+		return err
 	}
 	if err = completeMining(ctx, tx, tick); err != nil {
 		return err

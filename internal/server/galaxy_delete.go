@@ -9,6 +9,7 @@ import (
 
 func deletionBlockers(ctx context.Context, tx pgx.Tx, ids []int) (map[string]int, error) {
 	queries := map[string]string{
+		"planet_projects":   `SELECT count(*) FROM planet_projects p JOIN planet_surfaces s ON s.id=p.surface WHERE s.star=ANY($1::int[])`,
 		"ships":             `SELECT count(*) FROM ships s WHERE star=ANY($1::int[]) OR destination=ANY($1::int[]) OR EXISTS(SELECT 1 FROM jsonb_array_elements_text(waypoints) v WHERE v::int=ANY($1::int[]))`,
 		"warehouses":        `SELECT count(*) FROM warehouses WHERE star=ANY($1::int[]) AND EXISTS(SELECT 1 FROM jsonb_each_text(cargo) e WHERE e.value::bigint>0)`,
 		"corporate_storage": `SELECT count(*) FROM company_storage WHERE star=ANY($1::int[]) AND EXISTS(SELECT 1 FROM jsonb_each_text(cargo) e WHERE e.value::bigint>0)`,

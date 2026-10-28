@@ -10,6 +10,7 @@
     <script src="i18n.js" defer></script>
     <script src="windows.js" defer></script>
     <script src="workbench.js" defer></script>
+    <script src="planet-loader.js" defer></script>
     <script src="controls.js" defer></script>
     <script src="holograms.js" defer></script>
     <script src="station-labels.js" defer></script>
@@ -53,7 +54,7 @@
     </div>
     <header>
       <a class="brand" href="/"
-        >◈ COSMOSIMULATOR <small>EDEM / 0.11.0</small></a
+        >◈ COSMOSIMULATOR <small>EDEM / 0.12.0</small></a
       >
       <div class="header-actions">
         <div id="window-switcher" aria-label="Открытые окна"></div>
@@ -156,6 +157,10 @@
           >
         </button>
       </details>
+      <button type="button" id="nav-colonies" data-nav="Колонии">
+        <span class="nav-icon">⬡</span
+        ><span class="nav-label" data-i18n="Колонии">Колонии</span>
+      </button>
       <button
         type="button"
         data-open="ship"
@@ -391,7 +396,7 @@
     <footer>
       <span id="server-status" class="signal"
         ><span data-i18n="● СЕРВЕР ОНЛАЙН">● СЕРВЕР ОНЛАЙН</span></span
-      ><span>COSMOSIMULATOR · v0.11.0</span>
+      ><span>COSMOSIMULATOR · v0.12.0</span>
     </footer>
     <div id="toast" role="status" hidden></div>
     <div id="tooltip" role="tooltip" hidden></div>

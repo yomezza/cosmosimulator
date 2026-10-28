@@ -129,6 +129,7 @@
               corporate_storage: "Корпоративные запасы",
               stations: "Станции игроков",
               projects: "Корпоративные проекты",
+              planet_projects: "Планетарные проекты",
               tasks: "Задачи планировщика",
               deliveries: "Доставки",
               reservations: "Бронирования",

@@ -106,7 +106,7 @@ func (a *App) corporationCommand(ctx context.Context, tx pgx.Tx, u User, s *Ship
 			return true, errors.New("Некорректное название роли")
 		}
 		for _, p := range in.Permissions {
-			if p != "finance" && p != "manage" && p != "projects" && p != "warehouse" {
+			if p != "finance" && p != "manage" && p != "projects" && p != "warehouse" && p != "colonize" {
 				return true, errors.New("Неизвестное полномочие")
 			}
 		}
@@ -156,6 +156,14 @@ func (a *App) corporationCommand(ctx context.Context, tx pgx.Tx, u User, s *Ship
 			_, err = tx.Exec(ctx, `UPDATE users SET company_role=NULL WHERE id=$1`, in.ID)
 		}
 	case "company_dissolve":
+		var planets bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM planet_projects WHERE owner_company=$1)`, cid).Scan(&planets); err != nil {
+			return true, err
+		}
+		if planets {
+			return true, errors.New("У корпорации есть планетарные проекты")
+		}
+
 		var pending bool
 		var balance int64
 		var raw []byte
