@@ -1836,9 +1836,17 @@ input[aria-invalid="true"] {
   padding: 10px 5px;
   border-bottom: 1px solid #2c424e;
 }
-.study-entry strong {
-  display: block;
+.study-entry-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
   margin-bottom: 6px;
+}
+.study-region {
+  color: var(--muted);
+  font-size: 10px;
+  overflow-wrap: anywhere;
 }
 .study-entry small {
   display: block;

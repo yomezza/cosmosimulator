@@ -46,6 +46,9 @@
       i = e("input"),
       span = e("span", tr(text));
     l.dataset.filter = id;
+    if (id === "labels")
+      l.dataset.help =
+        "При приближении названия систем видны только рядом с курсором.";
     i.type = "checkbox";
     i.checked = true;
     i.onchange = () => {
@@ -98,8 +101,37 @@
     territories = [],
     hoverID = null,
     hoverTimer,
-    hoverGeneration = 0;
-  const summaryCache = new Map();
+    hoverGeneration = 0,
+    labelFocus = null,
+    labelFrame = null,
+    projectedSource = null,
+    projectedKey = "",
+    projectedX = new Float64Array(),
+    projectedY = new Float64Array(),
+    visibleStars = [],
+    regionCenters = [];
+  const labelRadius = 160,
+    labelLimit = 48;
+  function requestLabelDraw() {
+    if (labelFrame !== null) return;
+    labelFrame = requestAnimationFrame(() => {
+      labelFrame = null;
+      draw();
+    });
+  }
+  function trackLabelFocus(event) {
+    const bounds = canvas.getBoundingClientRect(),
+      x = event.clientX - bounds.left,
+      y = event.clientY - bounds.top;
+    labelFocus =
+      x >= 0 && y >= 0 && x <= bounds.width && y <= bounds.height
+        ? { x, y }
+        : null;
+    if (mode === "galaxy" && flags.labels && cam().zoom > 3) requestLabelDraw();
+  }
+  canvas.onpointerenter = trackLabelFocus;
+  const summaryCache = new Map(),
+    labelWidths = new Map();
   let knownStars = new Set();
   function hideSummary() {
     hoverID = null;
@@ -107,11 +139,42 @@
     hoverGeneration++;
     summary.hidden = true;
   }
-  canvas.onpointerleave = hideSummary;
+  canvas.onpointerleave = () => {
+    hideSummary();
+    labelFocus = null;
+    requestLabelDraw();
+  };
   function buildTerritories() {
     if (territorySource === galaxy) return;
     territorySource = galaxy;
+    labelWidths.clear();
     territories = [];
+    const regions = new Map(),
+      names = new Map(
+        (galaxy.regions || []).map((region) => [region.id, region.name]),
+      );
+    for (const star of galaxy.stars) {
+      if (star.deleted) continue;
+      const key = star.galaxy + ":" + star.region,
+        entry = regions.get(key) || {
+          galaxy: star.galaxy,
+          name: names.get(star.region),
+          x: 0,
+          y: 0,
+          count: 0,
+        };
+      entry.x += star.x;
+      entry.y += star.y;
+      entry.count++;
+      regions.set(key, entry);
+    }
+    regionCenters = [...regions.values()]
+      .filter((region) => region.name)
+      .map((region) => ({
+        ...region,
+        x: region.x / region.count,
+        y: region.y / region.count,
+      }));
     for (const definition of galaxy.galaxies || [])
       for (const area of definition.territories || []) {
         const center = galaxy.stars[area.anchor - 1],
@@ -154,10 +217,8 @@
       y = event.clientY - bounds.y;
     let closest = null,
       distance = 9;
-    for (const star of galaxy.stars) {
-      if (star.galaxy !== viewedGalaxy) continue;
-      const p = galaxyPoint(star),
-        d = Math.hypot(x - p.x, y - p.y);
+    for (const { star, x: sx, y: sy } of visibleStars) {
+      const d = Math.hypot(x - sx, y - sy);
       if (d < distance) {
         distance = d;
         closest = star;
@@ -432,6 +493,102 @@
       angle: Math.atan2(b.y - a.y, b.x - a.x),
     };
   }
+  function projectGalaxy(w, h) {
+    const c = camera.galaxy,
+      radius = definition()?.radius || 1250,
+      key = [
+        viewedGalaxy,
+        galaxy.revision,
+        galaxy.stars.length,
+        w,
+        h,
+        c.zoom,
+        c.x,
+        c.y,
+        radius,
+      ].join("/");
+    if (projectedSource === galaxy && projectedKey === key) return;
+    projectedSource = galaxy;
+    projectedKey = key;
+    if (projectedX.length <= galaxy.stars.length) {
+      projectedX = new Float64Array(galaxy.stars.length + 1);
+      projectedY = new Float64Array(galaxy.stars.length + 1);
+    }
+    visibleStars = [];
+    const scale = (Math.min(w, h) / (radius * 2)) * c.zoom,
+      cx = w / 2 + c.x,
+      cy = h / 2 + c.y;
+    for (const star of galaxy.stars) {
+      if (star.deleted || star.galaxy !== viewedGalaxy) continue;
+      const x = cx + star.x * scale,
+        y = cy + star.y * scale;
+      projectedX[star.id] = x;
+      projectedY[star.id] = y;
+      if (x >= -10 && y >= -10 && x <= w + 10 && y <= h + 10)
+        visibleStars.push({ star, x, y });
+    }
+  }
+  function outsideView(ax, ay, bx, by, w, h) {
+    return (
+      (ax < 0 && bx < 0) ||
+      (ay < 0 && by < 0) ||
+      (ax > w && bx > w) ||
+      (ay > h && by > h)
+    );
+  }
+  function drawNearbyLabels(w, h) {
+    if (!flags.labels || camera.galaxy.zoom <= 3 || !labelFocus) return;
+    const { x, y } = labelFocus,
+      candidates = visibleStars
+        .map((point) => ({
+          ...point,
+          distance: (point.x - x) ** 2 + (point.y - y) ** 2,
+        }))
+        .filter((point) => point.distance <= labelRadius ** 2)
+        .sort((a, b) => a.distance - b.distance)
+        .slice(0, 256),
+      placed = [];
+    ctx.font = "10px monospace";
+    for (const point of candidates) {
+      if (placed.length >= labelLimit) break;
+      let width = labelWidths.get(point.star.name);
+      if (width === undefined) {
+        width = ctx.measureText(point.star.name).width;
+        labelWidths.set(point.star.name, width);
+      }
+      const left = point.x + 5,
+        top = point.y - 15,
+        right = left + width,
+        bottom = point.y - 3;
+      if (
+        right < 0 ||
+        left > w ||
+        bottom < 0 ||
+        top > h ||
+        placed.some(
+          (box) =>
+            left < box.right + 3 &&
+            right + 3 > box.left &&
+            top < box.bottom + 2 &&
+            bottom + 2 > box.top,
+        )
+      )
+        continue;
+      ctx.fillStyle = knownStars.has(point.star.id)
+        ? {
+            O: "#96baff",
+            B: "#bdd5ff",
+            A: "#edf1ff",
+            F: "#fff0c4",
+            G: "#ffdb78",
+            K: "#f5ad65",
+            M: "#ee8277",
+          }[point.star.class] || "#fff"
+        : "#91a5b8";
+      ctx.fillText(point.star.name, left, point.y - 5);
+      placed.push({ left, top, right, bottom });
+    }
+  }
   function draw() {
     if (mode !== "galaxy") hideSummary();
     zoomLabel.textContent = cam().zoom.toFixed(1) + "×";
@@ -576,16 +733,24 @@
         }
       return;
     }
+    projectGalaxy(w, h);
     drawTerritories();
     ctx.strokeStyle = "#273749";
     ctx.lineWidth = 0.6;
     ctx.beginPath();
     for (const lane of galaxy.lanes) {
-      if (starGalaxy(lane.from) !== viewedGalaxy) continue;
-      const a = galaxyPoint(galaxy.stars[lane.from - 1]),
-        b = galaxyPoint(galaxy.stars[lane.to - 1]);
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
+      if (
+        starGalaxy(lane.from) !== viewedGalaxy ||
+        starGalaxy(lane.to) !== viewedGalaxy
+      )
+        continue;
+      const ax = projectedX[lane.from],
+        ay = projectedY[lane.from],
+        bx = projectedX[lane.to],
+        by = projectedY[lane.to];
+      if (outsideView(ax, ay, bx, by, w, h)) continue;
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(bx, by);
     }
     ctx.stroke();
     ctx.strokeStyle = "#efad58";
@@ -614,45 +779,43 @@
       K: "#f5ad65",
       M: "#ee8277",
     };
-    for (const s of galaxy.stars) {
-      if (s.galaxy !== viewedGalaxy) continue;
-      const p = galaxyPoint(s);
-      ctx.fillStyle = knownStars.has(s.id)
-        ? colors[s.class] || "#ffffff"
-        : "#6d8296";
-      ctx.beginPath();
-      ctx.arc(
-        p.x,
-        p.y,
-        Math.min(3.2, 1.15 * Math.sqrt(cam().zoom)),
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
-      if (s.id === selected) {
-        ctx.strokeStyle = "#efad58";
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-      if (flags.labels && cam().zoom > 3) {
-        ctx.font = "10px monospace";
-        ctx.fillText(s.name, p.x + 5, p.y - 5);
-      }
+    const groups = new Map(),
+      dotRadius = Math.min(3.2, 1.15 * Math.sqrt(cam().zoom));
+    for (const point of visibleStars) {
+      const color = knownStars.has(point.star.id)
+          ? colors[point.star.class] || "#fff"
+          : "#6d8296",
+        group = groups.get(color) || [];
+      group.push(point);
+      groups.set(color, group);
     }
+    for (const [color, points] of groups) {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      for (const point of points) {
+        ctx.moveTo(point.x + dotRadius, point.y);
+        ctx.arc(point.x, point.y, dotRadius, 0, Math.PI * 2);
+      }
+      ctx.fill();
+    }
+    const selectedPoint = visibleStars.find(
+      (point) => point.star.id === selected,
+    );
+    if (selectedPoint) {
+      ctx.strokeStyle = "#efad58";
+      ctx.beginPath();
+      ctx.arc(selectedPoint.x, selectedPoint.y, 8, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    drawNearbyLabels(w, h);
     if (flags.labels) {
       ctx.font = "11px monospace";
-      for (const region of galaxy.regions || []) {
-        const stars = galaxy.stars.filter(
-          (s) => s.region === region.id && s.galaxy === viewedGalaxy,
-        );
-        if (!stars.length) continue;
-        const p = galaxyPoint({
-          x: stars.reduce((n, s) => n + s.x, 0) / stars.length,
-          y: stars.reduce((n, s) => n + s.y, 0) / stars.length,
-        });
-        ctx.fillStyle = "#dce5ed";
-        ctx.fillText(tr(region.name), p.x, p.y);
+      ctx.fillStyle = "#dce5ed";
+      for (const region of regionCenters) {
+        if (region.galaxy !== viewedGalaxy) continue;
+        const point = galaxyPoint(region);
+        if (point.x >= -80 && point.y >= -20 && point.x <= w && point.y <= h)
+          ctx.fillText(tr(region.name), point.x, point.y);
       }
     }
     if (
@@ -1044,7 +1207,7 @@
       });
     if (site.resources?.length)
       items.push({
-        label: "Разведка и добыча",
+        label: "Добыча",
         action: () => Modules.open("research"),
       });
     UI.menu(items, x, y);
@@ -1330,6 +1493,7 @@
     canvas.setPointerCapture(event.pointerId);
   };
   canvas.onpointermove = (event) => {
+    trackLabelFocus(event);
     if (!pointer) {
       if (mode === "galaxy") hoverSummary(event);
       if (mode === "system") {
@@ -1419,10 +1583,8 @@
     }
     let closest,
       distance = 9;
-    for (const star of galaxy.stars) {
-      if (star.galaxy !== viewedGalaxy) continue;
-      const p = galaxyPoint(star),
-        d = Math.hypot(x - p.x, y - p.y);
+    for (const { star, x: sx, y: sy } of visibleStars) {
+      const d = Math.hypot(x - sx, y - sy);
       if (d < distance) {
         distance = d;
         closest = star;
@@ -1565,6 +1727,9 @@
   });
   window.addEventListener("signedout", () => {
     hideSummary();
+    labelFocus = null;
+    visibleStars = [];
+    projectedSource = null;
     summaryCache.clear();
     request++;
     pendingStar = null;

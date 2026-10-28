@@ -13,6 +13,11 @@
     known = () => gameData.workbench?.known || [];
   const personal = (item) => item.source === "survey";
   const star = (id) => window.MapData?.stars.find((s) => s.id === id);
+  const region = (s) =>
+    tr(
+      window.MapData?.regions?.find((r) => r.id === s?.region)?.name ||
+        "Регион неизвестен",
+    );
   const source = (item) =>
     personal(item)
       ? "Личное исследование"
@@ -86,6 +91,7 @@
             [
               star(item.star)?.name || String(item.star),
               tr(star(item.star)?.galaxy || "edem"),
+              region(star(item.star)),
             ].some((text) => text.toLocaleLowerCase(I18n.language).includes(q)),
         )
         .sort(
@@ -100,10 +106,14 @@
       const s = star(item.star),
         card = n("article", undefined, "study-entry"),
         body = n("div"),
+        heading = n("div", undefined, "study-entry-heading"),
+        area = n("span", region(s), "study-region"),
         tag = n("span", tr(source(item)), "study-source");
       tag.dataset.source = item.source;
+      area.title = tr("Регион") + ": " + region(s);
+      heading.append(n("strong", s?.name || String(item.star)), area);
       body.append(
-        n("strong", s?.name || String(item.star)),
+        heading,
         tag,
         n("small", new Date(item.received_at).toLocaleString(I18n.language)),
       );

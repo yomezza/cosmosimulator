@@ -129,7 +129,7 @@
   "Заправить · 1 Агни → 5 топлива": "Refuel · 1 Agni → 5 fuel",
   "Отправиться": "Depart",
   "Переход: 2 топлива и 5 секунд. Только по гиперкоридорам.": "Each jump costs 2 fuel and takes 5 seconds. Hyperlanes only.",
-  "Разведка и добыча": "Exploration and extraction",
+  "Разведка и добыча": "Mining",
   "Звезда": "Star",
   "Планеты и месторождения скрыты до разведки.": "Planets and deposits remain hidden until surveyed.",
   "Каменистая": "Rocky",
@@ -1338,5 +1338,8 @@
   "Сканирование объектов текущей системы": "Scan the objects in the current system",
   "Снять выделение": "Clear selection",
   "Текущие экспедиции": "Active expeditions",
-  "Созданы доставки": "Deliveries created"
+  "Созданы доставки": "Deliveries created",
+  "Данные о месторождениях недоступны": "Deposit data is unavailable",
+  "При приближении названия систем видны только рядом с курсором.": "When zoomed in, system names appear only near the cursor.",
+  "Регион неизвестен": "Unknown region"
 }

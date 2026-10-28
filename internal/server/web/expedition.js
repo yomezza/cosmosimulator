@@ -524,7 +524,6 @@
       side = n("aside");
     layout.append(main, side);
     root.append(layout);
-    main.append(b("Исследования", () => Modules.open("studies")));
     if (d().surveyed) {
       const rows = [];
       for (const site of d().sites.filter((s) => s.resources?.length)) {
@@ -575,7 +574,7 @@
         }
       }
       main.append(UI.table(["Объект", "Ресурс", "Доступно", "Действие"], rows));
-    } else UI.empty(main, "Исследуйте систему, чтобы открыть месторождения");
+    } else UI.empty(main, "Данные о месторождениях недоступны");
     const cycle = n("section", undefined, "production-card");
     cycle.append(n("h3", tr("Цикл добычи")));
     if (d().job) {
