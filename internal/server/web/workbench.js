@@ -97,12 +97,6 @@
         : document.createTextNode(site.name),
     );
     root.replaceChildren(title, UI.objectTag(site.kind));
-    if (site.kind === "Орбитальная станция")
-      root.append(
-        UI.button("Личное название и заметка", () =>
-          UI.stationEditor(star.id, site.id),
-        ),
-      );
     if (site.details) {
       const p = site.details;
       const params = node("p");
@@ -243,7 +237,8 @@
       "object-note-" + star.id + "-" + site.id,
       saved?.note || "",
     );
-    root.append(
+    const actions = node("div", undefined, "object-footer-actions");
+    actions.append(
       UI.button("Сохранить заметку", () =>
         Game.command({
           action: "note",
@@ -254,6 +249,13 @@
         }),
       ),
     );
+    if (site.kind === "Орбитальная станция")
+      actions.append(
+        UI.button("Личное название и заметка", () =>
+          UI.stationEditor(star.id, site.id),
+        ),
+      );
+    root.append(actions);
     container.scrollTop = scroll;
   }
   window.addEventListener("gamedata", async () => {

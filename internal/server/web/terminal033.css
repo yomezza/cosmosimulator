@@ -2322,6 +2322,14 @@ button.primary-action:hover,
 .object-information > .object-kind-tag {
   margin-bottom: 10px;
 }
+.object-footer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
 .logistics-content {
   display: flex;
   flex-direction: column;
