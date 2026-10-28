@@ -258,6 +258,8 @@
     },
     pointer,
     route = [],
+    activeRoute = [],
+    routeKey = "",
     selected = 1,
     selectedSite = null,
     sites = [],
@@ -589,12 +591,19 @@
     ctx.strokeStyle = "#efad58";
     ctx.lineWidth = 2;
     ctx.beginPath();
-    for (let i = 1; i < route.length; i++) {
-      const a = galaxyPoint(galaxy.stars[route[i - 1] - 1]),
-        b = galaxyPoint(galaxy.stars[route[i] - 1]);
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
-    }
+    updateRoute();
+    for (const path of [activeRoute, route])
+      for (let i = 1; i < path.length; i++) {
+        if (
+          starGalaxy(path[i - 1]) !== viewedGalaxy ||
+          starGalaxy(path[i]) !== viewedGalaxy
+        )
+          continue;
+        const a = galaxyPoint(galaxy.stars[path[i - 1] - 1]),
+          b = galaxyPoint(galaxy.stars[path[i] - 1]);
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+      }
     ctx.stroke();
     const colors = {
       O: "#96baff",
@@ -745,6 +754,7 @@
     );
   }
   function routePanel() {
+    UI.rememberFolds(side);
     side.replaceChildren();
     panelTabs();
     if (panelTab === "fleet") {
@@ -827,7 +837,7 @@
     side.append(target);
     const result = e("p");
     result.id = "route-result";
-    const details = e("details");
+    const details = UI.fold("map:waypoints");
     details.append(e("summary", tr("Промежуточные точки")));
     details.append(
       UI.button("Добавить точку", () => {
@@ -847,20 +857,7 @@
       details.append(line);
     }
     side.append(details);
-    const plan = () => {
-      const points = [...routeStops, selected];
-      let current = from,
-        full = [from];
-      for (const to of points) {
-        if (to === current) continue;
-        const part = localPath(current, to);
-        if (!part) return null;
-        full.push(...part.slice(1));
-        current = to;
-      }
-      return full;
-    };
-    const path = plan(),
+    const path = plannedRoute(from, [...routeStops, selected]),
       jumps = path ? path.length - 1 : 0;
     result.textContent = path
       ? `${jumps} ${tr("переходов")} · ${jumps * (gameData.expedition.ship.spec?.jump_seconds || 5)} s · ${jumps * (gameData.expedition.ship.spec?.jump_fuel || 2)} ${tr("Топливо")}`
@@ -876,14 +873,6 @@
       );
     side.append(
       UI.button(
-        "Показать маршрут",
-        () => {
-          route = path || [];
-          draw();
-        },
-        !path,
-      ),
-      UI.button(
         "Отправиться",
         () =>
           Game.command({
@@ -897,13 +886,13 @@
         "Недостаточно топлива или нет пути",
       ),
     );
-    const way = e("details");
+    const way = UI.fold("map:route-systems");
     way.append(
       e("summary", tr("Системы маршрута")),
       e("p", path?.map((id) => galaxy.stars[id - 1].name).join(" → ") || "—"),
     );
     side.append(way);
-    const bookmarks = e("details");
+    const bookmarks = UI.fold("map:bookmarks");
     bookmarks.append(e("summary", tr("Закладки")));
     for (const item of gameData.workbench.notes?.filter((n) => n.bookmark) ||
       [])
@@ -916,7 +905,7 @@
         }),
       );
     side.append(bookmarks);
-    const filter = e("details");
+    const filter = UI.fold("map:display");
     filters
       .querySelectorAll("label")
       .forEach(
@@ -927,6 +916,39 @@
       );
     filter.append(e("summary", tr("Отображение")), filters);
     side.append(filter);
+  }
+  function plannedRoute(from, points) {
+    const full = [from];
+    for (const to of points) {
+      const current = full[full.length - 1];
+      if (current === to) continue;
+      const part = localPath(current, to);
+      if (!part) return null;
+      full.push(...part.slice(1));
+    }
+    return full;
+  }
+  function updateRoute() {
+    const ship = gameData.expedition?.ship;
+    if (!ship) return;
+    const key = JSON.stringify([
+      galaxy.revision,
+      ship.id,
+      ship.star,
+      ship.path,
+      ship.waypoints,
+      selected,
+      routeStops,
+    ]);
+    if (key === routeKey) return;
+    routeKey = key;
+    route = plannedRoute(ship.star, [...routeStops, selected]) || [];
+    activeRoute = ship.destination ? [...ship.path] : [ship.star];
+    const tail = plannedRoute(
+      activeRoute[activeRoute.length - 1],
+      ship.waypoints || [],
+    );
+    if (tail) activeRoute.push(...tail.slice(1));
   }
   function localPath(from, to) {
     if (from === to) return [from];
@@ -1015,6 +1037,11 @@
           },
         },
       );
+    if (site.kind === "Орбитальная станция")
+      items.push({
+        label: "Личное название и заметка",
+        action: () => UI.stationEditor(local.star.id, site.id),
+      });
     if (site.resources?.length)
       items.push({
         label: "Разведка и добыча",
@@ -1023,6 +1050,7 @@
     UI.menu(items, x, y);
   }
   function systemPanel() {
+    UI.rememberFolds(side);
     side.replaceChildren();
     panelTabs();
     if (panelTab === "fleet") {
@@ -1033,6 +1061,7 @@
       routePanel();
       return;
     }
+    UI.personalizeStations(local);
     side.append(e("h3", local.star.name), e("p", tr(local.region)));
     const stellar = e("p");
     stellar.append(
@@ -1070,7 +1099,9 @@
       model.classList.add("inspector-model");
       side.append(
         model,
-        e("h3", chosen.name),
+        chosen.kind === "Орбитальная станция"
+          ? UI.stationLabel(local.star.id, chosen.id, chosen.name, "h3")
+          : e("h3", chosen.name),
         UI.button("Все объекты", () => {
           selectedSite = null;
           systemPanel();
@@ -1083,8 +1114,7 @@
       ["planet", "Планеты"],
       ["belt", "Месторождения"],
     ]) {
-      const group = e("details");
-      group.open = true;
+      const group = UI.fold("map:objects:" + local.star.id + ":" + kind, true);
       const objects = local.sites.filter((s) =>
         kind === "planet"
           ? !!s.details
@@ -1104,7 +1134,12 @@
         icon.width = 50;
         icon.height = 50;
         Visuals.object(icon.getContext("2d"), 25, 25, 15, site);
-        button.append(icon, e("span", site.name));
+        button.append(
+          icon,
+          site.kind === "Орбитальная станция"
+            ? UI.stationLabel(local.star.id, site.id, site.name)
+            : e("span", site.name),
+        );
         button.classList.toggle("selected", selectedSite === site.id);
         button.onpointerenter = () => {
           hoveredSite = site.id;
@@ -1118,7 +1153,7 @@
       }
       side.append(group);
     }
-    const display = e("details");
+    const display = UI.fold("map:display");
     display.append(e("summary", tr("Отображение")), filters);
     filters.querySelectorAll("label").forEach((l) => (l.hidden = false));
     side.append(display);
@@ -1536,6 +1571,9 @@
     local = null;
     mode = "galaxy";
     route = [];
+    activeRoute = [];
+    routeStops = [];
+    routeKey = "";
     pendingFind = null;
     back.hidden = true;
     side.replaceChildren();

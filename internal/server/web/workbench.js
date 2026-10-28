@@ -89,8 +89,20 @@
       container.append(model, root);
     }
     const asset = UI.objectModel(site, star);
-    if (model.getAttribute("src") !== asset) model.src = asset;
-    root.replaceChildren(node("h2", site.name), UI.objectTag(site.kind));
+    UI.updateHologram(model, asset, tr(site.kind));
+    const title = node("h2");
+    title.append(
+      site.kind === "Орбитальная станция"
+        ? UI.stationLabel(star.id, site.id, site.name)
+        : document.createTextNode(site.name),
+    );
+    root.replaceChildren(title, UI.objectTag(site.kind));
+    if (site.kind === "Орбитальная станция")
+      root.append(
+        UI.button("Личное название и заметка", () =>
+          UI.stationEditor(star.id, site.id),
+        ),
+      );
     if (site.details) {
       const p = site.details;
       const params = node("p");
@@ -273,6 +285,7 @@
     objects.clear();
     context.hidden = true;
     document.getElementById("tooltip").hidden = true;
+    document.getElementById("tooltip").replaceChildren();
   });
   function resourceCard(r) {
     const box = node("div", undefined, "resource-card");

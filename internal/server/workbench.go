@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 type Command struct {
@@ -180,7 +181,7 @@ func (a *App) workbench(w http.ResponseWriter, r *http.Request) {
 		{"mining", `SELECT j.*,s.name AS ship_name FROM mining_jobs j JOIN ships s ON s.id=j.ship_id WHERE j.user_id=$1 ORDER BY j.ship_id`, []any{u.ID}},
 		{"shipyards", `SELECT y.*,s.name AS station_name,s.specialization FROM shipyard_stock y JOIN stations s ON s.star=y.star AND s.object_id=y.station WHERE s.shipyard AND s.active ORDER BY y.star,y.station,y.ship_class`, nil},
 		{"known", `SELECT star,received_at,source FROM surveys WHERE user_id=$1 ORDER BY star`, []any{u.ID}},
-		{"notes", `SELECT star,object_id,note,bookmark FROM navigation_notes WHERE user_id=$1`, []any{u.ID}},
+		{"notes", `SELECT star,object_id,note,bookmark,label FROM navigation_notes WHERE user_id=$1`, []any{u.ID}},
 		{"stations", `SELECT s.*,c.name AS founder_name,c.color AS founder_color,COALESCE(o.name,c.name) AS owner_name,COALESCE(o.tag,c.tag) AS owner_tag,COALESCE(o.color,c.color) AS owner_color,CASE WHEN s.company_id IS NOT NULL THEN 'company' WHEN s.founder IS NOT NULL THEN 'founder' ELSE 'neutral' END AS owner_kind,COALESCE(r.points,0) AS reputation,CASE WHEN c.founder_key='founder-02' AND COALESCE(r.points,0)<20 THEN 2 ELSE 0 END AS fee_percent FROM stations s LEFT JOIN companies c ON c.id=s.founder LEFT JOIN companies o ON o.id=s.company_id LEFT JOIN reputation r ON r.company_id=s.founder AND r.user_id=$1 WHERE s.active ORDER BY s.star,s.object_id`, []any{u.ID}},
 		{"data_offers", `SELECT o.*,u.username AS seller_name,(SELECT count(*) FROM unnest(o.systems) s WHERE NOT EXISTS(SELECT 1 FROM surveys v WHERE v.user_id=$1 AND v.star=s)) AS new_systems FROM survey_offers o JOIN users u ON u.id=o.seller ORDER BY o.id DESC LIMIT 500`, []any{u.ID}},
 		{"warehouses", `SELECT * FROM warehouses WHERE user_id=$1 ORDER BY star,station`, []any{u.ID}},
@@ -391,6 +392,21 @@ func (a *App) navigationCommand(ctx context.Context, tx pgx.Tx, u User, s *Ship,
 			return true, errors.New("Некорректная заметка")
 		}
 		_, err := tx.Exec(ctx, `INSERT INTO navigation_notes(user_id,star,object_id,note,bookmark) VALUES($1,$2,$3,$4,$5) ON CONFLICT(user_id,star,object_id) DO UPDATE SET note=EXCLUDED.note,bookmark=EXCLUDED.bookmark`, u.ID, in.Star, in.Target, in.Note, in.Bookmark)
+		return true, err
+	case "station_label":
+		in.Name = strings.TrimSpace(in.Name)
+		in.Note = strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(in.Note, "\r\n", "\n"), "\r", "\n"))
+		if !ideaText(in.Name, false) || utf8.RuneCountInString(in.Name) > 60 || !ideaText(in.Note, true) || utf8.RuneCountInString(in.Note) > 800 {
+			return true, errors.New("Личное название: до 60 символов, заметка: до 800")
+		}
+		var exists bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM stations WHERE star=$1 AND object_id=$2 AND active)`, in.Star, in.Target).Scan(&exists); err != nil {
+			return true, err
+		}
+		if !exists {
+			return true, errors.New("Станция не найдена")
+		}
+		_, err := tx.Exec(ctx, `INSERT INTO navigation_notes(user_id,star,object_id,note,label) VALUES($1,$2,$3,$4,$5) ON CONFLICT(user_id,star,object_id) DO UPDATE SET note=EXCLUDED.note,label=EXCLUDED.label`, u.ID, in.Star, in.Target, in.Note, in.Name)
 		return true, err
 	case "pause_research":
 		tag, err := tx.Exec(ctx, `UPDATE research_jobs SET paused=TRUE WHERE user_id=$1 AND ship_id=$2`, u.ID, s.ID)

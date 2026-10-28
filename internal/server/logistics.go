@@ -20,6 +20,11 @@ type CargoLocation struct {
 	Company int64  `json:"company,omitempty"`
 }
 
+type CargoItem struct {
+	Resource string `json:"resource"`
+	Quantity int    `json:"quantity"`
+}
+
 func storageAccess(ctx context.Context, tx pgx.Tx, uid int64, loc CargoLocation, withdraw bool) (map[string]int, error) {
 	var active bool
 	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM stations WHERE star=$1 AND object_id=$2 AND active)`, loc.Star, loc.Station).Scan(&active); err != nil {
@@ -148,13 +153,29 @@ func (a *App) logistics(w http.ResponseWriter, r *http.Request) {
 		Ship     int64         `json:"ship"`
 		Resource string        `json:"resource"`
 		Quantity int           `json:"quantity"`
+		Items    []CargoItem   `json:"items,omitempty"`
 	}
 	if !decode(w, r, &in) {
 		return
 	}
-	if _, ok := resource(in.Resource); !ok || in.Quantity < 1 || in.Quantity > 100000 || len(in.Request) < 16 || len(in.Request) > 64 || strings.ContainsAny(in.Request, "\r\n\x00") || (in.Mode != "direct" && in.Mode != "queue") {
+	batch := len(in.Items) > 0
+	items := in.Items
+	if !batch {
+		items = []CargoItem{{in.Resource, in.Quantity}}
+	}
+	if len(items) > len(resources) || batch && (in.Resource != "" || in.Quantity != 0) || len(in.Request) < 16 || len(in.Request) > 64 || strings.ContainsAny(in.Request, "\r\n\x00") || (in.Mode != "direct" && in.Mode != "queue") {
 		fail(w, 400, "Некорректный перенос ресурса")
 		return
+	}
+	seen := map[string]bool{}
+	total := 0
+	for _, item := range items {
+		if _, ok := resource(item.Resource); !ok || item.Quantity < 1 || item.Quantity > 100000 || seen[item.Resource] {
+			fail(w, 400, "Некорректный перенос ресурса")
+			return
+		}
+		seen[item.Resource] = true
+		total += item.Quantity
 	}
 	digest := logisticsDigest(in)
 	tx, err := a.db.Begin(ctx)
@@ -200,9 +221,11 @@ func (a *App) logistics(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "Выберите другое место хранения")
 		return
 	}
-	if source[in.Resource] < in.Quantity {
-		fail(w, 409, "Недостаточно груза")
-		return
+	for _, item := range items {
+		if source[item.Resource] < item.Quantity {
+			fail(w, 409, "Недостаточно груза")
+			return
+		}
 	}
 	if toShip != nil {
 		var reserved int
@@ -210,13 +233,17 @@ func (a *App) logistics(w http.ResponseWriter, r *http.Request) {
 			a.internal(w, err)
 			return
 		}
-		if cargoSize(toShip.Cargo)+reserved+in.Quantity > toShip.capacity() {
+		if cargoSize(toShip.Cargo)+reserved+total > toShip.capacity() {
 			fail(w, 409, "Трюм заполнен")
 			return
 		}
-	} else if target[in.Resource] > 1000000000-in.Quantity {
-		fail(w, 409, "Склад заполнен")
-		return
+	} else {
+		for _, item := range items {
+			if target[item.Resource] > 1000000000-item.Quantity {
+				fail(w, 409, "Склад заполнен")
+				return
+			}
+		}
 	}
 	var carrier Ship
 	if fromShip != nil {
@@ -236,6 +263,7 @@ func (a *App) logistics(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	taskID := int64(0)
+	taskIDs := []int64{}
 	if in.Mode == "direct" {
 		if !docked(carrier) || carrier.Star != from.Star || carrier.ObjectID != from.Station || from.Star != to.Star || from.Station != to.Station || fromShip != nil && !docked(*fromShip) || toShip != nil && !docked(*toShip) {
 			fail(w, 409, "Для прямого переноса нужна стыковка с этой станцией")
@@ -253,8 +281,10 @@ func (a *App) logistics(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		source[in.Resource] -= in.Quantity
-		target[in.Resource] += in.Quantity
+		for _, item := range items {
+			source[item.Resource] -= item.Quantity
+			target[item.Resource] += item.Quantity
+		}
 		if fromShip != nil {
 			err = saveShip(ctx, tx, u.ID, *fromShip)
 		} else {
@@ -286,7 +316,7 @@ func (a *App) logistics(w http.ResponseWriter, r *http.Request) {
 			a.internal(w, err)
 			return
 		}
-		if count >= 20 {
+		if count+len(items) > 20 {
 			fail(w, 409, "В очереди уже 20 задач")
 			return
 		}
@@ -305,13 +335,22 @@ func (a *App) logistics(w http.ResponseWriter, r *http.Request) {
 		if company > 0 {
 			companyID = &company
 		}
-		err = tx.QueryRow(ctx, `INSERT INTO automation_tasks(user_id,ship_id,kind,source_star,source_object,dest_star,dest_station,resource,quantity,source_kind,dest_kind,company_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`, u.ID, carrier.ID, kind, from.Star, from.Station, to.Star, to.Station, in.Resource, in.Quantity, from.Kind, to.Kind, companyID).Scan(&taskID)
+		for _, item := range items {
+			err = tx.QueryRow(ctx, `INSERT INTO automation_tasks(user_id,ship_id,kind,source_star,source_object,dest_star,dest_station,resource,quantity,source_kind,dest_kind,company_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`, u.ID, carrier.ID, kind, from.Star, from.Station, to.Star, to.Station, item.Resource, item.Quantity, from.Kind, to.Kind, companyID).Scan(&taskID)
+			if err != nil {
+				break
+			}
+			taskIDs = append(taskIDs, taskID)
+		}
 	}
 	if err != nil {
 		a.internal(w, err)
 		return
 	}
 	result, _ = json.Marshal(map[string]any{"from": from, "to": to, "resource": in.Resource, "quantity": in.Quantity, "mode": in.Mode, "task": taskID, "time": time.Now()})
+	if batch {
+		result, _ = json.Marshal(map[string]any{"from": from, "to": to, "items": items, "mode": in.Mode, "tasks": taskIDs, "time": time.Now()})
+	}
 	if _, err = tx.Exec(ctx, `INSERT INTO logistics_operations(user_id,request_id,digest,result) VALUES($1,$2,$3,$4)`, u.ID, in.Request, digest, result); err != nil {
 		a.internal(w, err)
 		return

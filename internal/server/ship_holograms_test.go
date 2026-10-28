@@ -21,6 +21,7 @@ func TestShipHolograms(t *testing.T) {
 			ids := map[string]bool{}
 			refs := []string{}
 			orbits, pulses, uses := 0, 0, 0
+			engines := 0
 			shape := ""
 			for {
 				token, err := decoder.Token()
@@ -51,6 +52,13 @@ func TestShipHolograms(t *testing.T) {
 						ids[id] = true
 					}
 					switch el.Name.Local {
+					case "g":
+						if attrs["class"] == "engine-thrust" {
+							engines++
+							if attrs["visibility"] != "hidden" {
+								t.Fatal("stationary hull has active engines")
+							}
+						}
 					case "script", "foreignObject", "image", "text":
 						t.Fatal("hologram must contain only vector geometry", el.Name.Local)
 					case "path", "line", "polyline", "polygon", "rect", "circle", "ellipse":
@@ -74,6 +82,10 @@ func TestShipHolograms(t *testing.T) {
 						switch attrs["attributeName"] {
 						case "d":
 							orbits++
+							frames := strings.Split(attrs["values"], ";")
+							if len(frames) < 33 || frames[0] != frames[len(frames)-1] {
+								t.Fatal("spatial turn does not close smoothly")
+							}
 							if attrs["dur"] != "16s" {
 								t.Fatal("orbit period must be 16 seconds")
 							}
@@ -85,7 +97,7 @@ func TestShipHolograms(t *testing.T) {
 					fills = fills[:len(fills)-1]
 				}
 			}
-			if orbits < 1 || pulses < 1 || uses < 1 || shape == "" {
+			if orbits < 1 || pulses < 1 || uses < 1 || shape == "" || engines != 1 {
 				t.Fatal("missing rotation, light pulses or wireframe")
 			}
 			for _, ref := range refs {

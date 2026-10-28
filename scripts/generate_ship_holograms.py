@@ -222,17 +222,50 @@ def render(model_id, settings):
     important = {"engine", "canopy", "tool", "sensor"}
     body = [edge for edge, faces in edges.items() if faces[0][1] not in important]
     details = [edge for edge, faces in edges.items() if faces[0][1] in important]
+    # Build a short wireframe plume at every actual engine nozzle.
+    plume = Mesh()
+    adjacency = {}
+    for face, _, part in mesh.faces:
+        if part != "engine":
+            continue
+        for a, b in zip(face, face[1:] + face[:1]):
+            adjacency.setdefault(a, set()).add(b)
+            adjacency.setdefault(b, set()).add(a)
+    unseen = set(adjacency)
+    while unseen:
+        component, pending = set(), [unseen.pop()]
+        while pending:
+            vertex = pending.pop()
+            if vertex in component:
+                continue
+            component.add(vertex)
+            pending.extend(adjacency[vertex] - component)
+        unseen -= component
+        rear = max(mesh.points[i][1] for i in component)
+        ring = [mesh.points[i] for i in component if abs(mesh.points[i][1] - rear) < 1e-6]
+        x = sum(p[0] for p in ring) / len(ring)
+        z = sum(p[2] for p in ring) / len(ring)
+        width = (max(p[0] for p in ring) - min(p[0] for p in ring)) / 2
+        height = (max(p[2] for p in ring) - min(p[2] for p in ring)) / 2
+        plume.loft([(x, rear + .03, z, width * .8, height * .8),
+                    (x, rear + .48, z, width * .5, height * .5),
+                    (x, rear + 1.0, z, .025, .025)], part="thrust")
     raw_frames = [geometry.raw_projection(mesh.points, -35 + i * 360 / 48, elevation)[0] for i in range(49)]
-    # Use one scale throughout the orbit, so the model does not grow/shrink as it turns.
-    span_x = max(max(x for x, _ in frame) - min(x for x, _ in frame) for frame in raw_frames)
-    span_y = max(max(y for _, y in frame) - min(y for _, y in frame) for frame in raw_frames)
+    raw_plumes = [geometry.raw_projection(plume.points, -35 + i * 360 / 48, elevation)[0] for i in range(49)]
+    centers = [((min(x for x, _ in f) + max(x for x, _ in f)) / 2,
+                (min(y for _, y in f) + max(y for _, y in f)) / 2) for f in raw_frames]
+    extent_x = max(abs(x - cx) for body_frame, thrust_frame, (cx, cy) in zip(raw_frames, raw_plumes, centers) for x, y in body_frame + thrust_frame)
+    extent_y = max(abs(y - cy) for body_frame, thrust_frame, (cx, cy) in zip(raw_frames, raw_plumes, centers) for x, y in body_frame + thrust_frame)
     footprint = .48 + .52 * length / 92
-    scale = min(730 / span_x, 405 / span_y) * footprint
-    frames = [geometry.project(mesh.points, -35 + i * 360 / 48, elevation, fixed_scale=scale)[0] for i in range(49)]
-    assert all(math.isfinite(x) and math.isfinite(y) and 20 < x < 880 and 20 < y < 540 for f in frames for x, y in f)
+    scale = min(365 / extent_x, 202.5 / extent_y) * footprint
+    def project_frames(raw):
+        return [[(450 + (x - cx) * scale, 280 + (y - cy) * scale) for x, y in f]
+                for f, (cx, cy) in zip(raw, centers)]
+    frames, thrust_frames = project_frames(raw_frames), project_frames(raw_plumes)
+    assert all(math.isfinite(x) and math.isfinite(y) and 20 < x < 880 and 20 < y < 540 for f in frames + thrust_frames for x, y in f)
     definitions = []
-    for part, lines in (("body", body), ("details", details)):
-        paths = [geometry.path_for(lines, frame) for frame in frames]
+    for part, lines, projected in (("body", body, frames), ("details", details, frames), ("thrust", list(plume.edges()), thrust_frames)):
+        paths = [geometry.path_for(lines, frame) for frame in projected]
         assert paths[0] == paths[-1]
         definitions.append(f'<path id="{model_id}-{part}" d="{paths[0]}"><animate attributeName="d" values="{";".join(paths)}" dur="16s" repeatCount="indefinite" calcMode="linear"/></path>')
     return f'''<svg xmlns="http://www.w3.org/2000/svg" width="900" height="560" viewBox="0 0 900 560" data-length="{length}" role="img" fill="none" aria-labelledby="{model_id}-title {model_id}-description">
@@ -245,7 +278,11 @@ def render(model_id, settings):
 <use href="#{model_id}-details" stroke="{color}" stroke-width="3" opacity=".22" filter="url(#{model_id}-glow)"/>
 <use href="#{model_id}-details" stroke="{accent}" stroke-width="1.6" opacity=".96"/>
 <use href="#{model_id}-body" stroke="#cefff0" stroke-width="1.9" stroke-dasharray="16 190" opacity=".8"><animate attributeName="stroke-dashoffset" from="0" to="-206" dur="5s" repeatCount="indefinite"/></use>
-</g></svg>
+<g class="engine-thrust" visibility="hidden">
+<use href="#{model_id}-thrust" stroke="{color}" stroke-width="3" opacity=".3" filter="url(#{model_id}-glow)"/>
+<use href="#{model_id}-thrust" stroke="#a6ffe3" stroke-width="1.1" stroke-dasharray="6 8"><animate attributeName="stroke-dashoffset" from="0" to="-14" dur=".8s" repeatCount="indefinite"/></use>
+<animate attributeName="opacity" values=".45;.85;.45" dur="1.2s" repeatCount="indefinite"/>
+</g></g></svg>
 '''
 
 

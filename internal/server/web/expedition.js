@@ -68,17 +68,21 @@
     cargoCapacity = () => d()?.ship.spec?.cargo || d()?.capacity || 60,
     fuelCapacity = () => d()?.ship.spec?.fuel || 40;
   function reset(root) {
+    UI.rememberFolds(root);
     const scroll = root.scrollTop,
       folds = new Map(
         [...root.querySelectorAll("details")].map((el, i) => [
-          (el.querySelector("summary")?.textContent || "") + "|" + i,
+          el.dataset.fold ||
+            (el.querySelector("summary")?.textContent || "") + "|" + i,
           el.open,
         ]),
       );
     root.replaceChildren();
     queueMicrotask(() => {
       root.querySelectorAll("details").forEach((el, i) => {
-        const key = (el.querySelector("summary")?.textContent || "") + "|" + i;
+        const key =
+          el.dataset.fold ||
+          (el.querySelector("summary")?.textContent || "") + "|" + i;
         if (folds.has(key)) el.open = folds.get(key);
       });
       root.scrollTop = scroll;
@@ -204,7 +208,6 @@
   }
   function cargoMenu(id, q, tile, e) {
     e.preventDefault();
-    tile.classList.add("selected");
     const r = tile.getBoundingClientRect();
     UI.menu(
       [
@@ -283,6 +286,7 @@
       },
     );
     root.append(tools);
+    window.Logistics?.selectionToolbar(root);
     const grid = n("div", undefined, "cargo-grid");
     const items = Object.entries(d().ship.cargo).filter(
       ([id, q]) =>
@@ -338,7 +342,11 @@
       container.replaceChildren();
       layout = n("div", undefined, "ship-inline-layout");
       const projection = n("aside", undefined, "ship-projection"),
-        model = n("img", undefined, "ship-inline-model"),
+        model = UI.hologram(
+          s.spec.model,
+          tr("Голограмма корабля"),
+          "ship-inline-model",
+        ),
         caption = n("p", undefined, "ship-projection-caption"),
         controls = n("section", undefined, "ship-controls"),
         information = n("section", undefined, "ship-information");
@@ -348,8 +356,13 @@
       container.append(layout);
     }
     const model = layout.querySelector(".ship-inline-model");
-    if (model.getAttribute("src") !== s.spec.model) model.src = s.spec.model;
-    model.alt = tr("Голограмма корабля") + " · " + tr(s.spec.name);
+    model.dataset.ship = String(s.id);
+    UI.updateHologram(
+      model,
+      s.spec.model,
+      tr("Голограмма корабля") + " · " + tr(s.spec.name),
+      fly(s),
+    );
     layout.querySelector(".ship-projection-caption").textContent =
       tr(s.spec.name) + " · " + tr(s.spec.role);
     const root = layout.querySelector(".ship-information"),
@@ -425,8 +438,10 @@
     row(
       root,
       "Положение",
-      d().sites.find((v) => v.id === s.object_id)?.name ||
-        tr("Точка гиперперехода"),
+      station()
+        ? UI.stationRef(s.star, s.object_id)
+        : d().sites.find((v) => v.id === s.object_id)?.name ||
+            tr("Точка гиперперехода"),
     );
     row(root, "Зарезервировано топлива", s.reserved_fuel);
     const tools = n("div", undefined, "inline-controls");
@@ -448,7 +463,7 @@
       ),
     );
     controls.append(tools);
-    const equip = n("details");
+    const equip = UI.fold("ship:equipment");
     equip.append(n("summary", tr("Оборудование")));
     choice(
       equip,
@@ -509,34 +524,7 @@
       side = n("aside");
     layout.append(main, side);
     root.append(layout);
-    const job = w().research?.find((j) => j.ship === d().ship.id);
-    if (job) {
-      main.append(
-        n("h3", tr("Исследование")),
-        UI.bar(job.scanned, job.total, "Объекты"),
-        n(
-          "p",
-          tr(job.paused ? "Приостановлено" : "Сканирование") +
-            " · " +
-            job.seconds +
-            " s / " +
-            tr("Объект"),
-        ),
-        b(job.paused ? "Продолжить" : "Приостановить", () =>
-          command({
-            action: job.paused ? "resume_research" : "pause_research",
-          }),
-        ),
-      );
-    } else
-      main.append(
-        b(
-          "Исследовать систему · 10 CR",
-          () => Game.explore(d().ship.star),
-          d().surveyed || fly(d().ship),
-          d().surveyed ? "Система уже исследована" : "Корабль в пути",
-        ),
-      );
+    main.append(b("Исследования", () => Modules.open("studies")));
     if (d().surveyed) {
       const rows = [];
       for (const site of d().sites.filter((s) => s.resources?.length)) {
@@ -566,7 +554,9 @@
                 : "Дождитесь завершения действия",
             ),
           );
-          const details = n("details");
+          const details = UI.fold(
+            "mining:" + d().system.id + ":" + site.id + ":" + id,
+          );
           details.append(
             n("summary", site.name),
             n(
@@ -745,7 +735,7 @@
         const available = y.offers.reduce((sum, o) => sum + o.quantity, 0);
         button.append(
           n("span", String(y.star), "system-id"),
-          n("span", y.name),
+          UI.stationLabel(y.star, y.station, y.name),
           n("small", num(available)),
         );
         list.append(button);
@@ -778,7 +768,9 @@
           d().docked &&
           d().ship.star === y.star &&
           d().ship.object_id === y.station;
-      right.append(n("h3", y.name));
+      const yardTitle = n("h3");
+      yardTitle.append(UI.stationLabel(y.star, y.station, y.name));
+      right.append(yardTitle);
       const route = b("Построить маршрут", () => {
         Modules.open("galaxy");
         window.dispatchEvent(new CustomEvent("showstar", { detail: y.star }));
@@ -795,9 +787,7 @@
         )
           continue;
         const card = n("article", undefined, "shipyard-card"),
-          model = n("img");
-        model.src = c.model;
-        model.alt = tr(c.name);
+          model = UI.hologram(c.model, tr(c.name));
         card.dataset.hull = c.id;
         card.append(
           model,
@@ -1086,9 +1076,7 @@
           );
         return [
           "#" + r.id,
-          w().stations.find(
-            (p) => p.star === r.star && p.object_id === r.station,
-          )?.name || r.star + " / " + r.station,
+          UI.stationRef(r.star, r.station),
           resourceName(r.resource),
           "× " + r.quantity,
           money(r.cost),
@@ -1131,7 +1119,7 @@
               selectedOrder = o.id;
               renderMarket();
             }),
-            o.star + " · " + o.station,
+            UI.stationRef(o.star, o.station),
             num(o.quantity),
             money(o.price),
           ]),
@@ -1142,7 +1130,7 @@
         side.append(
           n("h3", tr(res(selected.resource).name)),
           n("p", selected.seller_name),
-          n("p", selected.star + " · " + selected.station),
+          UI.stationRef(selected.star, selected.station),
         );
         const q = field(side, "Количество", "order-buy-quantity", 1, "number");
         q.min = 1;
@@ -1223,7 +1211,11 @@
           ),
           n(
             "p",
-            offer.seller_name + " · " + offer.star + " / " + offer.station,
+            offer.seller_name +
+              " · " +
+              (w().stations.find(
+                (p) => p.star === offer.star && p.object_id === offer.station,
+              )?.name || offer.star + " / " + offer.station),
           ),
         );
         card.append(
@@ -1433,8 +1425,8 @@
   function deliveryDetails(job) {
     const root = Modules.create("delivery-info", "Доставка", 520, 430);
     reset(root);
-    row(root, "Отправление", job.from_star + " · " + job.from_station);
-    row(root, "Назначение", job.to_star + " · " + job.to_station);
+    row(root, "Отправление", UI.stationRef(job.from_star, job.from_station));
+    row(root, "Назначение", UI.stationRef(job.to_star, job.to_station));
     row(root, "Груз", tr(res(job.resource).name) + " × " + job.quantity);
     row(root, "Вознаграждение", money(job.reward));
     row(root, "Обеспечение", money(job.collateral));
@@ -1720,7 +1712,9 @@
     }
     if (corpTab === "storage") {
       for (const store of w().company_storage || []) {
-        side.append(n("h3", store.star + " · " + store.station));
+        const warehouseTitle = n("h3");
+        warehouseTitle.append(UI.stationRef(store.star, store.station));
+        side.append(warehouseTitle);
         side.append(
           UI.table(
             ["Ресурс", "Количество", "Действие"],
@@ -1976,7 +1970,7 @@
             ),
           );
       }
-      const contributions = n("details");
+      const contributions = UI.fold("corporation:contributions:" + p.id);
       contributions.append(n("summary", tr("Вклады участников")));
       for (const item of (w().project_contributions || []).filter(
         (x) => x.project_id === p.id,
@@ -2409,7 +2403,7 @@
     for (const group of groups.values()) {
       let host = root;
       if (group.length > 1) {
-        const details = n("details");
+        const details = UI.fold("notifications:group:" + group[0].kind);
         details.append(
           n(
             "summary",
@@ -2433,7 +2427,7 @@
             : notifySelected.delete(item.id);
           renderNotifications();
         };
-        const detail = n("details");
+        const detail = UI.fold("notification:" + item.id);
         detail.append(
           n("summary", eventText(item)),
           n("p", fmtTime(item.created_at), "muted"),
@@ -2605,6 +2599,7 @@
         if (!entries.length) continue;
         const group = n("details", undefined, "guide-category");
         group.dataset.category = category;
+        group.dataset.fold = "guide:" + category;
         group.open = !!q || expandedCategories.has(category);
         group.append(n("summary", tr(category) + " · " + entries.length));
         for (const subcategory of new Set(
@@ -2645,10 +2640,11 @@
       const item = all.find((v) => v.id === guideID) || all[0];
       article.append(n("h2", tr(item.name)));
       if (item.ship) {
-        const model = n("img");
-        model.src = item.ship.model;
-        model.alt = tr(item.ship.name);
-        model.className = "ship-model";
+        const model = UI.hologram(
+          item.ship.model,
+          tr(item.ship.name),
+          "ship-model",
+        );
         article.append(model, n("p", tr(item.desc)));
         shipStats(article, item.ship);
         article.append(
@@ -3199,6 +3195,19 @@
     }
   });
   window.addEventListener("gamedata", () => {
+    const model = roots.ship.querySelector(".ship-inline-model"),
+      vessel =
+        model &&
+        (gameData.fleet?.ships || []).find(
+          (s) => s.id === Number(model.dataset.ship),
+        );
+    if (vessel)
+      UI.updateHologram(
+        model,
+        vessel.spec.model,
+        tr("Голограмма корабля") + " · " + tr(vessel.spec.name),
+        fly(vessel),
+      );
     notificationBadge();
     renderVisible();
     const population = w().population?.[0];

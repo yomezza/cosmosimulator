@@ -10,6 +10,7 @@ import (
 )
 
 type AutomationTask struct {
+	Priority     int    `json:"priority"`
 	SourceKind   string `json:"source_kind"`
 	DestKind     string `json:"dest_kind"`
 	Company      int64  `json:"company"`
@@ -50,7 +51,7 @@ func (a *App) planner(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		history := view == "history"
-		list, err := queryMaps(ctx, a.db, `SELECT t.*,s.name AS ship_name FROM automation_tasks t JOIN ships s ON s.id=t.ship_id WHERE t.user_id=$1 AND (($2 AND t.status IN('completed','cancelled')) OR (NOT $2 AND t.status IN('queued','running','paused'))) ORDER BY CASE t.status WHEN 'running' THEN 0 WHEN 'queued' THEN 1 ELSE 2 END,CASE WHEN $2 THEN -t.id ELSE t.id END LIMIT 50`, u.ID, history)
+		list, err := queryMaps(ctx, a.db, `SELECT t.*,s.name AS ship_name FROM automation_tasks t JOIN ships s ON s.id=t.ship_id WHERE t.user_id=$1 AND (($2 AND t.status IN('completed','cancelled')) OR (NOT $2 AND t.status IN('queued','running','paused'))) ORDER BY CASE WHEN NOT $2 AND (t.carried>0 OR t.pending>0) THEN 0 ELSE 1 END,CASE WHEN NOT $2 THEN -t.priority ELSE 0 END,CASE WHEN $2 THEN -t.id ELSE t.id END LIMIT 50`, u.ID, history)
 		if err != nil {
 			a.internal(w, err)
 			return
@@ -79,7 +80,73 @@ func (a *App) planner(w http.ResponseWriter, r *http.Request) {
 		a.internal(w, err)
 		return
 	}
-	if in.Action != "create" {
+	if in.Action == "raise" || in.Action == "lower" || in.Action == "activate" {
+		var shipID int64
+		if err = tx.QueryRow(ctx, `SELECT ship_id FROM automation_tasks WHERE id=$1 AND user_id=$2 AND status IN('queued','running','paused')`, in.ID, u.ID).Scan(&shipID); errors.Is(err, pgx.ErrNoRows) {
+			fail(w, 404, "Задача не найдена")
+			return
+		} else if err != nil {
+			a.internal(w, err)
+			return
+		}
+		rows, e := tx.Query(ctx, `SELECT id FROM automation_tasks WHERE ship_id=$1 AND user_id=$2 AND status IN('queued','running','paused') ORDER BY priority DESC,id`, shipID, u.ID)
+		if e != nil {
+			a.internal(w, e)
+			return
+		}
+		ids := []int64{}
+		index := -1
+		for rows.Next() {
+			var id int64
+			if e = rows.Scan(&id); e != nil {
+				break
+			}
+			if id == in.ID {
+				index = len(ids)
+			}
+			ids = append(ids, id)
+		}
+		rows.Close()
+		if e == nil {
+			e = rows.Err()
+		}
+		if e != nil {
+			a.internal(w, e)
+			return
+		}
+		if index < 0 {
+			fail(w, 404, "Задача не найдена")
+			return
+		}
+		if in.Action == "raise" && index > 0 {
+			ids[index], ids[index-1] = ids[index-1], ids[index]
+		}
+		if in.Action == "lower" && index < len(ids)-1 {
+			ids[index], ids[index+1] = ids[index+1], ids[index]
+		}
+		if in.Action == "activate" {
+			var blocked bool
+			if e = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM automation_tasks WHERE ship_id=$1 AND id<>$2 AND status='paused' AND (carried>0 OR pending>0))`, shipID, in.ID).Scan(&blocked); e != nil {
+				a.internal(w, e)
+				return
+			}
+			if blocked {
+				fail(w, 409, "Завершите или отмените приостановленную задачу с грузом")
+				return
+			}
+			ids = append([]int64{in.ID}, append(ids[:index], ids[index+1:]...)...)
+			if _, e = tx.Exec(ctx, `UPDATE automation_tasks SET status='queued',error='',updated_at=now() WHERE id=$1`, in.ID); e != nil {
+				a.internal(w, e)
+				return
+			}
+		}
+		for i, id := range ids {
+			if _, e = tx.Exec(ctx, `UPDATE automation_tasks SET priority=$2,updated_at=now() WHERE id=$1`, id, len(ids)-i); e != nil {
+				a.internal(w, e)
+				return
+			}
+		}
+	} else if in.Action != "create" {
 		status := map[string]string{"pause": "paused", "resume": "queued", "cancel": "cancelled"}[in.Action]
 		if status == "" {
 			fail(w, 400, "Неизвестное действие")
@@ -468,7 +535,7 @@ func stepAutomation(ctx context.Context, tx pgx.Tx, t *AutomationTask, s *Ship, 
 	return nil
 }
 func (a *App) advanceAutomation(ctx context.Context) error {
-	rows, err := a.db.Query(ctx, `SELECT t.id FROM automation_tasks t WHERE t.status IN('queued','running') AND NOT EXISTS(SELECT 1 FROM automation_tasks prev WHERE prev.ship_id=t.ship_id AND prev.id<t.id AND prev.status IN('queued','running','paused')) ORDER BY t.updated_at,t.id LIMIT 100`)
+	rows, err := a.db.Query(ctx, `SELECT t.id FROM automation_tasks t WHERE t.status IN('queued','running') AND t.id=(SELECT h.id FROM automation_tasks h WHERE h.ship_id=t.ship_id AND h.status IN('queued','running','paused') ORDER BY (h.carried>0 OR h.pending>0) DESC,h.priority DESC,h.id LIMIT 1) ORDER BY t.updated_at,t.id LIMIT 100`)
 	if err != nil {
 		return err
 	}
@@ -511,7 +578,7 @@ func (a *App) advanceTask(ctx context.Context, id int64) error {
 		return nil
 	}
 	var previous bool
-	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM automation_tasks WHERE ship_id=$1 AND id<$2 AND status IN('queued','running','paused'))`, t.Ship, t.ID).Scan(&previous); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT COALESCE((SELECT id<>$2 FROM automation_tasks WHERE ship_id=$1 AND status IN('queued','running','paused') ORDER BY (carried>0 OR pending>0) DESC,priority DESC,id LIMIT 1),false)`, t.Ship, t.ID).Scan(&previous); err != nil {
 		return err
 	}
 	if previous {
@@ -537,6 +604,9 @@ func (a *App) advanceTask(ctx context.Context, id int64) error {
 			return err
 		}
 		return tx.Commit(ctx)
+	}
+	if _, err = tx.Exec(ctx, `UPDATE automation_tasks SET status='queued' WHERE ship_id=$1 AND id<>$2 AND status='running' AND carried=0 AND pending=0`, t.Ship, t.ID); err != nil {
+		return err
 	}
 	original := t
 	t.Status = "running"

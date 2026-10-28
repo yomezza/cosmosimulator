@@ -24,7 +24,7 @@ async function api(path, body, signal) {
     e.status = r.status;
     throw e;
   }
-  return data;
+  return UI.personalizeStations?.(data) || data;
 }
 function startupStatus(failed = false) {
   const title = failed ? "Не удалось подключиться" : "Подключение к серверу",
@@ -123,6 +123,7 @@ async function refreshData() {
       notifications,
       serverOffset: new Date(clock.server_time).getTime() - Date.now(),
     };
+    UI.personalizeStations(gameData);
     $("auth").hidden = true;
     for (const id of [
       "game",

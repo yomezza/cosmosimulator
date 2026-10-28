@@ -182,7 +182,11 @@
                 ["", "Оставлять в трюме"],
                 ...ports
                   .filter((p) => p.star === ship.star)
-                  .map((p) => [p.object_id, p.name]),
+                  .map((p) => ({
+                    id: p.object_id,
+                    label: p.name,
+                    station: { star: p.star, id: p.object_id },
+                  })),
               ],
               "",
               (value) => (dest.station = value),
@@ -269,9 +273,17 @@
       list.replaceChildren();
       const active = result
         .filter((t) => ["queued", "running", "paused"].includes(t.status))
-        .sort((a, b) => a.id - b.id);
+        .sort(
+          (a, b) =>
+            Number(b.carried > 0 || b.pending > 0) -
+              Number(a.carried > 0 || a.pending > 0) ||
+            b.priority - a.priority ||
+            a.id - b.id,
+        );
       host.querySelector(".planner-queue-title").textContent =
         tr("Очередь и выполнение") + " · " + active.length;
+      host.querySelector(".planner-queue-title").dataset.help =
+        "Приоритет меняется в пределах корабля. Текущий цикл добычи или разгрузка уже принятого груза завершается перед переключением.";
       for (const task of active) {
         const card = n("section", undefined, "planner-item"),
           resource = gameData.expedition.resources.find(
@@ -314,6 +326,9 @@
               task.status === "paused" ? "resume" : "pause",
               task.status === "paused" ? "Продолжить" : "Приостановить",
             ],
+            ["raise", "Выше в очереди"],
+            ["lower", "Ниже в очереди"],
+            ["activate", "Сделать активной"],
             ["cancel", "Отменить задачу"],
           ])
             tools.append(

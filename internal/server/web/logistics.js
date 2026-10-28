@@ -55,6 +55,85 @@
       tr(loc.kind === "company" ? "Корпоративный склад" : "Личный склад")
     );
   }
+  let selectionMode = false,
+    selectionFrom = null;
+  const selectedResources = new Set();
+  function availableCargo(from) {
+    if (from?.kind === "ship")
+      return gameData.fleet?.ships.find((s) => s.id === from.ship)?.cargo || {};
+    return from ? stock(from.kind, from) : {};
+  }
+  function selectionItems() {
+    const cargo = availableCargo(selectionFrom);
+    return [...selectedResources]
+      .filter((id) => cargo[id] > 0)
+      .map((id) => ({ resource: id, quantity: cargo[id] }));
+  }
+  function paintSelection() {
+    if (selectionFrom) {
+      const cargo = availableCargo(selectionFrom);
+      for (const id of selectedResources)
+        if (!(cargo[id] > 0)) selectedResources.delete(id);
+      if (!selectedResources.size) selectionFrom = null;
+    }
+
+    document.querySelectorAll("[data-cargo-resource]").forEach((tile) => {
+      const active =
+        selectionFrom &&
+        tile.dataset.cargoLocation === JSON.stringify(selectionFrom) &&
+        selectedResources.has(tile.dataset.cargoResource);
+      tile.classList.toggle("cargo-selected", !!active);
+      tile.setAttribute("aria-pressed", String(!!active));
+      tile.classList.toggle(
+        "cargo-select-mode",
+        selectionMode && tile.dataset.cargoSelectable === "true",
+      );
+    });
+    document
+      .querySelectorAll(".cargo-selection-tools")
+      .forEach((bar) => bar.updateSelection?.());
+  }
+  function clearSelection() {
+    selectionFrom = null;
+    selectedResources.clear();
+    paintSelection();
+  }
+  function select(from, id) {
+    if (!selectionFrom || !same(selectionFrom, from)) {
+      selectedResources.clear();
+      selectionFrom = from;
+    }
+    if (selectedResources.has(id)) selectedResources.delete(id);
+    else selectedResources.add(id);
+    if (!selectedResources.size) selectionFrom = null;
+    paintSelection();
+  }
+  function selectionToolbar(holder) {
+    const bar = n("div", undefined, "cargo-selection-tools"),
+      toggle = b("Выделить ресурсы", () => {
+        selectionMode = !selectionMode;
+        paintSelection();
+      }),
+      count = n("span"),
+      move = b("Переместить выбранное", () =>
+        chooseDestination(selectionFrom, selectionItems()),
+      ),
+      clear = b("Снять выделение", clearSelection);
+    toggle.dataset.help =
+      "Ctrl/⌘ + щелчок добавляет ресурс к выделению. Для переноса выберите ресурсы из одного трюма или склада.";
+    const update = () => {
+      if (!bar.isConnected) return;
+      const amount = selectionItems().length;
+      toggle.setAttribute("aria-pressed", String(selectionMode));
+      count.textContent = amount ? tr("Выбрано") + ": " + amount : "";
+      move.hidden = clear.hidden = !amount;
+    };
+    bar.updateSelection = update;
+    bar.append(toggle, count, move, clear);
+    holder.append(bar);
+    queueMicrotask(update);
+    return bar;
+  }
   function cleanDrag() {
     drag = null;
     document.body.classList.remove("cargo-dragging");
@@ -77,6 +156,7 @@
     )
       return;
     data = result;
+    paintSelection();
     if (!drag && !formOpen) draw();
   }
   function local(from, to) {
@@ -103,26 +183,32 @@
     );
   }
   function transfer(from, to, id, q) {
-    if (same(from, to) || pending) return;
-    const carrier =
-      from.kind === "ship"
-        ? gameData.fleet.ships.find((s) => s.id === from.ship)
-        : to.kind === "ship"
-          ? gameData.fleet.ships.find((s) => s.id === to.ship)
-          : ship();
-    if (!carrier) return;
+    if (!from || same(from, to) || pending) return;
+    const items = Array.isArray(id) ? id : [{ resource: id, quantity: q }],
+      carrier =
+        from.kind === "ship"
+          ? gameData.fleet.ships.find((s) => s.id === from.ship)
+          : to.kind === "ship"
+            ? gameData.fleet.ships.find((s) => s.id === to.ship)
+            : ship();
+    if (!carrier || !items.length) return;
     const mode = local(from, to) ? "direct" : "queue",
-      r = resource(id),
+      single = items.length === 1,
       holder = Modules.create(
         "cargo-transfer",
         "Перемещение ресурса",
-        560,
-        450,
+        single ? 560 : 680,
+        single ? 450 : 620,
       );
     formOpen = true;
     holder.replaceChildren();
     holder.append(
-      n("h3", tr(r?.name || id)),
+      n(
+        "h3",
+        single
+          ? tr(resource(items[0].resource)?.name || items[0].resource)
+          : tr("Перемещение выбранных ресурсов"),
+      ),
       n("p", label(from)),
       n("p", "→ " + label(to), "transfer-target"),
       n(
@@ -130,44 +216,58 @@
         tr(
           mode === "direct"
             ? "Перенос на текущей станции"
-            : "Будет создана задача: корабль перевезёт ресурс по существующему маршруту.",
+            : "Будут созданы задачи: корабль перевезёт ресурсы по существующему маршруту.",
         ),
         "muted",
       ),
     );
-    let max = Math.min(q, 100000);
+    let free = Infinity;
     if (to.kind === "ship") {
       const target = gameData.fleet.ships.find((s) => s.id === to.ship),
         reserved = (gameData.workbench.mining || [])
           .filter((j) => j.ship_id === target.id)
           .reduce((a, j) => a + j.quantity, 0);
-      max = Math.min(
-        max,
+      free =
         target.spec.cargo -
-          Object.values(target.cargo).reduce((a, v) => a + v, 0) -
-          reserved,
-      );
+        Object.values(target.cargo).reduce((a, v) => a + v, 0) -
+        reserved;
     }
-    const quantity = UI.field(
-      holder,
-      "Количество",
-      "cargo-transfer-quantity",
-      Math.max(1, max),
-      "number",
-    );
-    quantity.min = 1;
-    quantity.max = Math.max(0, max);
-    quantity.step = 1;
-    const requestID = uuid(),
-      submit = b(
+    const list = n("div", undefined, "cargo-transfer-items");
+    holder.append(list);
+    const fields = items.map((item) => {
+      const row = n("div", undefined, "cargo-transfer-item");
+      row.dataset.resource = item.resource;
+      const input = UI.field(
+        row,
+        tr(resource(item.resource)?.name || item.resource),
+        single ? "cargo-transfer-quantity" : "cargo-transfer-" + item.resource,
+        single
+          ? Math.min(item.quantity, 100000, Math.max(1, free))
+          : Math.min(item.quantity, 100000),
+        "number",
+      );
+      input.min = 1;
+      input.max = Math.min(item.quantity, 100000);
+      list.append(row);
+      return { resource: item.resource, input };
+    });
+    let requestID = uuid();
+    const total = n("p", undefined, "muted");
+    holder.append(total);
+    const submit = b(
         mode === "direct" ? "Переместить" : "Создать доставку",
         async () => {
-          if (!quantity.reportValidity() || pending) return;
+          if (pending || !fields.every((f) => f.input.reportValidity())) return;
+          const payloadItems = fields.map((f) => ({
+            resource: f.resource,
+            quantity: Number(f.input.value),
+          }));
+          if (payloadItems.reduce((a, v) => a + v.quantity, 0) > free) return;
           const serial = ++operation,
             epoch = authEpoch;
           pending = true;
           cancel.disabled = true;
-          quantity.disabled = true;
+          fields.forEach((f) => (f.input.disabled = true));
           try {
             await api("logistics", {
               request: requestID,
@@ -175,11 +275,16 @@
               from,
               to,
               ship: carrier.id,
-              resource: id,
-              quantity: Number(quantity.value),
+              ...(single
+                ? {
+                    resource: payloadItems[0].resource,
+                    quantity: payloadItems[0].quantity,
+                  }
+                : { items: payloadItems }),
             });
             if (serial !== operation || epoch !== authEpoch || !signedIn)
               return;
+            clearSelection();
             Modules.close("cargo-transfer");
             notify(
               tr(mode === "direct" ? "Ресурс перемещён" : "Задача добавлена"),
@@ -193,25 +298,68 @@
             if (serial === operation) {
               pending = false;
               cancel.disabled = false;
-              quantity.disabled = false;
+              fields.forEach((f) => (f.input.disabled = false));
             }
           }
         },
-        max < 1,
-        max < 1 ? "Трюм заполнен" : "",
       ),
       cancel = b("Отмена", () => Modules.close("cargo-transfer"));
+    function validate() {
+      const amount = fields.reduce((a, f) => a + Number(f.input.value), 0);
+      total.textContent =
+        tr("Общий объём") +
+        ": " +
+        amount +
+        (Number.isFinite(free) ? " / " + free : "");
+      total.classList.toggle("error", amount > free);
+      submit.disabled =
+        amount > free ||
+        fields.some((f) => !f.input.checkValidity()) ||
+        pending;
+    }
+    fields.forEach(
+      (f) =>
+        (f.input.oninput = () => {
+          requestID = uuid();
+          validate();
+        }),
+    );
     holder.append(submit, cancel);
+    validate();
     Modules.open("cargo-transfer");
   }
   function draggable(tile, from, id, q, enabled = true) {
     tile.draggable = enabled;
     tile.dataset.cargoResource = id;
+    tile.dataset.cargoSelectable = String(enabled);
+    tile.dataset.cargoLocation = JSON.stringify(from);
+    tile.classList.toggle(
+      "cargo-selected",
+      !!selectionFrom && same(selectionFrom, from) && selectedResources.has(id),
+    );
+    tile.classList.toggle(
+      "cargo-select-mode",
+      selectionMode && tile.dataset.cargoSelectable === "true",
+    );
+    tile.setAttribute(
+      "aria-pressed",
+      String(tile.classList.contains("cargo-selected")),
+    );
     if (!enabled) return;
     tile.classList.add("cargo-draggable");
     const prior = tile.onclick;
     tile.onclick = (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        select(from, id);
+        return;
+      }
       if (performance.now() < suppressClick) return;
+      if (selectionMode) {
+        e.preventDefault();
+        select(from, id);
+        return;
+      }
       return prior?.call(tile, e);
     };
     tile.ondragstart = (e) => {
@@ -220,7 +368,11 @@
         return;
       }
       const token = uuid();
-      drag = { from, id, q, token };
+      const items =
+        selectionFrom && same(selectionFrom, from) && selectedResources.has(id)
+          ? selectionItems()
+          : [{ resource: id, quantity: q }];
+      drag = { from, id, q, token, items };
       e.dataTransfer.effectAllowed = "move";
       e.dataTransfer.setData("application/x-cosmos-cargo", token);
       tile.classList.add("cargo-drag-source");
@@ -265,7 +417,7 @@
       const token = e.dataTransfer.getData("application/x-cosmos-cargo");
       if (token !== item.token) return;
       cleanDrag();
-      transfer(item.from, target, item.id, item.q);
+      transfer(item.from, target, item.items);
     };
   }
   function tile(from, id, q, canMove) {
@@ -313,6 +465,7 @@
     return grid;
   }
   async function chooseDestination(from, id, q) {
+    if (!from) return;
     const epoch = authEpoch;
     try {
       const info = await api("logistics");
@@ -340,6 +493,7 @@
         id: "personal:" + key(p),
         code: String(p.star),
         label: p.name + " · " + tr("Личный склад"),
+        station: { star: p.star, id: p.object_id },
         location: { kind: "personal", star: p.star, station: p.object_id },
       });
       if (data?.can_deposit && built(p))
@@ -347,6 +501,7 @@
           id: "company:" + key(p),
           code: String(p.star),
           label: p.name + " · " + tr("Корпоративный склад"),
+          station: { star: p.star, id: p.object_id },
           location: {
             kind: "company",
             star: p.star,
@@ -356,7 +511,14 @@
         });
     }
     const available = options.filter((o) => !same(from, o.location));
-    holder.replaceChildren(n("h3", tr(resource(id)?.name || id)));
+    holder.replaceChildren(
+      n(
+        "h3",
+        Array.isArray(id)
+          ? tr("Перемещение выбранных ресурсов")
+          : tr(resource(id)?.name || id),
+      ),
+    );
     if (!available.length) {
       UI.empty(holder, "Нет доступных складов");
       Modules.open("cargo-destination");
@@ -382,6 +544,7 @@
     const focus = document.activeElement?.id,
       caret = document.activeElement?.selectionStart,
       scroll = root.querySelector(".storage-tree")?.scrollTop || 0;
+    UI.rememberFolds(root);
     root.replaceChildren();
     const top = n("div", undefined, "logistics-toolbar"),
       search = UI.field(
@@ -410,6 +573,7 @@
     );
     top.append(b("Планировщик задач", () => Modules.open("tasks")));
     root.append(top);
+    selectionToolbar(root);
     const layout = n("div", undefined, "logistics-layout"),
       hold = n("aside", undefined, "logistics-hold"),
       main = n("section", undefined, "storage-tree"),
@@ -493,7 +657,7 @@
       details.dataset.station = key(p);
       details.open = open.has(key(p));
       name.append(
-        n("b", p.name),
+        UI.stationLabel(p.star, p.object_id, p.name, "b"),
         n("small", window.MapData?.stars[p.star - 1]?.name || ""),
       );
       summary.append(
@@ -577,16 +741,21 @@
       main.append(details);
     }
     if (!filtered.length) UI.empty(main, "Ничего не найдено");
-    const history = n("details", undefined, "logistics-history");
+    const history = UI.fold("logistics:history", false, "logistics-history");
     history.append(n("summary", tr("История перемещений")));
     for (const entry of data.history || []) {
       const r = entry.result;
       history.append(
         n(
           "p",
-          tr(resource(r.resource)?.name || r.resource) +
-            " × " +
-            r.quantity +
+          (r.items || [{ resource: r.resource, quantity: r.quantity }])
+            .map(
+              (item) =>
+                tr(resource(item.resource)?.name || item.resource) +
+                " × " +
+                item.quantity,
+            )
+            .join(", ") +
             " · " +
             label(r.from) +
             " → " +
@@ -595,7 +764,9 @@
             tr(
               r.mode === "direct"
                 ? "Перемещено"
-                : entry.task_status || "queued",
+                : r.tasks?.length
+                  ? "Созданы доставки"
+                  : entry.task_status || "queued",
             ),
         ),
       );
@@ -612,6 +783,7 @@
       return !!drag;
     },
     draggable,
+    selectionToolbar,
     dropzone,
     chooseDestination,
     refresh,
@@ -637,6 +809,7 @@
   window.addEventListener("moduleclose", (e) => {
     if (e.detail === "cargo-transfer") {
       formOpen = false;
+      suppressClick = 0;
       if (Modules.isOpen("logistics")) refresh().catch(apiError);
     }
   });
@@ -644,6 +817,8 @@
     request++;
     operation++;
     data = null;
+    selectionMode = false;
+    clearSelection();
     open.clear();
     query = "";
     scope = "all";

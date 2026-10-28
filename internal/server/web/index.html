@@ -11,12 +11,15 @@
     <script src="windows.js" defer></script>
     <script src="workbench.js" defer></script>
     <script src="controls.js" defer></script>
+    <script src="holograms.js" defer></script>
+    <script src="station-labels.js" defer></script>
     <script src="app.js" defer></script>
     <script src="galaxy-admin.js" defer></script>
     <script src="operations070.js" defer></script>
     <script src="logistics.js" defer></script>
     <script src="ideas.js" defer></script>
     <script src="expedition.js" defer></script>
+    <script src="studies.js" defer></script>
     <script src="galaxy.js" defer></script>
   </head>
   <body>
@@ -49,7 +52,9 @@
       </section>
     </div>
     <header>
-      <a class="brand" href="/">◈ COSMOSIMULATOR <small>EDEM / 0.9.3</small></a>
+      <a class="brand" href="/"
+        >◈ COSMOSIMULATOR <small>EDEM / 0.10.0</small></a
+      >
       <div class="header-actions">
         <div id="window-switcher" aria-label="Открытые окна"></div>
         <button
@@ -166,6 +171,16 @@
         ></button
       ><button
         type="button"
+        data-open="studies"
+        data-nav="Исследования"
+        aria-label="Исследования"
+      >
+        <span class="nav-icon">⌾</span
+        ><span class="nav-label" data-i18n="Исследования"
+          >Исследования</span
+        ></button
+      ><button
+        type="button"
         data-open="market"
         data-nav="Рынок"
         aria-label="Рынок"
@@ -196,7 +211,11 @@
         ><span class="nav-label" data-i18n="Планировщик задач"
           >Планировщик задач</span
         ></button
-      ><button data-open="guide" data-nav="Руководство пилота">
+      ><button
+        class="sidebar-bottom"
+        data-open="guide"
+        data-nav="Руководство пилота"
+      >
         <span class="nav-icon">▤</span
         ><span class="nav-label" data-i18n="Руководство пилота"
           >Руководство пилота</span
@@ -204,7 +223,6 @@
       </button>
       <button
         type="button"
-        class="sidebar-bottom"
         data-open="ideas"
         data-nav="Предложить идею"
         aria-label="Предложить идею"
@@ -357,7 +375,7 @@
     <footer>
       <span id="server-status" class="signal"
         ><span data-i18n="● СЕРВЕР ОНЛАЙН">● СЕРВЕР ОНЛАЙН</span></span
-      ><span>COSMOSIMULATOR · v0.9.3</span>
+      ><span>COSMOSIMULATOR · v0.10.0</span>
     </footer>
     <div id="toast" role="status" hidden></div>
     <div id="tooltip" role="tooltip" hidden></div>

@@ -2,6 +2,21 @@
 (() => {
   const tr = (s) => I18n.t(s),
     n = UI.node;
+  const folds = new Map();
+  UI.rememberFolds = (root) =>
+    root
+      .querySelectorAll("details[data-fold]")
+      .forEach((d) => folds.set(d.dataset.fold, d.open));
+  UI.fold = (key, opened = false, className) => {
+    const details = n("details", undefined, className);
+    details.dataset.fold = key;
+    details.open = folds.has(key) ? folds.get(key) : opened;
+    details.addEventListener("toggle", () => {
+      if (details.isConnected) folds.set(key, details.open);
+    });
+    return details;
+  };
+  window.addEventListener("signedout", () => folds.clear());
   UI.serverStatus = (info) => {
     const target = document.getElementById("server-status");
     target.dataset.help = "Сервер";
@@ -48,12 +63,11 @@
     return "object-" + type + ".svg";
   };
   UI.objectHologram = (site, star) => {
-    const img = n("img");
-    img.className = "object-hologram";
-    img.src = UI.objectModel(site, star);
-    img.alt = tr(site.kind);
-    img.draggable = false;
-    return img;
+    return UI.hologram(
+      UI.objectModel(site, star),
+      tr(site.kind),
+      "object-hologram",
+    );
   };
   UI.objectTag = (kind) => {
     const colors = {
@@ -218,12 +232,37 @@
     button.setAttribute("aria-haspopup", "listbox");
     button.value = String(value ?? opts[0]?.id ?? "");
     const update = () => {
+      for (const option of opts)
+        if (option.station) {
+          const port = window.gameData?.workbench?.stations?.find(
+              (p) =>
+                p.star === option.station.star &&
+                p.object_id === option.station.id,
+            ),
+            name = port?.name;
+          if (name) {
+            if (option.stationName && option.label.includes(option.stationName))
+              option.label = option.label.replace(option.stationName, name);
+            option.stationName = name;
+            option.source = option.label;
+          }
+        }
       const selected = opts.find((o) => o.id === button.value);
       button.replaceChildren();
       button.classList.toggle("picker-has-code", !!selected?.code);
       if (selected?.code) button.append(n("span", selected.code, "system-id"));
       button.append(
-        n("span", selected?.label || tr("Выберите значение"), "picker-label"),
+        selected?.station
+          ? UI.stationLabel(
+              selected.station.star,
+              selected.station.id,
+              selected.label,
+            )
+          : n(
+              "span",
+              selected?.label || tr("Выберите значение"),
+              "picker-label",
+            ),
         n("span", "⌄", "picker-chevron"),
       );
     };
@@ -306,7 +345,11 @@
           b.setAttribute("role", "option");
           b.setAttribute("aria-selected", String(o.id === button.value));
           if (o.code) b.append(n("span", o.code, "system-id"));
-          b.append(n("span", o.label, "picker-label"));
+          b.append(
+            o.station
+              ? UI.stationLabel(o.station.star, o.station.id, o.label)
+              : n("span", o.label, "picker-label"),
+          );
           if (o.extra) b.append(n("small", o.extra));
           if (config.favorites) {
             const row = n("div", undefined, "picker-entry"),
@@ -446,12 +489,19 @@
       },
     };
   };
+  window.addEventListener("gamedata", () => {
+    for (const button of document.querySelectorAll(".picker-button")) {
+      const entry = pickerRegistry.get(button);
+      if (entry?.opts.some((option) => option.station)) entry.update();
+    }
+  });
   UI.stationPicker = (root, ports, value, change) => {
     const picker = UI.picker(
       ports.map((p) => ({
         id: p.star + "|" + (p.station || p.object_id),
         code: String(p.star),
         label: p.name + (p.specialization ? " · " + tr(p.specialization) : ""),
+        station: { star: p.star, id: p.station || p.object_id },
       })),
       value,
       change,
@@ -532,6 +582,8 @@
     market: "M3 7h16l-4-4m6 14H5l4 4",
     corporations: "M12 2l9 5v10l-9 5-9-5V7zM8 9h8v7H8z",
     tasks: "M8 6h13M8 12h13M8 18h13M3 6h1M3 12h1M3 18h1",
+    studies:
+      "M12 2v4M12 18v4M2 12h4M18 12h4M7 5l2 3M17 5l-2 3M7 19l2-3M17 19l-2-3M7 12a5 5 0 1 0 10 0a5 5 0 1 0-10 0",
     ideas: "M12 3a6 6 0 0 1 4 10l-1 2H9l-1-2a6 6 0 0 1 4-10zM9 18h6M10 21h4",
     guide: "M3 4h7l2 2 2-2h7v15h-7l-2 2-2-2H3zM12 6v15",
     portal:
