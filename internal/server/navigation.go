@@ -27,7 +27,8 @@ func (a *App) fleet(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback(context.Background())
 	var id int64
-	if err = tx.QueryRow(r.Context(), `SELECT id FROM users WHERE id=$1 FOR UPDATE`, u.ID).Scan(&id); err != nil {
+	var level int
+	if err = tx.QueryRow(r.Context(), `SELECT id,level FROM users WHERE id=$1 FOR UPDATE`, u.ID).Scan(&id, &level); err != nil {
 		a.internal(w, err)
 		return
 	}
@@ -71,7 +72,12 @@ func (a *App) fleet(w http.ResponseWriter, r *http.Request) {
 		}
 		ships = append(ships, ship)
 	}
-	reply(w, 200, map[string]any{"ships": ships, "server_time": time.Now()})
+	public, err := queryMaps(r.Context(), a.db, `SELECT s.id,s.name,s.star,s.destination,s.arrival,s.departure,s.travel_path AS path,s.object_id,s.position_mode,s.local_target,s.local_started,s.local_arrival,u.id AS owner,u.username AS owner_name FROM ships s JOIN users u ON u.id=s.user_id WHERE s.user_id<>$1 AND NOT u.is_bot ORDER BY s.id`, u.ID)
+	if err != nil {
+		a.internal(w, err)
+		return
+	}
+	reply(w, 200, map[string]any{"ships": ships, "public_ships": public, "ship_limit": fleetLimit(level), "server_time": time.Now()})
 }
 func saveShip(ctx context.Context, tx pgx.Tx, id int64, s Ship) error {
 	cargo, _ := json.Marshal(s.Cargo)

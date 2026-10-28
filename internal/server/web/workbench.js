@@ -476,14 +476,14 @@
       }
       ctx.restore();
     },
-    ship(ctx, x, y, size = 10, angle = 0) {
+    ship(ctx, x, y, size = 10, angle = 0, color = "#9de5f2") {
       ctx.save();
       ctx.translate(x, y);
       ctx.rotate(angle);
-      ctx.fillStyle = "#9de5f2";
+      ctx.fillStyle = color;
       ctx.strokeStyle = "#f4ffff";
       ctx.lineWidth = 1;
-      ctx.shadowColor = "#63dcff";
+      ctx.shadowColor = color;
       ctx.shadowBlur = 9;
       ctx.beginPath();
       ctx.moveTo(size, 0);

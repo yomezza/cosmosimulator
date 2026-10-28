@@ -28,6 +28,7 @@
   const filters = e("div", undefined, "map-filters"),
     flags = {
       ships: true,
+      others: true,
       ports: true,
       planets: true,
       belts: true,
@@ -36,6 +37,7 @@
     };
   for (const [id, text] of [
     ["ships", "Мои корабли"],
+    ["others", "Корабли других игроков"],
     ["ports", "Порты"],
     ["planets", "Планеты"],
     ["belts", "Месторождения"],
@@ -328,6 +330,7 @@
     request = 0,
     loading = false,
     pendingFind = null,
+    currentSystemRequested = false,
     pendingStar = null,
     hoveredSite = null,
     panelTab = "route",
@@ -404,6 +407,12 @@
   const now = () => Date.now() + (gameData.serverOffset || 0),
     cam = () => camera[mode],
     fleet = () => gameData.fleet?.ships || [];
+  const shipOwner = (s) => s.owner ?? gameData.state.user.id;
+  const shipColor = (s) => `hsl(${(shipOwner(s) * 137.508) % 360} 72% 72%)`;
+  const mapShips = () => [
+    ...(flags.ships ? fleet() : []),
+    ...(flags.others ? gameData.fleet?.public_ships || [] : []),
+  ];
   function action(text, fn) {
     const b = e("button", tr(text));
     b.onclick = fn;
@@ -702,8 +711,8 @@
         ctx.fillStyle = "#79a4bc";
         ctx.fillText(tr("Точка гиперперехода"), entry.x + 14, entry.y);
       }
-      if (flags.ships)
-        for (const ship of fleet()) {
+      if (flags.ships || flags.others)
+        for (const ship of mapShips()) {
           const inSystem =
             ship.star === local.star.id ||
             (ship.destination === local.star.id &&
@@ -721,8 +730,8 @@
             ctx.stroke();
             ctx.setLineDash([]);
           }
-          Visuals.ship(ctx, p.x, p.y, 10, p.angle || 0);
-          ctx.fillStyle = "#a8e6f3";
+          Visuals.ship(ctx, p.x, p.y, 10, p.angle || 0, shipColor(ship));
+          ctx.fillStyle = shipColor(ship);
           ctx.fillText(
             tr(ship.name) +
               (ship.destination ? " · " + tr("Гиперпереход") : ""),
@@ -845,24 +854,38 @@
       ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
       ctx.fill();
     }
-    if (flags.ships) {
+    if (flags.ships || flags.others) {
       const groups = new Map();
-      for (const ship of fleet()) {
+      for (const ship of mapShips()) {
+        if (!galaxy.stars[ship.star - 1] || galaxy.stars[ship.star - 1].deleted)
+          continue;
         const p = galaxyShip(ship),
-          key = ship.destination ? "flight-" + ship.id : "star-" + ship.star,
+          key =
+            shipOwner(ship) +
+            ":" +
+            (ship.destination ? "flight-" + ship.id : "star-" + ship.star),
           group = groups.get(key) || [];
         group.push({ ship, p });
         groups.set(key, group);
       }
+      const positions = new Map();
       for (const group of groups.values()) {
-        const { ship, p } = group[0];
+        const ship = group[0].ship,
+          p = { ...group[0].p };
+        const location = Math.round(p.x) + ":" + Math.round(p.y),
+          rank = positions.get(location) || 0;
+        positions.set(location, rank + 1);
+        if (rank) {
+          p.x += Math.cos(rank * 2.4) * (24 + rank * 5);
+          p.y += Math.sin(rank * 2.4) * (24 + rank * 5);
+        }
         if (starGalaxy(ship.star) !== viewedGalaxy) continue;
-        ctx.strokeStyle = "#9de5f2";
+        ctx.strokeStyle = shipColor(ship);
         ctx.beginPath();
         ctx.arc(p.x, p.y, 15, 0, Math.PI * 2);
         ctx.stroke();
-        Visuals.ship(ctx, p.x, p.y, 10, p.angle || 0);
-        ctx.fillStyle = "#b8edf5";
+        Visuals.ship(ctx, p.x, p.y, 10, p.angle || 0, shipColor(ship));
+        ctx.fillStyle = shipColor(ship);
         ctx.font = "11px monospace";
         ctx.fillText(
           group.length > 1
@@ -1381,6 +1404,10 @@
       if (pendingFind) findShip(pendingFind);
       if (pendingStar) showStar(pendingStar);
       if (!focusRequested) findShip(gameData.expedition.ship.id);
+      if (currentSystemRequested) {
+        currentSystemRequested = false;
+        await openSystem(gameData.expedition.ship.star);
+      }
     } catch (error) {
       notify(error.message);
     } finally {
@@ -1409,6 +1436,13 @@
     routePanel();
     draw();
   }
+  window.addEventListener("showcurrentsystem", () => {
+    if (galaxy && signedIn) openSystem(gameData.expedition.ship.star);
+    else {
+      currentSystemRequested = true;
+      load();
+    }
+  });
   window.addEventListener("showstar", (event) =>
     showStar(Number(event.detail)),
   );
@@ -1543,8 +1577,14 @@
     if (hit) {
       UI.menu(
         [
-          { heading: hit.ship.name },
-          { label: "Корабль", action: () => Modules.open("ship") },
+          {
+            heading:
+              hit.ship.name +
+              (hit.ship.owner_name ? " · " + hit.ship.owner_name : ""),
+          },
+          ...(hit.ship.owner
+            ? []
+            : [{ label: "Корабль", action: () => Modules.open("ship") }]),
           { label: "К системе", action: () => openSystem(hit.ship.star) },
         ],
         event.clientX,
@@ -1728,6 +1768,7 @@
   window.addEventListener("signedout", () => {
     hideSummary();
     labelFocus = null;
+    currentSystemRequested = false;
     visibleStars = [];
     projectedSource = null;
     summaryCache.clear();

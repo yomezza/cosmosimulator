@@ -8,7 +8,8 @@ import (
 	"time"
 )
 
-const MaxCredits int64 = 500_000_000_000
+// Technical exact-integer bound shared with browser Number, not a gameplay cap.
+const MaxCredits int64 = 9_007_199_254_740_991
 
 func warehouse(ctx context.Context, tx pgx.Tx, uid int64, star int, station string) (map[string]int, error) {
 	_, err := tx.Exec(ctx, `INSERT INTO warehouses(user_id,star,station) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`, uid, star, station)
@@ -45,7 +46,7 @@ func credit(ctx context.Context, tx pgx.Tx, uid int64, n int64) error {
 	}
 	tag, err := tx.Exec(ctx, `UPDATE users SET credits=credits+$2::bigint WHERE id=$1 AND credits<=$3::bigint-$2::bigint`, uid, n, MaxCredits)
 	if err == nil && tag.RowsAffected() == 0 {
-		return errors.New("Достигнут лимит 500 млрд CR")
+		return errors.New("Сумма превышает технический диапазон")
 	}
 	return err
 }
@@ -221,7 +222,7 @@ func (a *App) economyCommand(ctx context.Context, tx pgx.Tx, u User, s *Ship, g 
 			return true, errors.New("Обеспечение должно покрывать стоимость груза")
 		}
 		if in.Amount > MaxCredits-in.Collateral {
-			return true, errors.New("Достигнут лимит 500 млрд CR")
+			return true, errors.New("Сумма превышает технический диапазон")
 		}
 		var dest bool
 		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM stations WHERE star=$1 AND object_id=$2 AND active)`, in.To, in.Station).Scan(&dest); err != nil {

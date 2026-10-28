@@ -284,6 +284,33 @@
         tr("Очередь и выполнение") + " · " + active.length;
       host.querySelector(".planner-queue-title").dataset.help =
         "Приоритет меняется в пределах корабля. Текущий цикл добычи или разгрузка уже принятого груза завершается перед переключением.";
+      const groups = new Map();
+      for (const ship of gameData.fleet.ships) {
+        const group = n("section", undefined, "planner-ship"),
+          heading = n("div", undefined, "planner-ship-heading");
+        const model = UI.hologram(
+          ship.spec.model,
+          UI.shipName(ship),
+          "planner-ship-model",
+        );
+        UI.updateHologram(
+          model,
+          ship.spec.model,
+          UI.shipName(ship),
+          !!ship.destination || !!ship.local_target,
+        );
+        heading.append(model, n("h4", UI.shipName(ship)));
+        group.append(heading);
+        UI.shipActivity(
+          group,
+          ship,
+          active.some((t) => t.ship_id === ship.id),
+        );
+        if (!active.some((t) => t.ship_id === ship.id))
+          UI.empty(group, "Нет запланированных задач");
+        groups.set(ship.id, group);
+        list.append(group);
+      }
       for (const task of active) {
         const card = n("section", undefined, "planner-item"),
           resource = gameData.expedition.resources.find(
@@ -340,9 +367,8 @@
             );
           card.append(tools);
         }
-        list.append(card);
+        groups.get(task.ship_id)?.append(card);
       }
-      if (!active.length) UI.empty(list, "Нет запланированных задач");
     },
   };
   const grantRoot = Modules.create(

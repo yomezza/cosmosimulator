@@ -142,8 +142,15 @@ func buyShip(ctx context.Context, tx pgx.Tx, u User, s Ship, in Command) error {
 		return errors.New("Неизвестная модель корабля")
 	}
 	var level int
-	if err := tx.QueryRow(ctx, `SELECT level FROM users WHERE id=$1`, u.ID).Scan(&level); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT level FROM users WHERE id=$1 FOR UPDATE`, u.ID).Scan(&level); err != nil {
 		return err
+	}
+	var count int
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM ships WHERE user_id=$1`, u.ID).Scan(&count); err != nil {
+		return err
+	}
+	if count >= fleetLimit(level) {
+		return errors.New("Достигнут лимит кораблей по стажу")
 	}
 	if level < c.RequiredLevel {
 		return fmt.Errorf("Для покупки нужен стаж %d", c.RequiredLevel)
@@ -182,4 +189,20 @@ func renameShip(ctx context.Context, tx pgx.Tx, s Ship, name string) error {
 	}
 	_, err := tx.Exec(ctx, `UPDATE ships SET name=$2 WHERE id=$1`, s.ID, name)
 	return err
+}
+
+// Above 35 retain the last specified allowance until further tiers are defined.
+func fleetLimit(level int) int {
+	switch {
+	case level <= 5:
+		return 2
+	case level <= 10:
+		return 3
+	case level <= 16:
+		return 4
+	case level <= 25:
+		return 6
+	default:
+		return 7
+	}
 }

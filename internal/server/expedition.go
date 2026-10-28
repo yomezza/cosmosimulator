@@ -380,7 +380,7 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 					} else if cargoSize(ship.Cargo)+reservedCargo+q > ship.capacity() {
 						problem = "Трюм заполнен"
 					} else if wallet > MaxCredits-cost {
-						problem = "Достигнут лимит 500 млрд CR"
+						problem = "Сумма превышает технический диапазон"
 					} else if u.Credits < cost {
 						problem = "Недостаточно кредитов"
 					} else {
@@ -395,7 +395,7 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 					if ship.Cargo[in.Resource] < q {
 						problem = "Нет груза для продажи"
 					} else if u.Credits > MaxCredits-cost {
-						problem = "Достигнут лимит 500 млрд CR"
+						problem = "Сумма превышает технический диапазон"
 					} else if wallet < cost {
 						problem = "У рынка недостаточно кредитов"
 					} else {

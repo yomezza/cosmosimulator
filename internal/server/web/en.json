@@ -1341,5 +1341,16 @@
   "Созданы доставки": "Deliveries created",
   "Данные о месторождениях недоступны": "Deposit data is unavailable",
   "При приближении названия систем видны только рядом с курсором.": "When zoomed in, system names appear only near the cursor.",
-  "Регион неизвестен": "Unknown region"
+  "Регион неизвестен": "Unknown region",
+  "Карты": "Maps",
+  "Карта текущей системы": "Current system map",
+  "Корабли других игроков": "Other players’ ships",
+  "Стаж и размер флота": "Experience and fleet size",
+  "Техническая информация": "Technical information",
+  "Развитие игрока": "Pilot progression",
+  "Достигнут лимит кораблей по стажу": "Fleet limit for your experience reached",
+  "Сумма превышает технический диапазон": "Amount exceeds the supported numeric range",
+  "Стаж не ограничен сотым уровнем. Лимит флота определяет число принадлежащих игроку кораблей.": "Experience continues beyond level 100. The fleet allowance limits how many ships a player owns.",
+  "После стажа 35 сохраняется лимит 7 кораблей до появления новых диапазонов. Имеющиеся корабли не изымаются. Ограничения стажа для покупки конкретной модели действуют отдельно.": "Above experience 35, the allowance stays at 7 ships until more tiers are defined. Existing ships are retained. Model-specific purchase requirements still apply.",
+  "Лимит флота": "Fleet allowance"
 }

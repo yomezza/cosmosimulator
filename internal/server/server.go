@@ -473,8 +473,8 @@ func (a *App) adminUsers(w http.ResponseWriter, r *http.Request) {
 	reply(w, 200, list)
 }
 func (a *App) internal(w http.ResponseWriter, err error) {
-	if strings.Contains(err.Error(), "Достигнут лимит 500 млрд CR") {
-		fail(w, 409, "Достигнут лимит 500 млрд CR")
+	if strings.Contains(err.Error(), "Сумма превышает технический диапазон") {
+		fail(w, 409, "Сумма превышает технический диапазон")
 		return
 	}
 	log.Printf("request failed: %v", err)

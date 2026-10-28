@@ -12,6 +12,24 @@
         return f;
       }
     };
+  const maps = document.getElementById("maps-navigation");
+  maps.open = read("maps-navigation-open", false) === true;
+  maps.addEventListener("toggle", () => {
+    try {
+      localStorage.setItem("maps-navigation-open", JSON.stringify(maps.open));
+    } catch {}
+  });
+  maps.querySelector("summary").onclick = (event) => {
+    event.preventDefault();
+    maps.open = !maps.open;
+    try {
+      localStorage.setItem("maps-navigation-open", JSON.stringify(maps.open));
+    } catch {}
+  };
+  document.getElementById("current-system-map").onclick = () => {
+    Modules.open("galaxy");
+    window.dispatchEvent(new Event("showcurrentsystem"));
+  };
   const node = (tag, text, cls) => {
     const e = document.createElement(tag);
     if (text !== undefined) e.textContent = text;

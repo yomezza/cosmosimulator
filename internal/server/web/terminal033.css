@@ -2610,7 +2610,8 @@ body:has(#sidebar:not([hidden])) main {
   background: #30404c;
   margin: 8px 0 10px;
 }
-#sidebar > button {
+#sidebar > button,
+#sidebar .maps-navigation > button {
   display: flex;
   width: 100%;
   height: 28px;
@@ -2623,12 +2624,14 @@ body:has(#sidebar:not([hidden])) main {
   background: #18252f;
   box-shadow: none;
 }
-#sidebar > button:hover {
+#sidebar > button:hover,
+#sidebar .maps-navigation > button:hover {
   background: #243745;
   border-color: #52727e;
   color: #e1edf0;
 }
-#sidebar > button.module-open {
+#sidebar > button.module-open,
+#sidebar .maps-navigation > button.module-open {
   border-color: #51818a;
   background: #21353e;
   box-shadow: inset 2px 0 #79bab9;
@@ -2663,7 +2666,8 @@ body:has(#sidebar:not([hidden])) main {
 #sidebar.collapsed #sidebar-toggle svg {
   transform: rotate(180deg);
 }
-#sidebar.collapsed > button {
+#sidebar.collapsed > button,
+#sidebar.collapsed .maps-navigation > button {
   justify-content: center;
   padding-inline: 0;
 }
@@ -2807,7 +2811,8 @@ button.picker-button.system-picker .picker-chevron {
   .sidebar-heading {
     justify-content: center;
   }
-  #sidebar > button {
+  #sidebar > button,
+  #sidebar .maps-navigation > button {
     justify-content: center;
     padding-inline: 0;
     height: 32px;
@@ -2825,7 +2830,8 @@ button.picker-button.system-picker .picker-chevron {
 }
 #sidebar .sidebar-heading,
 #sidebar .sidebar-divider,
-#sidebar > button {
+#sidebar > button,
+#sidebar .maps-navigation > button {
   flex-shrink: 0;
 }
 #sidebar > button.sidebar-bottom {
@@ -3192,4 +3198,45 @@ button.picker-button.system-picker .picker-chevron {
   .ship-inline-model {
     height: 200px;
   }
+}
+
+.maps-navigation > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  list-style: none;
+}
+.maps-navigation > summary::-webkit-details-marker {
+  display: none;
+}
+.maps-navigation > button {
+  width: 100%;
+}
+.maps-navigation[open] > summary {
+  margin-bottom: 5px;
+}
+.planner-ship {
+  border: 1px solid var(--border);
+  padding: 10px;
+  margin-bottom: 12px;
+}
+.planner-ship-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.planner-ship-model {
+  width: 100px;
+  height: 70px;
+  flex-shrink: 0;
+}
+.ship-inline-model {
+  height: 260px;
+}
+
+.shipyard-card > .hologram-surface {
+  height: 150px;
 }

@@ -374,6 +374,7 @@
       tr("Корабль") + " · " + UI.shipName(s) + " · " + d().system.name,
     );
     const ships = gameData.fleet.ships;
+    row(root, "Лимит флота", ships.length + " / " + gameData.fleet.ship_limit);
     choice(
       controls,
       "Корабль",
@@ -815,16 +816,19 @@
             !here ||
               offer.quantity < 1 ||
               d().credits < offer.price ||
-              gameData.profile.level < c.required_level,
+              gameData.profile.level < c.required_level ||
+              gameData.fleet.ships.length >= gameData.fleet.ship_limit,
             !here
               ? "Прибудьте на выбранную верфь"
               : offer.quantity < 1
                 ? "На верфи нет доступных кораблей"
                 : gameData.profile.level < c.required_level
                   ? "Недостаточный стаж для покупки"
-                  : d().credits < offer.price
-                    ? "Недостаточно кредитов"
-                    : "",
+                  : gameData.fleet.ships.length >= gameData.fleet.ship_limit
+                    ? "Достигнут лимит кораблей по стажу"
+                    : d().credits < offer.price
+                      ? "Недостаточно кредитов"
+                      : "",
           ),
         );
         cards.append(card);
@@ -2128,7 +2132,7 @@
       ),
       xp = field(values, "Опыт", "edit-xp-" + u.id, u.xp, "number");
     credits.min = 0;
-    credits.max = 500000000000;
+    credits.max = Number.MAX_SAFE_INTEGER;
     credits.step = 1;
     level.min = 1;
     level.max = 1000000;
@@ -2537,6 +2541,14 @@
       expandedCategories = new Set();
     let previousQuery = search.value.toLowerCase().trim();
     const all = [
+      {
+        id: "experience",
+        name: "Стаж и размер флота",
+        category: "Техническая информация",
+        subcategory: "Развитие игрока",
+        technical: true,
+        desc: "",
+      },
       ...d().resources.map((r) => ({
         id: r.id,
         name: r.name,
@@ -2593,7 +2605,12 @@
           tr(item.subcategory),
         ].some((value) => value.toLowerCase().includes(q)),
       );
-      for (const category of ["Ресурсы", "Космические объекты", "Корабли"]) {
+      for (const category of [
+        "Ресурсы",
+        "Космические объекты",
+        "Корабли",
+        "Техническая информация",
+      ]) {
         const entries = matched.filter((item) => item.category === category);
         if (!entries.length) continue;
         const group = n("details", undefined, "guide-category");
@@ -2638,7 +2655,33 @@
       article.replaceChildren();
       const item = all.find((v) => v.id === guideID) || all[0];
       article.append(n("h2", tr(item.name)));
-      if (item.ship) {
+      if (item.technical) {
+        article.append(
+          n(
+            "p",
+            tr(
+              "Стаж не ограничен сотым уровнем. Лимит флота определяет число принадлежащих игроку кораблей.",
+            ),
+          ),
+          UI.table(
+            ["Стаж игрока", "Кораблей"],
+            [
+              ["1–5", "2"],
+              ["6–10", "3"],
+              ["11–16", "4"],
+              ["17–25", "6"],
+              ["26–35", "7"],
+              ["36+", "7"],
+            ],
+          ),
+          n(
+            "p",
+            tr(
+              "После стажа 35 сохраняется лимит 7 кораблей до появления новых диапазонов. Имеющиеся корабли не изымаются. Ограничения стажа для покупки конкретной модели действуют отдельно.",
+            ),
+          ),
+        );
+      } else if (item.ship) {
         const model = UI.hologram(
           item.ship.model,
           tr(item.ship.name),
@@ -2701,6 +2744,71 @@
     drawList();
     renderArticle();
   }
+  UI.shipActivity = (card, s, hasQueue = false) => {
+    if (s.destination)
+      card.append(
+        n(
+          "p",
+          `${window.MapData?.stars[s.star - 1]?.name || s.star} → ${window.MapData?.stars[s.destination - 1]?.name || s.destination} · ${fmtTime(s.arrival)}`,
+        ),
+      );
+    if (s.local_target)
+      card.append(
+        n(
+          "p",
+          tr("Манёвр") +
+            " → " +
+            s.local_target +
+            " · " +
+            fmtTime(s.local_arrival),
+        ),
+      );
+    if (s.waypoints?.length)
+      card.append(
+        n(
+          "p",
+          tr("Маршрут") +
+            ": " +
+            s.waypoints
+              .map((id) => window.MapData?.stars[id - 1]?.name || id)
+              .join(" → "),
+        ),
+        b("Отменить оставшийся маршрут", () =>
+          command({ action: "cancel_route", ship: s.id }),
+        ),
+      );
+    const research = w().research?.find((j) => j.ship === s.id);
+    if (research) {
+      card.append(
+        UI.bar(research.scanned, research.total, "Объекты"),
+        n("p", tr(research.paused ? "Приостановлено" : "Сканирование")),
+        b(research.paused ? "Продолжить" : "Приостановить", () =>
+          command({
+            action: research.paused ? "resume_research" : "pause_research",
+            ship: s.id,
+          }),
+        ),
+      );
+    }
+    for (const job of (w().mining || []).filter((j) => j.ship_id === s.id))
+      card.append(
+        n(
+          "p",
+          tr("Добыча") +
+            " · " +
+            tr(res(job.resource).name) +
+            " × " +
+            job.quantity,
+        ),
+      );
+    if (
+      !hasQueue &&
+      !fly(s) &&
+      !research &&
+      !w().mining?.some((j) => j.ship_id === s.id)
+    )
+      card.append(n("p", tr("Ожидает задания"), "muted"));
+  };
   function renderTasks() {
     const container = roots.tasks;
     if (!container.querySelector(".planner")) reset(container);
@@ -2710,84 +2818,13 @@
     Scheduler.render(container).catch((error) =>
       notify(error.message, "error"),
     );
-    let fleet = container.querySelector(".planner-fleet");
-    if (!fleet) {
-      fleet = n("section", undefined, "planner-fleet");
-      container.querySelector(".planner-compose").append(fleet);
-    }
-    const root = fleet;
-    root.replaceChildren();
-    root.append(n("h3", tr("Текущие действия флота"), "fleet-heading"));
-    for (const s of gameData.fleet.ships) {
-      const card = n("section", undefined, "task-card");
-      card.append(n("h3", UI.shipName(s)));
-      if (s.destination)
-        card.append(
-          n(
-            "p",
-            `${window.MapData?.stars[s.star - 1]?.name || s.star} → ${window.MapData?.stars[s.destination - 1]?.name || s.destination} · ${fmtTime(s.arrival)}`,
-          ),
-        );
-      if (s.local_target)
-        card.append(
-          n(
-            "p",
-            tr("Манёвр") +
-              " → " +
-              s.local_target +
-              " · " +
-              fmtTime(s.local_arrival),
-          ),
-        );
-      if (s.waypoints?.length)
-        card.append(
-          n(
-            "p",
-            tr("Маршрут") +
-              ": " +
-              s.waypoints
-                .map((id) => window.MapData?.stars[id - 1]?.name || id)
-                .join(" → "),
-          ),
-          b("Отменить оставшийся маршрут", () =>
-            command({ action: "cancel_route", ship: s.id }),
-          ),
-        );
-      const research = w().research?.find((j) => j.ship === s.id);
-      if (research) {
-        card.append(
-          UI.bar(research.scanned, research.total, "Объекты"),
-          n("p", tr(research.paused ? "Приостановлено" : "Сканирование")),
-          b(research.paused ? "Продолжить" : "Приостановить", () =>
-            command({
-              action: research.paused ? "resume_research" : "pause_research",
-              ship: s.id,
-            }),
-          ),
-        );
-      }
-      for (const job of (w().mining || []).filter((j) => j.ship_id === s.id))
-        card.append(
-          n(
-            "p",
-            tr("Добыча") +
-              " · " +
-              tr(res(job.resource).name) +
-              " × " +
-              job.quantity,
-          ),
-        );
-      if (!fly(s) && !research && !w().mining?.some((j) => j.ship_id === s.id))
-        card.append(n("p", tr("Ожидает задания"), "muted"));
-      root.append(card);
-    }
     for (const delivery of (w().deliveries || []).filter(
       (j) =>
         (j.owner === gameData.state.user.id ||
           j.carrier === gameData.state.user.id) &&
         ["bot", "carrying", "open"].includes(j.status),
     ))
-      root.append(
+      container.append(
         b(
           "#" +
             delivery.id +

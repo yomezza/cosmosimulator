@@ -61,6 +61,8 @@ func TestFleetPurchases060(t *testing.T) {
 				t.Fatal("purchase did not apply exact quote, tank or stock")
 			}
 			f.cmd(cookie, map[string]any{"action": "select_ship", "ship": sid}, 200)
+			// Exercise every hull without accumulating a fleet beyond the experience allowance.
+			f.exec(`DELETE FROM ships WHERE user_id=$1 AND NOT active AND class NOT IN ('crucible','titan') AND id<>(SELECT min(id) FROM ships WHERE user_id=$1)`, uid)
 			f.exec(`UPDATE ships SET star=1,object_id='station' WHERE id=$1`, sid)
 			response := f.req(cookie, "GET", "/api/estimate?to=5", nil, 200)
 			var estimate struct {

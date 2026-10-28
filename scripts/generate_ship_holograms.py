@@ -264,13 +264,13 @@ def render(model_id, settings):
     extent_x = max(abs(x - cx) for body_frame, thrust_frame, (cx, cy) in zip(raw_frames, [a + b for a, b in zip(raw_plumes, raw_particles)], centers) for x, y in body_frame + thrust_frame)
     extent_y = max(abs(y - cy) for body_frame, thrust_frame, (cx, cy) in zip(raw_frames, [a + b for a, b in zip(raw_plumes, raw_particles)], centers) for x, y in body_frame + thrust_frame)
     footprint = .48 + .52 * length / 92
-    scale = min(365 / extent_x, 202.5 / extent_y) * footprint
+    scale = min(415 / extent_x, 235 / extent_y) * footprint
     def project_frames(raw):
         return [[(450 + (x - cx) * scale, 280 + (y - cy) * scale) for x, y in f]
                 for f, (cx, cy) in zip(raw, centers)]
     frames, thrust_frames = project_frames(raw_frames), project_frames(raw_plumes)
     particle_frames = project_frames(raw_particles)
-    assert all(math.isfinite(x) and math.isfinite(y) and 20 < x < 880 and 20 < y < 540 for f in frames + thrust_frames + particle_frames for x, y in f)
+    assert all(math.isfinite(x) and math.isfinite(y) and 5 < x < 895 and 5 < y < 555 for f in frames + thrust_frames + particle_frames for x, y in f)
     definitions = []
     for part, lines, projected in (("body", body, frames), ("details", details, frames), ("thrust", list(plume.edges()), thrust_frames), ("particles", particle_edges, particle_frames)):
         paths = [geometry.path_for(lines, frame) for frame in projected]
