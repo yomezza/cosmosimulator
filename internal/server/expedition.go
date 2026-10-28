@@ -29,6 +29,7 @@ type Ship struct {
 	LocalStarted *time.Time     `json:"local_started"`
 	LocalArrival *time.Time     `json:"local_arrival"`
 	Extractor    string         `json:"extractor"`
+	Mining       MiningStats    `json:"mining"`
 	ReservedFuel int            `json:"reserved_fuel"`
 	Active       bool           `json:"active"`
 	Waypoints    []int          `json:"waypoints"`
@@ -459,6 +460,7 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 		a.internal(w, err)
 		return
 	}
+	ship.Mining = ship.miningStats(sites)
 	if !surveyed {
 		star.Planets = nil
 	}

@@ -398,8 +398,18 @@
     row(root, "Длина корпуса", s.spec.length + " " + tr("м"));
     row(root, "Время перехода", s.spec.jump_seconds + " s");
     row(root, "Расход за переход", s.spec.jump_fuel);
-    if (s.spec.mining_bonus)
-      row(root, "Бонус добычи", "+" + s.spec.mining_bonus);
+    const mining = n("b", undefined, "ship-mining");
+    mining.textContent =
+      s.mining.current ??
+      (s.mining.min === s.mining.max
+        ? s.mining.min
+        : `${s.mining.min}–${s.mining.max}`);
+    mining.tabIndex = 0;
+    mining.dataset.help =
+      s.mining.current == null
+        ? "Добыча за цикл с установленным добытчиком. Вне совместимого месторождения показан диапазон; у месторождения — точное значение. Остаток ресурсов и свободное место в трюме могут ограничить добычу."
+        : "Добыча за цикл с учётом корпуса и установленного добытчика. Для специализированного добытчика учтены условия текущего месторождения. Остаток ресурсов и свободное место в трюме могут ограничить добычу.";
+    row(root, "Добыча", mining);
     row(root, "Местоположение", d().system.name + " · " + tr(d().region));
     row(
       root,
@@ -449,7 +459,10 @@
       equip,
       "Добытчик",
       [
-        ["universal", "Базовый · до 3 единиц за цикл"],
+        [
+          "universal",
+          tr("Базовый добытчик") + " · " + s.spec.mining + " " + tr("ед./цикл"),
+        ],
         ["ore", "Рудный добытчик"],
         ["ice", "Ледовый добытчик"],
         ["gas", "Газовый добытчик"],
@@ -464,7 +477,7 @@
       n(
         "p",
         tr(
-          "Установка в порту. Специализированный добытчик: 4–6 единиц с учётом концентрации.",
+          "Установка в порту. Итоговая добыча учитывает корпус, установленный добытчик и условия месторождения.",
         ),
         "muted",
       ),
@@ -622,7 +635,11 @@
     row(root, "Топливный бак", c.fuel);
     row(root, "Время перехода", c.jump_seconds + " s");
     row(root, "Расход за переход", c.jump_fuel);
-    if (c.mining_bonus) row(root, "Бонус добычи", "+" + c.mining_bonus);
+    const mining = n("b", c.mining);
+    mining.tabIndex = 0;
+    mining.dataset.help =
+      "Добыча за цикл в базовой комплектации. Установленный добытчик может изменить значение.";
+    row(root, "Добыча", mining);
   }
   function renderShipyards(root) {
     root.append(

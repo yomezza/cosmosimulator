@@ -23,6 +23,7 @@ func readShip(ctx context.Context, q querier, id int64) (Ship, error) {
 		return s, err
 	}
 	s.Spec = s.hull()
+	s.Mining = s.miningStats(nil)
 	err = json.Unmarshal(way, &s.Waypoints)
 	return s, err
 }
@@ -158,12 +159,19 @@ func extractorAccepts(e, res string) bool {
 	}
 	return res != "water" && res != "azoth" && res != "agni" && res != "manna" && res != "ambrosia"
 }
-func extractorYield(e string, star, obj int) int {
+func extractorRange(e string) (int, int) {
 	if e == "universal" {
-		return 3
+		return 3, 3
+	}
+	return 4, 6
+}
+func extractorYield(e string, star, obj int) int {
+	lo, hi := extractorRange(e)
+	if lo == hi {
+		return lo
 	}
 	grade := 1 + (star*13+obj*7)%5
-	return 4 + min(2, (concentration(star, obj)/20+grade)/4)
+	return lo + min(hi-lo, (concentration(star, obj)/20+grade)/4)
 }
 func (a *App) activities(ctx context.Context) error {
 	g, err := a.loadUniverse(ctx)

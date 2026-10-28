@@ -1281,5 +1281,14 @@
   "Нужен водород в трюме": "Hydrogen is required in the cargo hold",
   "Нужен водород в трюме выбранного корабля": "Hydrogen is required in the selected ship’s cargo hold",
   "1 ед. водорода = до 5 единиц топлива": "1 unit of hydrogen = up to 5 fuel units",
-  "Недостаточно топлива: добавьте водород в трюм": "Insufficient fuel: add hydrogen to the cargo hold"
+  "Недостаточно топлива: добавьте водород в трюм": "Insufficient fuel: add hydrogen to the cargo hold",
+  "Базовый добытчик": "Basic extractor",
+  "ед./цикл": "units/cycle",
+  "Установка в порту. Итоговая добыча учитывает корпус, установленный добытчик и условия месторождения.": "Install at a port. Mining output accounts for the hull, installed extractor and deposit conditions.",
+  "Добыча за цикл с установленным добытчиком. Вне совместимого месторождения показан диапазон; у месторождения — точное значение. Остаток ресурсов и свободное место в трюме могут ограничить добычу.": "Output per cycle with the installed extractor. Away from a compatible deposit, a range is shown; at the deposit, the exact output is shown. Remaining resources and free cargo space may limit extraction.",
+  "Добыча за цикл с учётом корпуса и установленного добытчика. Для специализированного добытчика учтены условия текущего месторождения. Остаток ресурсов и свободное место в трюме могут ограничить добычу.": "Output per cycle including the hull and installed extractor. Specialized extractor output includes current deposit conditions. Remaining resources and free cargo space may limit extraction.",
+  "Добыча за цикл в базовой комплектации. Установленный добытчик может изменить значение.": "Output per cycle with the standard equipment. Installing another extractor may change this value.",
+  "Промышленный корпус с усиленной добывающей установкой.": "An industrial hull with reinforced mining equipment.",
+  "Добывающий корабль с парными буровыми захватами и защищёнными рудными отсеками.": "Mining ship with paired drilling claws and protected ore bays.",
+  "Крупный промышленный корабль с четырьмя добывающими узлами и увеличенным рудным трюмом.": "Large industrial ship with four extraction heads and a larger ore hold."
 }

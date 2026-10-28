@@ -214,7 +214,7 @@ func beginExtraction(ctx context.Context, tx pgx.Tx, uid int64, s Ship, star Sta
 	if !extractorAccepts(s.Extractor, res) {
 		return nil, errors.New("Установите подходящий добытчик")
 	}
-	count := extractorYield(s.Extractor, s.Star, planet) + s.hull().MiningBonus
+	count := s.extractionYield(s.Star, planet)
 	if limit > 0 {
 		count = min(count, limit)
 	}
@@ -414,7 +414,7 @@ func stepAutomation(ctx context.Context, tx pgx.Tx, t *AutomationTask, s *Ship, 
 				planet = site.Planet
 			}
 		}
-		count := min(remaining, extractorYield(s.Extractor, t.SourceStar, planet)+s.hull().MiningBonus)
+		count := min(remaining, s.extractionYield(t.SourceStar, planet))
 		if s.capacity()-cargoSize(s.Cargo) < count {
 			if t.DestStation == "" || t.Carried == 0 {
 				return errors.New("Трюм заполнен")

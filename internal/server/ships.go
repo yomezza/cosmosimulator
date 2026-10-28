@@ -20,6 +20,7 @@ type ShipClass struct {
 	JumpSeconds   int    `json:"jump_seconds"`
 	JumpFuel      int    `json:"jump_fuel"`
 	MiningBonus   int    `json:"mining_bonus"`
+	Mining        int    `json:"mining"`
 	Price         int64  `json:"price"`
 	Model         string `json:"model"`
 	Length        int    `json:"length"`
@@ -29,14 +30,14 @@ type ShipClass struct {
 var shipClasses = priceShipClasses([]ShipClass{
 	{ID: "pilgrim", Name: "Пилигрим", Role: "Универсальный", Description: "Начальный корабль для первых экспедиций, торговли и добычи.", Cargo: 60, Fuel: 40, JumpSeconds: 5, JumpFuel: 2, Model: "pilgrim.svg", Length: 22},
 	{ID: "wanderer", Name: "Скиталец", Role: "Разведчик", Description: "Быстрый разведчик с большим баком и компактным трюмом.", Cargo: 35, Fuel: 80, JumpSeconds: 3, JumpFuel: 2, Model: "wanderer.svg", Length: 24},
-	{ID: "forge", Name: "Горн", Role: "Добывающий", Description: "Промышленный корпус с усиленной добывающей установкой: +2 единицы за цикл.", Cargo: 120, Fuel: 60, JumpSeconds: 6, JumpFuel: 3, MiningBonus: 2, Model: "forge.svg", Length: 40},
+	{ID: "forge", Name: "Горн", Role: "Добывающий", Description: "Промышленный корпус с усиленной добывающей установкой.", Cargo: 120, Fuel: 60, JumpSeconds: 6, JumpFuel: 3, MiningBonus: 2, Model: "forge.svg", Length: 40},
 	{ID: "ark", Name: "Ковчег", Role: "Грузовой", Description: "Вместительный транспорт для крупных партий. Медленнее и расходует больше топлива.", Cargo: 240, Fuel: 80, JumpSeconds: 7, JumpFuel: 4, Model: "ark.svg", Length: 60},
 	{ID: "hermes", Name: "Гермес", Role: "Курьер", Description: "Дальнобойный курьер для срочных грузов: большой бак и умеренный трюм.", Cargo: 90, Fuel: 100, JumpSeconds: 4, JumpFuel: 2, Model: "hermes.svg", Length: 32},
 	{ID: "vesper", Name: "Веспер", Role: "Разведчик", Description: "Разведчик с раздвоенным носом и парой сенсорных штанг. Больше топлива и места для находок, чем у Скитальца.", Cargo: 45, Fuel: 100, JumpSeconds: 3, JumpFuel: 2, Model: "vesper.svg", Length: 28},
 	{ID: "astra", Name: "Астра", Role: "Разведчик", Description: "Дальняя разведка: стреловидный корпус, боковые сканеры и ускоренный гиперпереход.", Cargo: 55, Fuel: 120, JumpSeconds: 2, JumpFuel: 2, Model: "astra.svg", Length: 34},
 	{ID: "argus", Name: "Аргус", Role: "Разведчик", Description: "Флагман разведывательной серии с кольцевым сенсорным блоком, большим баком и расширенным трюмом.", Cargo: 70, Fuel: 150, JumpSeconds: 2, JumpFuel: 2, Model: "argus.svg", Length: 42},
-	{ID: "crucible", Name: "Тигель", Role: "Добывающий", Description: "Добывающий корабль с парными буровыми захватами и защищёнными рудными отсеками: +3 единицы за цикл.", Cargo: 150, Fuel: 80, JumpSeconds: 6, JumpFuel: 3, MiningBonus: 3, Model: "crucible.svg", Length: 48},
-	{ID: "titan", Name: "Титан", Role: "Добывающий", Description: "Крупный промышленный корабль с четырьмя добывающими узлами: +5 единиц за цикл и увеличенный рудный трюм.", Cargo: 190, Fuel: 105, JumpSeconds: 5, JumpFuel: 3, MiningBonus: 5, Model: "titan.svg", Length: 60},
+	{ID: "crucible", Name: "Тигель", Role: "Добывающий", Description: "Добывающий корабль с парными буровыми захватами и защищёнными рудными отсеками.", Cargo: 150, Fuel: 80, JumpSeconds: 6, JumpFuel: 3, MiningBonus: 3, Model: "crucible.svg", Length: 48},
+	{ID: "titan", Name: "Титан", Role: "Добывающий", Description: "Крупный промышленный корабль с четырьмя добывающими узлами и увеличенным рудным трюмом.", Cargo: 190, Fuel: 105, JumpSeconds: 5, JumpFuel: 3, MiningBonus: 5, Model: "titan.svg", Length: 60},
 	{ID: "atlas", Name: "Атлас", Role: "Грузовой", Description: "Контейнеровоз с двумя рядами грузовых модулей. Перевозит больше Ковчега при том же расходе на переход.", Cargo: 320, Fuel: 100, JumpSeconds: 7, JumpFuel: 4, Model: "atlas.svg", Length: 72},
 	{ID: "leviathan", Name: "Левиафан", Role: "Грузовой", Description: "Тяжёлый транспорт с трёхрядной грузовой палубой и усиленной кормой. Самый вместительный корабль серии.", Cargo: 420, Fuel: 125, JumpSeconds: 6, JumpFuel: 4, Model: "leviathan.svg", Length: 92},
 	{ID: "iris", Name: "Ирида", Role: "Курьер", Description: "Курьер с разнесёнными двигателями и защищённым центральным грузовым отсеком. Следующая ступень после Гермеса.", Cargo: 110, Fuel: 120, JumpSeconds: 4, JumpFuel: 2, Model: "iris.svg", Length: 40},
@@ -49,6 +50,7 @@ var shipClasses = priceShipClasses([]ShipClass{
 func priceShipClasses(classes []ShipClass) []ShipClass {
 	for i := range classes {
 		c := &classes[i]
+		c.Mining = extractorYield("universal", 0, 0) + c.MiningBonus
 		c.RequiredLevel = map[string]int{"pilgrim": 6, "wanderer": 6, "forge": 10, "ark": 10, "hermes": 10, "vesper": 10, "astra": 15, "argus": 20, "crucible": 15, "titan": 20, "atlas": 15, "leviathan": 20, "iris": 10, "zephyr": 15, "lightning": 20}[c.ID]
 		value := int64(100000 + (c.Cargo-60)*1000 + (c.Fuel-40)*2000 + 600000/c.JumpSeconds - 120000 + 120000/c.JumpFuel - 60000 + c.MiningBonus*90000)
 		c.Price = (max(int64(100000), value) + 4999) / 5000 * 5000
@@ -87,6 +89,43 @@ func hull(id string) (ShipClass, bool) {
 }
 func (s Ship) hull() ShipClass { c, _ := hull(s.Class); return c }
 func (s Ship) capacity() int   { return s.hull().Cargo }
+
+type MiningStats struct {
+	Min     int  `json:"min"`
+	Max     int  `json:"max"`
+	Current *int `json:"current"`
+}
+
+func (s Ship) extractionYield(star, planet int) int {
+	return extractorYield(s.Extractor, star, planet) + s.hull().MiningBonus
+}
+
+// Only revealed, compatible deposits can contribute a location-specific figure.
+// Cargo space and shared quotas limit the job, not the ship's mining capability.
+func (s Ship) miningStats(sites []Site) MiningStats {
+	lo, hi := extractorRange(s.Extractor)
+	bonus := s.hull().MiningBonus
+	stats := MiningStats{Min: lo + bonus, Max: hi + bonus}
+	if lo == hi {
+		value := stats.Min
+		stats.Current = &value
+		return stats
+	}
+	for _, site := range sites {
+		if !nearObject(s, site.ID) {
+			continue
+		}
+		for _, resource := range site.Resources {
+			if extractorAccepts(s.Extractor, resource) {
+				value := s.extractionYield(s.Star, site.Planet)
+				stats.Current = &value
+				return stats
+			}
+		}
+	}
+	return stats
+}
+
 func buyShip(ctx context.Context, tx pgx.Tx, u User, s Ship, in Command) error {
 	if !docked(s) {
 		return errors.New("Стыкуйтесь с верфью")
