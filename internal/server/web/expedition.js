@@ -340,9 +340,10 @@
       const projection = n("aside", undefined, "ship-projection"),
         model = n("img", undefined, "ship-inline-model"),
         caption = n("p", undefined, "ship-projection-caption"),
+        controls = n("section", undefined, "ship-controls"),
         information = n("section", undefined, "ship-information");
       model.draggable = false;
-      projection.append(model, caption);
+      projection.append(model, caption, controls);
       layout.append(projection, information);
       container.append(layout);
     }
@@ -351,15 +352,17 @@
     model.alt = tr("Голограмма корабля") + " · " + tr(s.spec.name);
     layout.querySelector(".ship-projection-caption").textContent =
       tr(s.spec.name) + " · " + tr(s.spec.role);
-    const root = layout.querySelector(".ship-information");
+    const root = layout.querySelector(".ship-information"),
+      controls = layout.querySelector(".ship-controls");
     reset(root);
+    reset(controls);
     Modules.title(
       "ship",
       tr("Корабль") + " · " + UI.shipName(s) + " · " + d().system.name,
     );
     const ships = gameData.fleet.ships;
     choice(
-      root,
+      controls,
       "Корабль",
       ships.map((s) => [
         s.id,
@@ -382,13 +385,15 @@
       ),
     );
     root.append(meters);
-    const rename = field(root, "Название корабля", "ship-rename", s.name);
+    const identity = n("div", undefined, "ship-identity"),
+      rename = field(identity, "Название корабля", "ship-rename", s.name);
     rename.maxLength = 40;
-    root.append(
+    identity.append(
       b("Переименовать корабль", () =>
         command({ action: "rename_ship", ship: s.id, name: rename.value }),
       ),
     );
+    controls.append(identity);
     row(root, "Класс корабля", tr(s.spec.role));
     row(root, "Длина корпуса", s.spec.length + " " + tr("м"));
     row(root, "Время перехода", s.spec.jump_seconds + " s");
@@ -437,7 +442,7 @@
         refuelReason(s),
       ),
     );
-    root.append(tools);
+    controls.append(tools);
     const equip = n("details");
     equip.append(n("summary", tr("Оборудование")));
     choice(
@@ -464,12 +469,12 @@
         "muted",
       ),
     );
-    root.append(equip);
-    root.append(
+    controls.append(equip);
+    controls.append(
       b("Верфи", () => Game.openShipyards(d().ship.star, d().ship.object_id)),
     );
     const shipActions = n("div", undefined, "inline-controls ship-actions");
-    root.append(shipActions);
+    controls.append(shipActions);
     shipActions.append(
       b(
         "Эвакуация",
