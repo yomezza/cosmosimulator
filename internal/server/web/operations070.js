@@ -61,7 +61,65 @@
             build();
           },
         );
-        host.append(form, body, list);
+        const layout = n("div", undefined, "planner-workspace"),
+          compose = n("section", undefined, "planner-compose"),
+          side = n("aside", undefined, "planner-sidebar"),
+          queueTitle = n(
+            "h3",
+            tr("Очередь и выполнение"),
+            "planner-queue-title",
+          ),
+          history = n("details", undefined, "planner-history"),
+          historyList = n("div", undefined, "planner-history-list");
+        compose.append(form, body);
+        history.append(
+          n("summary", tr("История завершённых задач")),
+          historyList,
+        );
+        side.append(queueTitle, list, history);
+        layout.append(compose, side);
+        host.append(layout);
+        let historyRequest = 0;
+        async function loadHistory() {
+          const serial = ++historyRequest,
+            epoch = authEpoch;
+          try {
+            const tasks = await api("planner?view=history");
+            if (
+              serial !== historyRequest ||
+              epoch !== authEpoch ||
+              !host.isConnected ||
+              !history.open
+            )
+              return;
+            historyList.replaceChildren();
+            for (const task of tasks) {
+              const res = gameData.expedition.resources.find(
+                (r) => r.id === task.resource,
+              );
+              const line = n(
+                "p",
+                task.ship_name +
+                  " · " +
+                  tr(res?.name || task.resource) +
+                  " · " +
+                  task.progress +
+                  " / " +
+                  task.quantity +
+                  " · " +
+                  tr(task.status),
+              );
+              historyList.append(line);
+            }
+            if (!tasks.length)
+              UI.empty(historyList, "Завершённых задач пока нет");
+          } catch (e) {
+            if (epoch === authEpoch && signedIn) notify(e.message, "error");
+          }
+        }
+        history.ontoggle = () => {
+          if (history.open) loadHistory();
+        };
         let generation = 0;
         async function build() {
           const key = ++generation,
@@ -209,12 +267,19 @@
       if (key !== request || epoch !== authEpoch || !host.isConnected) return;
       const list = host.querySelector(".planner-list");
       list.replaceChildren();
-      for (const task of result) {
+      const active = result
+        .filter((t) => ["queued", "running", "paused"].includes(t.status))
+        .sort((a, b) => a.id - b.id);
+      host.querySelector(".planner-queue-title").textContent =
+        tr("Очередь и выполнение") + " · " + active.length;
+      for (const task of active) {
         const card = n("section", undefined, "planner-item"),
           resource = gameData.expedition.resources.find(
             (r) => r.id === task.resource,
           ),
           ship = gameData.fleet.ships.find((s) => s.id === task.ship_id);
+        card.dataset.task = String(task.id);
+        card.dataset.status = task.status;
         card.append(
           n(
             "b",
@@ -262,7 +327,7 @@
         }
         list.append(card);
       }
-      if (!result.length) UI.empty(list, "Нет запланированных задач");
+      if (!active.length) UI.empty(list, "Нет запланированных задач");
     },
   };
   const grantRoot = Modules.create(

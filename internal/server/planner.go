@@ -44,7 +44,13 @@ func (a *App) planner(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	if r.Method == "GET" {
-		list, err := queryMaps(ctx, a.db, `SELECT t.*,s.name AS ship_name FROM automation_tasks t JOIN ships s ON s.id=t.ship_id WHERE t.user_id=$1 ORDER BY CASE WHEN t.status IN('queued','running','paused') THEN 0 ELSE 1 END,t.id DESC LIMIT 200`, u.ID)
+		view := r.URL.Query().Get("view")
+		if view != "" && view != "active" && view != "history" {
+			fail(w, 400, "Некорректный раздел задач")
+			return
+		}
+		history := view == "history"
+		list, err := queryMaps(ctx, a.db, `SELECT t.*,s.name AS ship_name FROM automation_tasks t JOIN ships s ON s.id=t.ship_id WHERE t.user_id=$1 AND (($2 AND t.status IN('completed','cancelled')) OR (NOT $2 AND t.status IN('queued','running','paused'))) ORDER BY CASE t.status WHEN 'running' THEN 0 WHEN 'queued' THEN 1 ELSE 2 END,CASE WHEN $2 THEN -t.id ELSE t.id END LIMIT 50`, u.ID, history)
 		if err != nil {
 			a.internal(w, err)
 			return
@@ -239,7 +245,7 @@ func taskFuel(s *Ship, needed int, protected ...int) error {
 		return errors.New("Маршрут длиннее запаса топлива")
 	}
 	if s.Fuel+max(0, s.Cargo["agni"]-reserve)*5 < needed {
-		return errors.New("Недостаточно топлива: добавьте Агни в трюм")
+		return errors.New("Недостаточно топлива: добавьте водород в трюм")
 	}
 	for s.Fuel < needed {
 		s.Cargo["agni"]--

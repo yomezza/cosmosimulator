@@ -399,8 +399,7 @@
       top,
       "Показывать",
       [
-        ["all", "Все станции"],
-        ["stock", "С запасами"],
+        ["all", "Склады с грузом и текущая станция"],
         ["system", "Текущая система"],
       ],
       scope,
@@ -454,7 +453,7 @@
         const inventories = [stock("personal", p), stock("company", p)],
           has = inventories.some((c) => Object.values(c).some((v) => v > 0));
         return (
-          (scope !== "stock" || has) &&
+          (has || shipAt(s, p)) &&
           (scope !== "system" || p.star === s?.star) &&
           (!q ||
             [

@@ -67,10 +67,17 @@ func (a *App) clientAddress(r *http.Request) string {
 	return ip.String()
 }
 
+func jsonBodyLimit(r *http.Request) int64 {
+	if r.Method == "POST" && r.URL.Path == "/api/ideas" {
+		return 16 * 1024
+	}
+	return 4096
+}
+
 // Read the entire bounded JSON document before invoking any handler. In
 // particular, a slow sender must not hold user rows or the world mutation lock.
 func bufferJSON(w http.ResponseWriter, r *http.Request) bool {
-	data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 4096))
+	data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, jsonBodyLimit(r)))
 	if err != nil {
 		fail(w, 400, "Некорректный JSON")
 		return false

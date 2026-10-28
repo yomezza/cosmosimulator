@@ -532,6 +532,7 @@
     market: "M3 7h16l-4-4m6 14H5l4 4",
     corporations: "M12 2l9 5v10l-9 5-9-5V7zM8 9h8v7H8z",
     tasks: "M8 6h13M8 12h13M8 18h13M3 6h1M3 12h1M3 18h1",
+    ideas: "M12 3a6 6 0 0 1 4 10l-1 2H9l-1-2a6 6 0 0 1 4-10zM9 18h6M10 21h4",
     guide: "M3 4h7l2 2 2-2h7v15h-7l-2 2-2-2H3zM12 6v15",
     portal:
       "M12 4c5 0 9 4 9 8s-4 8-9 8-9-4-9-8 4-8 9-8zM8 12c0-3 2-5 4-5s4 2 4 5-2 5-4 5-4-2-4-5z",

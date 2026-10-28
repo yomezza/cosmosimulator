@@ -152,6 +152,8 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("POST /api/admin/galaxies/delete", a.deleteGalaxy)
 	m.HandleFunc("GET /api/logistics", a.logistics)
 	m.HandleFunc("POST /api/logistics", a.logistics)
+	m.HandleFunc("GET /api/ideas", a.ideas)
+	m.HandleFunc("POST /api/ideas", a.ideas)
 	m.HandleFunc("GET /api/planner", a.planner)
 	m.HandleFunc("POST /api/planner", a.planner)
 	m.HandleFunc("POST /api/admin/user", a.editUser)
@@ -213,7 +215,7 @@ func fail(w http.ResponseWriter, status int, s string) {
 	reply(w, status, map[string]string{"error": s})
 }
 func decode(w http.ResponseWriter, r *http.Request, v any) bool {
-	r.Body = http.MaxBytesReader(w, r.Body, 4096)
+	r.Body = http.MaxBytesReader(w, r.Body, jsonBodyLimit(r))
 	d := json.NewDecoder(r.Body)
 	d.DisallowUnknownFields()
 	if d.Decode(v) != nil || d.Decode(new(any)) != io.EOF {

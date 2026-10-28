@@ -15,12 +15,13 @@
     <script src="galaxy-admin.js" defer></script>
     <script src="operations070.js" defer></script>
     <script src="logistics.js" defer></script>
+    <script src="ideas.js" defer></script>
     <script src="expedition.js" defer></script>
     <script src="galaxy.js" defer></script>
   </head>
   <body>
     <header>
-      <a class="brand" href="/">◈ COSMOSIMULATOR <small>EDEM / 0.8.1</small></a>
+      <a class="brand" href="/">◈ COSMOSIMULATOR <small>EDEM / 0.9.0</small></a>
       <div class="header-actions">
         <div id="window-switcher" aria-label="Открытые окна"></div>
         <button
@@ -49,6 +50,10 @@
               <span data-i18n="Журнал изменений">Журнал изменений</span></button
             ><button data-open="resourcegrant">
               <span data-i18n="Выдача ресурсов">Выдача ресурсов</span></button
+            ><button data-open="adminideas">
+              <span data-i18n="Предложения игроков"
+                >Предложения игроков</span
+              ></button
             ><button data-open="users">
               <span data-i18n="Пользователи">Пользователи</span>
             </button>
@@ -167,6 +172,18 @@
         <span class="nav-icon">▤</span
         ><span class="nav-label" data-i18n="Руководство пилота"
           >Руководство пилота</span
+        >
+      </button>
+      <button
+        type="button"
+        class="sidebar-bottom"
+        data-open="ideas"
+        data-nav="Предложить идею"
+        aria-label="Предложить идею"
+      >
+        <span class="nav-icon">✧</span
+        ><span class="nav-label" data-i18n="Предложить идею"
+          >Предложить идею</span
         >
       </button>
     </aside>
@@ -312,7 +329,7 @@
     <footer>
       <span id="server-status" class="signal"
         ><span data-i18n="● СЕРВЕР ОНЛАЙН">● СЕРВЕР ОНЛАЙН</span></span
-      ><span>COSMOSIMULATOR · v0.8.1</span>
+      ><span>COSMOSIMULATOR · v0.9.0</span>
     </footer>
     <div id="toast" role="status" hidden></div>
     <div id="tooltip" role="tooltip" hidden></div>

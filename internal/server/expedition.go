@@ -334,7 +334,7 @@ func (a *App) expedition(w http.ResponseWriter, r *http.Request) {
 				if ship.Fuel >= ship.hull().Fuel {
 					problem = "Бак полон"
 				} else if ship.Cargo["agni"] < 1 {
-					problem = "Нужен Агни в трюме"
+					problem = "Нужен водород в трюме"
 				} else {
 					ship.Cargo["agni"]--
 					ship.Fuel += 5

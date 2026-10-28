@@ -135,6 +135,17 @@
           d.show();
           if (!w.initialized) {
             const l = read("module:" + id, {});
+            if (
+              id === "ship" &&
+              innerWidth >= 1000 &&
+              !read("layout:ship-inline-v1", false)
+            ) {
+              if (l.w && l.w < 700 && !l.pinned)
+                l.w = Math.min(width, innerWidth - 220);
+              try {
+                localStorage.setItem("layout:ship-inline-v1", "true");
+              } catch {}
+            }
             d.style.width = Math.min(l.w || width, innerWidth - 12) + "px";
             d.style.height = Math.min(l.h || height, innerHeight - 106) + "px";
             d.style.left =
@@ -308,11 +319,7 @@
       new ResizeObserver(() => {
         if (!d.open) return;
         const r = d.getBoundingClientRect();
-        d.classList.toggle(
-          "too-small",
-          r.width < (id === "hologram" ? 240 : 350) ||
-            r.height < (id === "hologram" ? 180 : 220),
-        );
+        d.classList.toggle("too-small", r.width < 350 || r.height < 220);
         clearTimeout(timer);
         timer = setTimeout(() => save(id, w), 200);
         window.dispatchEvent(new CustomEvent("moduleresize", { detail: id }));
@@ -383,7 +390,7 @@
     arrangeShip() {
       const ship = windows.get("ship");
       if (!ship?.dialog.open) return;
-      const members = ["hologram", "ship", "cargo"]
+      const members = ["ship", "cargo"]
         .filter(
           (id) =>
             id === "ship" ||
@@ -392,8 +399,7 @@
         .map((id) => ({ id, w: windows.get(id) }));
       if (members.some(({ w }) => w.pinned || w.maximized)) {
         for (const { id } of members)
-          if (id !== "ship")
-            Modules.adjacent(id, "ship", id === "hologram" ? "left" : "right");
+          if (id !== "ship") Modules.adjacent(id, "ship", "right");
         return;
       }
       const sidebar = document.getElementById("sidebar"),
@@ -413,7 +419,7 @@
         )
       )
         return;
-      const minima = members.map(({ id }) => (id === "hologram" ? 240 : 350)),
+      const minima = members.map(({ id }) => (id === "ship" ? 620 : 350)),
         widths = rects.map((r, i) => Math.max(minima[i], r.width)),
         total = widths.reduce((a, b) => a + b, 0),
         minimum = minima.reduce((a, b) => a + b, 0),
@@ -454,8 +460,7 @@
   };
   for (const [id, title, w, h] of [
     ["galaxy", "Галактическая карта", 1180, 700],
-    ["ship", "Корабль", 480, 640],
-    ["hologram", "Голограмма корабля", 360, 470],
+    ["ship", "Корабль", 860, 660],
     ["cargo", "Трюм", 360, 590],
     ["research", "Разведка и добыча", 1000, 660],
     ["market", "Рынок", 1060, 660],

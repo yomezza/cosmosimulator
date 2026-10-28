@@ -8,7 +8,6 @@
     choice = UI.choice;
   const ids = [
       "ship",
-      "hologram",
       "cargo",
       "research",
       "market",
@@ -325,52 +324,35 @@
       ),
     );
   }
-  function renderHologram() {
-    const root = roots.hologram,
-      s = d().ship;
-    Modules.title("hologram", tr("Голограмма") + " · " + UI.shipName(s));
-    root.classList.add("hologram-content");
-    let model = root.querySelector(".hologram-model");
-    if (!model) {
-      model = n("img");
-      model.className = "hologram-model";
-      model.draggable = false;
-      const controls = n("div", undefined, "hologram-controls"),
-        toggle = b("", () => {
-          Modules.link("ship", "hologram", !Modules.linked("hologram", "ship"));
-          renderHologram();
-          Modules.arrangeShip();
-        });
-      toggle.className = "hologram-link";
-      controls.append(toggle);
-      root.append(model, controls);
-    }
-    // Keep the image node and its timeline through polls, language and fuel updates.
-    if (model.getAttribute("src") !== s.spec.model) model.src = s.spec.model;
-    model.alt = tr("Голограмма корабля") + " · " + tr(s.spec.name);
-    root.dataset.ship = String(s.id);
-    root.querySelector(".hologram-link").textContent = tr(
-      Modules.linked("hologram", "ship")
-        ? "Отделить окно"
-        : "Связать с кораблём",
-    );
-  }
-  function openHologram() {
-    Modules.link("ship", "hologram", true);
-    Modules.open("hologram");
-    Modules.arrangeShip();
-    Modules.focus("ship");
-  }
   function refuelReason(ship) {
     if (fly(ship)) return "Корабль в пути";
     if (ship.fuel >= ship.spec.fuel) return "Бак полон";
-    if (!ship.cargo.agni) return "Нужен Агни в трюме выбранного корабля";
-    return "1 Агни = до 5 единиц топлива";
+    if (!ship.cargo.agni) return "Нужен водород в трюме выбранного корабля";
+    return "1 ед. водорода = до 5 единиц топлива";
   }
   function renderShip() {
-    const root = roots.ship;
+    const container = roots.ship,
+      s = d().ship;
+    let layout = container.querySelector(".ship-inline-layout");
+    if (!layout) {
+      container.replaceChildren();
+      layout = n("div", undefined, "ship-inline-layout");
+      const projection = n("aside", undefined, "ship-projection"),
+        model = n("img", undefined, "ship-inline-model"),
+        caption = n("p", undefined, "ship-projection-caption"),
+        information = n("section", undefined, "ship-information");
+      model.draggable = false;
+      projection.append(model, caption);
+      layout.append(projection, information);
+      container.append(layout);
+    }
+    const model = layout.querySelector(".ship-inline-model");
+    if (model.getAttribute("src") !== s.spec.model) model.src = s.spec.model;
+    model.alt = tr("Голограмма корабля") + " · " + tr(s.spec.name);
+    layout.querySelector(".ship-projection-caption").textContent =
+      tr(s.spec.name) + " · " + tr(s.spec.role);
+    const root = layout.querySelector(".ship-information");
     reset(root);
-    const s = d().ship;
     Modules.title(
       "ship",
       tr("Корабль") + " · " + UI.shipName(s) + " · " + d().system.name,
@@ -434,8 +416,8 @@
     row(root, "Зарезервировано топлива", s.reserved_fuel);
     row(
       root,
-      "Агни в трюме",
-      `${s.cargo.agni || 0} · ${tr("1 Агни = до 5 единиц топлива")}`,
+      "Водород в трюме",
+      `${s.cargo.agni || 0} · ${tr("1 ед. водорода = до 5 единиц топлива")}`,
     );
     const tools = n("div", undefined, "inline-controls");
     tools.append(
@@ -444,7 +426,6 @@
         Modules.open("cargo");
         Modules.arrangeShip();
       }),
-      b("Голограмма", openHologram),
       b("Найти на карте", () => {
         window.dispatchEvent(new CustomEvent("findship", { detail: s.id }));
         Modules.open("galaxy");
@@ -2709,12 +2690,21 @@
     renderArticle();
   }
   function renderTasks() {
-    const root = roots.tasks;
-    if (!root.querySelector(".planner")) reset(root);
-    [...root.children]
+    const container = roots.tasks;
+    if (!container.querySelector(".planner")) reset(container);
+    [...container.children]
       .filter((e) => !e.classList.contains("planner"))
       .forEach((e) => e.remove());
-    Scheduler.render(root).catch((error) => notify(error.message, "error"));
+    Scheduler.render(container).catch((error) =>
+      notify(error.message, "error"),
+    );
+    let fleet = container.querySelector(".planner-fleet");
+    if (!fleet) {
+      fleet = n("section", undefined, "planner-fleet");
+      container.querySelector(".planner-compose").append(fleet);
+    }
+    const root = fleet;
+    root.replaceChildren();
     root.append(n("h3", tr("Текущие действия флота"), "fleet-heading"));
     for (const s of gameData.fleet.ships) {
       const card = n("section", undefined, "task-card");
@@ -3086,7 +3076,6 @@
   }
   const renderers = {
     ship: renderShip,
-    hologram: renderHologram,
     cargo: renderCargo,
     research: renderResearch,
     market: renderMarket,
@@ -3116,6 +3105,10 @@
     for (const [id, render] of Object.entries(renderers)) {
       if (!Modules.isOpen(id) || (!force && onDemand.has(id))) continue;
       const root = roots[id];
+      if (id === "tasks") {
+        render();
+        continue;
+      }
       if (
         root.querySelector('[data-dirty="true"]') ||
         (!force &&
@@ -3175,7 +3168,6 @@
       if (epoch !== authEpoch || !signedIn || !Modules.isOpen(e.detail)) return;
       await renderers[e.detail]?.();
       if (epoch !== authEpoch || !signedIn || !Modules.isOpen(e.detail)) return;
-      if (e.detail === "ship") openHologram();
       if (e.detail === "notifications") {
         const dialog = document.getElementById("window-notifications");
         if (!dialog.dataset.positioned) {
@@ -3214,8 +3206,6 @@
   window.addEventListener("languagechange", () => renderVisible(true));
   window.addEventListener("moduleclose", (e) => {
     if (e.detail === "market") marketRequestID++;
-    if (e.detail === "ship" && Modules.isOpen("hologram"))
-      Modules.close("hologram");
   });
   window.addEventListener("signedout", () => {
     noticeCursor = null;
