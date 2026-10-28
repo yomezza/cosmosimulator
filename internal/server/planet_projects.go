@@ -52,7 +52,7 @@ func (c PlanetConfig) valid() bool {
 	return true
 }
 func (a *App) planetAt(ctx context.Context, q querier, uid int64, star, planet int) (Planet, error) {
-	g, err := a.loadUniverse(ctx)
+	g, err := a.loadUniverseFrom(ctx, q)
 	if err != nil {
 		return Planet{}, err
 	}
@@ -112,7 +112,7 @@ func (a *App) planetSurface(w http.ResponseWriter, r *http.Request) {
 				a.internal(w, e)
 				return
 			}
-			g, e := a.loadUniverse(ctx)
+			g, e := a.loadUniverseFrom(ctx, tx)
 			if e != nil {
 				a.internal(w, e)
 				return

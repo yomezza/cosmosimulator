@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/jackc/pgx/v5"
 	"math"
 	"math/rand"
 	"net/http"
@@ -180,13 +181,34 @@ func (a *App) galaxy(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) loadUniverse(ctx context.Context) (*Galaxy, error) {
+	return a.loadUniverseFrom(ctx, a.db)
+}
+
+// A caller holding a transaction must be able to load a cold world cache using
+// that connection, rather than waiting for another slot in a saturated pool.
+func (a *App) loadUniverseFrom(ctx context.Context, q querier) (*Galaxy, error) {
+	// Transactional readers use their own committed-world snapshot directly. They
+	// must not wait for a cache mutex held by an ordinary pool reader that itself
+	// might be waiting for one of these transactions to release a connection.
+	if _, transactional := q.(pgx.Tx); transactional {
+		var raw []byte
+		if err := q.QueryRow(ctx, `SELECT data FROM galaxies WHERE name='Edem'`).Scan(&raw); err != nil {
+			return nil, err
+		}
+		var g Galaxy
+		if err := json.Unmarshal(raw, &g); err != nil {
+			return nil, err
+		}
+		return &g, nil
+	}
+
 	a.universeMu.Lock()
 	defer a.universeMu.Unlock()
 	if a.universe != nil {
 		return a.universe, nil
 	}
 	var raw []byte
-	if err := a.db.QueryRow(ctx, `SELECT data FROM galaxies WHERE name='Edem'`).Scan(&raw); err != nil {
+	if err := q.QueryRow(ctx, `SELECT data FROM galaxies WHERE name='Edem'`).Scan(&raw); err != nil {
 		return nil, err
 	}
 	var g Galaxy

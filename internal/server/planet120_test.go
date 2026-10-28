@@ -2,11 +2,14 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -397,4 +400,51 @@ func TestPlanetContributionPages120(t *testing.T) {
 		t.Fatal("lost historical contributions")
 	}
 	f.req(c, "POST", "/api/planet/action", map[string]any{"action": "withdraw", "id": pid, "contribution": page.Items[len(page.Items)-1].ID, "request": "history120-withdraw"}, 200)
+}
+
+func TestPlanetColdCacheSaturatedPool120(t *testing.T) {
+	f, _, uid, _, _ := setupPlanet120(t)
+	ctx, cancel := context.WithTimeout(f.ctx, 2*time.Second)
+	defer cancel()
+	tx, err := f.db.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(context.Background())
+	held := []*pgxpool.Conn{}
+	defer func() {
+		for _, conn := range held {
+			conn.Release()
+		}
+	}()
+	for i := 1; i < int(f.db.Config().MaxConns); i++ {
+		conn, e := f.db.Acquire(ctx)
+		if e != nil {
+			t.Fatal(e)
+		}
+		held = append(held, conn)
+	}
+	fresh := &App{db: f.db}
+	done := make(chan error, 1)
+	go func() { _, err := fresh.loadUniverse(ctx); done <- err }()
+	// The ordinary cache reader now holds the mutex while awaiting a pool slot.
+	for fresh.universeMu.TryLock() {
+		fresh.universeMu.Unlock()
+		runtime.Gosched()
+		if ctx.Err() != nil {
+			t.Fatal(ctx.Err())
+		}
+	}
+	var planet int
+	if err = tx.QueryRow(ctx, `SELECT planet FROM planet_surfaces LIMIT 1`).Scan(&planet); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = fresh.planetAt(ctx, tx, uid, 1, planet); err != nil {
+		t.Fatal("cold world cache tried to acquire another connection:", err)
+	}
+	held[0].Release()
+	held = held[1:]
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
 }
