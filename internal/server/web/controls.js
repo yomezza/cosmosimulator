@@ -3,16 +3,33 @@
   const tr = (s) => I18n.t(s),
     n = UI.node;
   const folds = new Map();
+  const saveFold = (d) => {
+    folds.set(d.dataset.fold, d.open);
+    if (d.dataset.foldStorage) {
+      try {
+        localStorage.setItem(d.dataset.foldStorage, JSON.stringify(d.open));
+      } catch {}
+    }
+  };
   UI.rememberFolds = (root) =>
-    root
-      .querySelectorAll("details[data-fold]")
-      .forEach((d) => folds.set(d.dataset.fold, d.open));
-  UI.fold = (key, opened = false, className) => {
+    root.querySelectorAll("details[data-fold]").forEach(saveFold);
+  UI.fold = (key, opened = false, className, persistent = false) => {
     const details = n("details", undefined, className);
     details.dataset.fold = key;
+    if (persistent) {
+      details.dataset.foldStorage = `fold:${gameData.state.user.id}:${key}`;
+      if (!folds.has(key)) {
+        try {
+          const saved = JSON.parse(
+            localStorage.getItem(details.dataset.foldStorage),
+          );
+          if (typeof saved === "boolean") folds.set(key, saved);
+        } catch {}
+      }
+    }
     details.open = folds.has(key) ? folds.get(key) : opened;
     details.addEventListener("toggle", () => {
-      if (details.isConnected) folds.set(key, details.open);
+      if (details.isConnected) saveFold(details);
     });
     return details;
   };

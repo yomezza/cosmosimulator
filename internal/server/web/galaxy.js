@@ -26,15 +26,49 @@
   label.id = "map-breadcrumb";
   top.append(back, galaxyPicker, system, label, toggle);
   const filters = e("div", undefined, "map-filters"),
-    flags = {
+    filterDefaults = {
       ships: true,
-      others: true,
+      others: false,
       ports: true,
       planets: true,
       belts: true,
       labels: true,
       territories: true,
+      lanes: true,
     };
+  let flags = { ...filterDefaults },
+    filterOwner,
+    filterModes;
+  function syncFilters() {
+    const owner = gameData.state?.user?.id;
+    if (!owner) return;
+    if (filterOwner !== owner) {
+      filterOwner = owner;
+      filterModes = {};
+      for (const type of ["galaxy", "system"]) {
+        const defaults = { ...filterDefaults, others: type === "system" };
+        let saved;
+        try {
+          saved = JSON.parse(
+            localStorage.getItem(`map-filters:${owner}:${type}`),
+          );
+        } catch {}
+        for (const key of Object.keys(defaults))
+          if (typeof saved?.[key] === "boolean") defaults[key] = saved[key];
+        filterModes[type] = defaults;
+      }
+    }
+    flags = filterModes[mode];
+    filters.querySelectorAll("label").forEach((l) => {
+      l.querySelector("input").checked = flags[l.dataset.filter];
+      l.hidden =
+        mode === "galaxy"
+          ? !["ships", "others", "labels", "territories", "lanes"].includes(
+              l.dataset.filter,
+            )
+          : ["territories", "lanes"].includes(l.dataset.filter);
+    });
+  }
   for (const [id, text] of [
     ["ships", "Мои корабли"],
     ["others", "Корабли других игроков"],
@@ -43,11 +77,13 @@
     ["belts", "Месторождения"],
     ["labels", "Подписи"],
     ["territories", "Владения корпораций"],
+    ["lanes", "Гиперкоридоры"],
   ]) {
     const l = e("label"),
       i = e("input"),
       span = e("span", tr(text));
     l.dataset.filter = id;
+    span.dataset.i18n = text;
     if (id === "labels")
       l.dataset.help =
         "При приближении названия систем видны только рядом с курсором.";
@@ -55,11 +91,25 @@
     i.checked = true;
     i.onchange = () => {
       flags[id] = i.checked;
+      try {
+        localStorage.setItem(
+          `map-filters:${filterOwner}:${mode}`,
+          JSON.stringify(flags),
+        );
+      } catch {}
       draw();
     };
     l.append(i, span);
     filters.append(l);
   }
+  const display = UI.fold("map:display", false, "map-display-menu"),
+    displayTitle = e("summary", tr("Отображение"));
+  displayTitle.dataset.i18n = "Отображение";
+  display.append(displayTitle, filters);
+  top.append(display);
+  display.addEventListener("toggle", () => {
+    if (display.open) syncFilters();
+  });
   const body = e("div", undefined, "map-workspace"),
     view = e("div", undefined, "map-canvas-wrap"),
     canvas = e("canvas"),
@@ -213,6 +263,27 @@
     }
     ctx.restore();
   }
+  let presenceSource,
+    presence = new Map();
+  function systemPlayers(star) {
+    if (presenceSource !== gameData.fleet) {
+      presenceSource = gameData.fleet;
+      presence = new Map();
+      const add = (star, id, name) => {
+        if (!presence.has(star)) presence.set(star, new Map());
+        const owners = presence.get(star);
+        if (!owners.has(id) && owners.size < 11) owners.set(id, name);
+      };
+      for (const ship of gameData.fleet?.ships || [])
+        add(ship.star, gameData.state.user.id, gameData.state.user.username);
+      for (const ship of gameData.fleet?.public_ships || [])
+        add(ship.star, ship.owner, ship.owner_name);
+    }
+    const names = [...(presence.get(star)?.values() || [])];
+    return names.length
+      ? names.slice(0, 10).join(", ") + (names.length > 10 ? "…" : "")
+      : tr("Нет игроков");
+  }
   function hoverSummary(event) {
     const bounds = canvas.getBoundingClientRect(),
       x = event.clientX - bounds.x,
@@ -265,7 +336,14 @@
         "map-owner",
       );
       if (owner) badge.style.color = owner.color;
-      summary.append(badge);
+      summary.append(
+        badge,
+        e(
+          "p",
+          tr("Присутствуют игроки") + ": " + systemPlayers(star.id),
+          "system-presence",
+        ),
+      );
       const known = Game.known(star.id),
         progress =
           gameData.workbench?.research?.find((r) => r.star === star.id)
@@ -599,6 +677,7 @@
     }
   }
   function draw() {
+    syncFilters();
     if (root.classList.contains("planet-open")) return;
     if (mode !== "galaxy") hideSummary();
     zoomLabel.textContent = cam().zoom.toFixed(1) + "×";
@@ -748,7 +827,7 @@
     ctx.strokeStyle = "#273749";
     ctx.lineWidth = 0.6;
     ctx.beginPath();
-    for (const lane of galaxy.lanes) {
+    for (const lane of flags.lanes ? galaxy.lanes : []) {
       if (
         starGalaxy(lane.from) !== viewedGalaxy ||
         starGalaxy(lane.to) !== viewedGalaxy
@@ -1092,17 +1171,6 @@
         }),
       );
     side.append(bookmarks);
-    const filter = UI.fold("map:display");
-    filters
-      .querySelectorAll("label")
-      .forEach(
-        (l) =>
-          (l.hidden =
-            mode === "galaxy" &&
-            !["ships", "labels"].includes(l.dataset.filter)),
-      );
-    filter.append(e("summary", tr("Отображение")), filters);
-    side.append(filter);
   }
   function plannedRoute(from, points) {
     const full = [from];
@@ -1348,10 +1416,6 @@
       }
       side.append(group);
     }
-    const display = UI.fold("map:display");
-    display.append(e("summary", tr("Отображение")), filters);
-    filters.querySelectorAll("label").forEach((l) => (l.hidden = false));
-    side.append(display);
   }
   async function openSystem(id, notifySelection = true) {
     if (!Number.isInteger(id) || id < 1 || id > (galaxy?.stars.length || 0)) {
@@ -1747,6 +1811,10 @@
     draw();
   });
   window.addEventListener("gamedata", () => {
+    const players = summary.querySelector(".system-presence");
+    if (!summary.hidden && hoverID && players)
+      players.textContent =
+        tr("Присутствуют игроки") + ": " + systemPlayers(hoverID);
     knownStars = new Set(
       (gameData.workbench?.known || []).map((item) => item.star),
     );

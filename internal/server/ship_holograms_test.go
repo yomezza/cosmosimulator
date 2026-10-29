@@ -3,7 +3,11 @@ package server
 import (
 	"bytes"
 	"encoding/xml"
+	"fmt"
 	"io"
+	"math"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -109,6 +113,67 @@ func TestShipHolograms(t *testing.T) {
 				t.Fatal("same hull geometry as", other)
 			}
 			silhouettes[shape] = class.ID
+		})
+	}
+}
+
+// Every orbit frame must fit its viewport, including the long active engine
+// particles. Idle hulls must use most of the preview instead of empty SVG space.
+func TestShipHologramViewports(t *testing.T) {
+	point := regexp.MustCompile(`[ML](-?[0-9.]+) (-?[0-9.]+)`)
+	for _, class := range shipClasses {
+		t.Run(class.ID, func(t *testing.T) {
+			data, err := assets.ReadFile("web/" + class.Model)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var svg struct {
+				Idle   string `xml:"data-idle-viewbox,attr"`
+				Moving string `xml:"data-moving-viewbox,attr"`
+				Paths  []struct {
+					ID        string `xml:"id,attr"`
+					Animation struct {
+						Values string `xml:"values,attr"`
+					} `xml:"animate"`
+				} `xml:"defs>path"`
+			}
+			if err = xml.Unmarshal(data, &svg); err != nil {
+				t.Fatal(err)
+			}
+			for _, moving := range []bool{false, true} {
+				viewport := svg.Idle
+				if moving {
+					viewport = svg.Moving
+				}
+				var x, y, w, h float64
+				if n, e := fmt.Sscanf(viewport, "%f %f %f %f", &x, &y, &w, &h); e != nil || n != 4 || w <= 0 || h <= 0 {
+					t.Fatal("invalid viewport", viewport)
+				}
+				minX, maxX, minY, maxY := math.Inf(1), math.Inf(-1), math.Inf(1), math.Inf(-1)
+				for _, path := range svg.Paths {
+					if !moving && (strings.HasSuffix(path.ID, "-thrust") || strings.HasSuffix(path.ID, "-particles")) {
+						continue
+					}
+					points := point.FindAllStringSubmatch(path.Animation.Values, -1)
+					if len(points) == 0 {
+						t.Fatal("missing animated geometry", path.ID)
+					}
+					for _, p := range points {
+						px, _ := strconv.ParseFloat(p[1], 64)
+						py, _ := strconv.ParseFloat(p[2], 64)
+						if px < x+5 || px > x+w-5 || py < y+5 || py > y+h-5 {
+							t.Fatalf("clipped geometry %s at %v (moving=%v)", path.ID, p, moving)
+						}
+						minX = math.Min(minX, px)
+						maxX = math.Max(maxX, px)
+						minY = math.Min(minY, py)
+						maxY = math.Max(maxY, py)
+					}
+				}
+				if !moving && math.Max((maxX-minX)/w, (maxY-minY)/h) < .65 {
+					t.Fatal("idle hull remains too small")
+				}
+			}
 		})
 	}
 }

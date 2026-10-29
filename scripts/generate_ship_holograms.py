@@ -263,7 +263,10 @@ def render(model_id, settings):
                 (min(y for _, y in f) + max(y for _, y in f)) / 2) for f in raw_frames]
     extent_x = max(abs(x - cx) for body_frame, thrust_frame, (cx, cy) in zip(raw_frames, [a + b for a, b in zip(raw_plumes, raw_particles)], centers) for x, y in body_frame + thrust_frame)
     extent_y = max(abs(y - cy) for body_frame, thrust_frame, (cx, cy) in zip(raw_frames, [a + b for a, b in zip(raw_plumes, raw_particles)], centers) for x, y in body_frame + thrust_frame)
-    footprint = .48 + .52 * length / 92
+    # A shared visible footprint: old .48 base left starter hulls tiny even
+    # in taller CSS boxes. Keep size progression while using the safe envelope
+    # of all orbit frames, engine plumes and particles (no runtime cropping).
+    footprint = .80 + .20 * length / 92
     scale = min(415 / extent_x, 235 / extent_y) * footprint
     def project_frames(raw):
         return [[(450 + (x - cx) * scale, 280 + (y - cy) * scale) for x, y in f]
@@ -271,12 +274,22 @@ def render(model_id, settings):
     frames, thrust_frames = project_frames(raw_frames), project_frames(raw_plumes)
     particle_frames = project_frames(raw_particles)
     assert all(math.isfinite(x) and math.isfinite(y) and 5 < x < 895 and 5 < y < 555 for f in frames + thrust_frames + particle_frames for x, y in f)
+    def viewport(all_frames):
+        # Fit the complete turn, not only its first frame. Reserve stroke/glow
+        # padding and retain the fleet's modest relative size progression.
+        rx = max(abs(x - 450) for f in all_frames for x, y in f) / footprint + 18
+        ry = max(abs(y - 280) for f in all_frames for x, y in f) / footprint + 18
+        rx = max(rx, ry * 900 / 560)
+        ry = rx * 560 / 900
+        return f"{450-rx:.2f} {280-ry:.2f} {2*rx:.2f} {2*ry:.2f}"
+    idle_view = viewport(frames)
+    moving_view = viewport(frames + thrust_frames + particle_frames)
     definitions = []
     for part, lines, projected in (("body", body, frames), ("details", details, frames), ("thrust", list(plume.edges()), thrust_frames), ("particles", particle_edges, particle_frames)):
         paths = [geometry.path_for(lines, frame) for frame in projected]
         assert paths[0] == paths[-1]
         definitions.append(f'<path id="{model_id}-{part}" d="{paths[0]}"><animate attributeName="d" values="{";".join(paths)}" dur="16s" repeatCount="indefinite" calcMode="linear"/></path>')
-    return f'''<svg xmlns="http://www.w3.org/2000/svg" width="900" height="560" viewBox="0 0 900 560" data-length="{length}" role="img" fill="none" aria-labelledby="{model_id}-title {model_id}-description">
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" width="900" height="560" viewBox="{idle_view}" data-idle-viewbox="{idle_view}" data-moving-viewbox="{moving_view}" data-length="{length}" role="img" fill="none" aria-labelledby="{model_id}-title {model_id}-description">
 <title id="{model_id}-title">{name} hologram</title>
 <desc id="{model_id}-description">Transparent wireframe spacecraft. Full spatial orbit in 16 seconds, soft green glow and moving light pulses.</desc>
 <defs><filter id="{model_id}-glow" x="-25%" y="-25%" width="150%" height="150%"><feGaussianBlur stdDeviation="1.2"/></filter>{"".join(definitions)}</defs>

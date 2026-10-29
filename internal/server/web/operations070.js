@@ -11,6 +11,7 @@
   let request = 0;
   window.Scheduler = {
     async render(root) {
+      UI.rememberFolds(root);
       let host = root.querySelector(".planner");
       if (!host || host.dataset.language !== I18n.language) {
         host?.remove();
@@ -270,6 +271,7 @@
         result = await api("planner");
       if (key !== request || epoch !== authEpoch || !host.isConnected) return;
       const list = host.querySelector(".planner-list");
+      UI.rememberFolds(list);
       list.replaceChildren();
       const active = result
         .filter((t) => ["queued", "running", "paused"].includes(t.status))
@@ -286,8 +288,14 @@
         "Приоритет меняется в пределах корабля. Текущий цикл добычи или разгрузка уже принятого груза завершается перед переключением.";
       const groups = new Map();
       for (const ship of gameData.fleet.ships) {
-        const group = n("section", undefined, "planner-ship"),
-          heading = n("div", undefined, "planner-ship-heading");
+        const group = UI.fold(
+            `planner:ship:${ship.id}`,
+            true,
+            "planner-ship",
+            true,
+          ),
+          heading = n("summary", undefined, "planner-ship-heading"),
+          tasks = n("div", undefined, "planner-ship-tasks");
         const model = UI.hologram(
           ship.spec.model,
           UI.shipName(ship),
@@ -300,26 +308,32 @@
           !!ship.destination || !!ship.local_target,
         );
         heading.append(model, n("h4", UI.shipName(ship)));
-        group.append(heading);
+        group.append(heading, tasks);
         UI.shipActivity(
-          group,
+          tasks,
           ship,
           active.some((t) => t.ship_id === ship.id),
         );
         if (!active.some((t) => t.ship_id === ship.id))
-          UI.empty(group, "Нет запланированных задач");
-        groups.set(ship.id, group);
+          UI.empty(tasks, "Нет запланированных задач");
+        groups.set(ship.id, tasks);
         list.append(group);
       }
       for (const task of active) {
-        const card = n("section", undefined, "planner-item"),
+        const card = UI.fold(
+            `planner:task:${task.id}`,
+            true,
+            "planner-item",
+            true,
+          ),
+          taskHeading = n("summary"),
           resource = gameData.expedition.resources.find(
             (r) => r.id === task.resource,
           ),
           ship = gameData.fleet.ships.find((s) => s.id === task.ship_id);
         card.dataset.task = String(task.id);
         card.dataset.status = task.status;
-        card.append(
+        taskHeading.append(
           n(
             "b",
             (ship ? UI.shipName(ship) : task.ship_name) +
@@ -333,6 +347,9 @@
                 }[task.kind] || task.kind,
               ),
           ),
+        );
+        card.append(
+          taskHeading,
           n(
             "p",
             tr(resource?.name || task.resource) +

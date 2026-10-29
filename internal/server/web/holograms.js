@@ -25,6 +25,10 @@
     return templates.get(source);
   }
   function thrust(state) {
+    const viewport = state.svg?.getAttribute(
+      state.moving ? "data-moving-viewbox" : "data-idle-viewbox",
+    );
+    if (viewport) state.svg.setAttribute("viewBox", viewport);
     state.svg
       ?.querySelectorAll(".engine-thrust")
       .forEach((group) =>
