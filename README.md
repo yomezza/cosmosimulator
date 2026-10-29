@@ -4,6 +4,8 @@
 
 [Изменения 0.12.5](release-notes/v0.12.5.md) · [Реестр игровых идей](docs/roadmap/README.md) · [72 улучшения интерфейса](docs/roadmap/ui-0.3.3.md) · [Отложенное](docs/roadmap/deferred.md) · [Отклонённое](docs/roadmap/rejected.md).
 
+[Рефакторинг интерфейса: M0, контракты и тесты](docs/refactoring/ui/README.ru.md) · [Границы космической и будущей планетарной служб](docs/refactoring/service-boundaries.ru.md). Node/Playwright используются только для разработки; Windows-службе они не нужны.
+
 [Исходные эскизы голографических кораблей](docs/design/ship-holograms/README.md).
 
 ## Запуск в Windows

@@ -1,0 +1,24 @@
+# Каталог предлагаемой UI-системы
+
+Это архитектурное предложение. Ни один новый компонент аудитом не создан. Сначала развивать существующие реализации, вводить временные compatibility facades с одной реализацией, а не второй параллельный UI-framework.
+
+| ID | Механизм | Ответственность | Не должен делать | Основа | Приоритет |
+|---|---|---|---|---|---|
+| U01 | AppShell / SessionBoundary | Экраны startup/auth/game, видимость, авторитетный authEpoch | Не хранит игровые команды и economy | app.js; windows.js auth shell | P0/P1 |
+| U02 | ApiClient / ApiError | HTTP status, JSON/non-JSON, AbortSignal, network vs forbidden vs conflict | Не personalizes станции; не делает автоматический retry мутаций | app.js api | P1 |
+| U03 | RequestScope / AsyncAction | Генерация, отмена, accept only current, busy/error/finally ownership | Не определяет idempotency и пользовательские permissions | Ideas/Market patterns → Users pilot | P1 |
+| U04 | FeatureSnapshot / ResourceStore | Согласованный current snapshot, in-flight read dedup, events/selectors | Не заменяет PostgreSQL и не скрывает старость данных | gameData / MapData / 7 endpoint composition | P1 |
+| U05 | ModuleWindow / WindowRegistry | Workspace geometry, pin/link/maximize, title, lifecycle/dispose | Не знает ship stats или project access | windows.js Modules facade | P1/P2 |
+| U06 | OverlayHost / FloatingPlacement | Active overlays, viewport/scroll tracking, Escape/outside, focus ownership | Tooltip не становится modal; header menu может сохраняться после action | UI.menu / UI.picker / tooltip positional parts | P1/P2 |
+| U07 | Button / ActionGroup | Вид, busy, controlled disabled, aria-label/pressed | Не высчитывает цену корабля или лимит добычи | UI.button / direct native buttons | P1 |
+| U08 | Field / QuantityField / FormState | Label/help/error, native validation, dirty/pending, selection/caret | Payload и кросс-полевые business guards в feature | UI.field / UI.dirty / hand forms | P1/P2 |
+| U09 | Disclosure / TreeGroup | open state, stable ID, optional persistence, indicator | Не определяет структуру очереди или содержимое категорий | UI.fold + manual adapters | P2 |
+| U10 | Tabs | Selected key, keyboard/focus, aria relationships | Загрузка tab data и правила остаются feature | UI.tabs | P2 |
+| U11 | Combobox / SearchPicker | Options, search/page/favorites slots, events, positioning through host | Station/system options создаются адаптерами | UI.picker + choice facade | P2 |
+| U12 | Table / AsyncList / Pager / CursorMore | Presentation, loading/refreshing/empty/error, action slot | Не универсальный data-fetching grid и не all-pages SQL facade | UI.table + 7 pager families | P2 |
+| U13 | PreferenceStore | Defaults vs manual choice, schemaVersion, scope, storage fallback, migrations | Не хранит баланс, владение, маршрут сервера или receipts | 3 storage-controller families + I18n/density adapters | P2 |
+| U14 | Format / I18n facade | Credits, quantities, percent, time/duration/stardate, units, interpolation | Не округляет DTO и не переводит имена игроков | UI.formatNumber/percent + current catalogs | P2 |
+| U15 | Feedback / Tooltip / Confirm | Transient vs persisted delivery explicit; content + action policies | Inbox collection feature-owned; dangerous operation server preview feature-owned | notify + rich/simple tooltip + UI.confirm | P2 |
+| U16 | Badge / Divider / Section / StatList | Минимальные presentation classes/slots/token roles | Не component для каждого span; игровая палитра отдельно | row, status spans, cards, shipStats view | P2/P3 |
+| U17 | Inventory ResourceTile / SelectionController | Повторное отображение ресурса, selection updates в inventory | Source/amount/permissions остаются inventory feature | renderCargo + Logistics.tile; common resourceCard reused | P2/P3 |
+| U18 | PublicAssetCache / MotionPolicy | Dedup, failure eviction, paused/reduced motion convention | SVG IDs/SMIL и terrain sampling не становятся одним renderer | holograms + texture cache (bounded public art) | P3 |

@@ -1,0 +1,17 @@
+{
+  "name": "cosmosimulator-ui-contracts",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test --test-concurrency=1 *.test.mjs",
+    "test:baseline": "node --test --test-concurrency=1 baseline.test.mjs",
+    "test:known": "node --test --test-concurrency=1 known-defects.test.mjs",
+    "capture": "node capture.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1"
+  }
+}
