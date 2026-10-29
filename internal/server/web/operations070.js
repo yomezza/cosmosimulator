@@ -286,11 +286,14 @@
         tr("Очередь и выполнение") + " · " + active.length;
       host.querySelector(".planner-queue-title").dataset.help =
         "Приоритет меняется в пределах корабля. Текущий цикл добычи или разгрузка уже принятого груза завершается перед переключением.";
-      const groups = new Map();
+      const groups = new Map(),
+        counts = new Map();
+      for (const task of active)
+        counts.set(task.ship_id, (counts.get(task.ship_id) || 0) + 1);
       for (const ship of gameData.fleet.ships) {
         const group = UI.fold(
-            `planner:ship:${ship.id}`,
-            true,
+            `planner:ship:v2:${ship.id}`,
+            false,
             "planner-ship",
             true,
           ),
@@ -307,15 +310,13 @@
           UI.shipName(ship),
           !!ship.destination || !!ship.local_target,
         );
-        heading.append(model, n("h4", UI.shipName(ship)));
+        const count = counts.get(ship.id) || 0,
+          badge = n("span", tr("Задания") + ": " + count, "planner-ship-count");
+        badge.dataset.help = "В очереди, выполняются или приостановлены";
+        heading.append(model, n("h4", UI.shipName(ship)), badge);
         group.append(heading, tasks);
-        UI.shipActivity(
-          tasks,
-          ship,
-          active.some((t) => t.ship_id === ship.id),
-        );
-        if (!active.some((t) => t.ship_id === ship.id))
-          UI.empty(tasks, "Нет запланированных задач");
+        UI.shipActivity(tasks, ship, count > 0);
+        if (!count) UI.empty(tasks, "Нет запланированных задач");
         groups.set(ship.id, tasks);
         list.append(group);
       }

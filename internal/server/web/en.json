@@ -1480,5 +1480,6 @@
   "Возврат ожидает получения в разделе Колонии": "A refund is awaiting collection in Colonies",
   "Полное финансирование автоматически начинает строительство. После этого возврат вкладов и отмена недоступны.": "Full funding automatically starts construction. Contributions can no longer be withdrawn and the project cannot be cancelled after that.",
   "Присутствуют игроки": "Players present",
-  "Нет игроков": "No players"
+  "Нет игроков": "No players",
+  "В очереди, выполняются или приостановлены": "Queued, running or paused"
 }

@@ -3225,8 +3225,23 @@ button.picker-button.system-picker .picker-chevron {
 }
 .planner-ship-heading {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+}
+.planner-ship-heading > h4 {
+  min-width: 0;
+  flex: 1 1 80px;
+  overflow-wrap: anywhere;
+  margin: 0;
+}
+.planner-ship-count {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  color: var(--accent);
+  font-size: 11px;
 }
 .planner-ship-model {
   width: 100px;
