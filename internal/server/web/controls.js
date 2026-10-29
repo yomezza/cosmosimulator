@@ -2,6 +2,17 @@
 (() => {
   const tr = (s) => I18n.t(s),
     n = UI.node;
+  UI.formatNumber = (value, options = {}) =>
+    typeof value === "number" && Number.isFinite(value)
+      ? value.toLocaleString(I18n.language, {
+          maximumFractionDigits: 1,
+          ...options,
+        })
+      : "—";
+  UI.percent = (value) =>
+    typeof value === "number" && Number.isFinite(value)
+      ? UI.formatNumber(Math.max(0, Math.min(100, value))) + "%"
+      : "—";
   const folds = new Map();
   const saveFold = (d) => {
     folds.set(d.dataset.fold, d.open);

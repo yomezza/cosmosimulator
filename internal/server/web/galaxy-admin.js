@@ -21,6 +21,7 @@
     gameplay: "Игровой процесс",
     user_edit: "Редактирование пользователя",
     teleport: "Телепортация",
+    planet_surface_reset: "Сброс поверхности планеты",
     galaxy_update: "Изменение галактики",
     galaxy_delete: "Удаление галактики",
   };
@@ -568,6 +569,35 @@
                   ]),
                 ),
               );
+            } else if (item.action === "planet_surface_reset") {
+              const before = data.before || {};
+              UI.row(entry, "Планета", before.name || data.planet || "—");
+              UI.row(
+                entry,
+                "Операция",
+                tr(
+                  data.operation === "delete"
+                    ? "Удалить генерацию колонии"
+                    : "Перегенерировать колонию",
+                ),
+              );
+              UI.row(
+                entry,
+                "Результат",
+                tr(
+                  {
+                    success: "Успешно",
+                    blocked: "Заблокировано",
+                    error: "Ошибка",
+                  }[data.result] || data.result,
+                ),
+              );
+              if (data.reason) entry.append(n("p", tr(data.reason)));
+              if (data.before) {
+                UI.row(entry, "Количество секторов", before.sectors);
+                UI.row(entry, "Проекты", before.projects);
+                UI.row(entry, "Колонии", before.colonies);
+              }
             } else if (item.action === "teleport") {
               UI.row(entry, "Корабль", "#" + data.ship);
               for (const [label, id] of [

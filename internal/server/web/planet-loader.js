@@ -17,6 +17,10 @@
     UI.loadPlanet()
       .then((p) => p.open(star, planet))
       .catch((e) => notify(e.message, "error"));
+  UI.adminPlanetSurface = (star, planet, action) =>
+    UI.loadPlanet()
+      .then((p) => p.admin(star, planet, action))
+      .catch((e) => notify(e.message, "error"));
   document.addEventListener(
     "click",
     (event) => {

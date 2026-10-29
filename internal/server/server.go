@@ -137,6 +137,8 @@ func (a *App) routes() http.Handler {
 	m.HandleFunc("GET /api/admin/galaxies", a.adminGalaxies)
 	m.HandleFunc("POST /api/admin/galaxies/preview", a.adminGalaxies)
 	m.HandleFunc("POST /api/admin/galaxies/apply", a.adminGalaxies)
+	m.HandleFunc("GET /api/admin/planet/surface", a.adminPlanetSurface)
+	m.HandleFunc("POST /api/admin/planet/surface", a.adminPlanetSurface)
 	m.HandleFunc("GET /api/planet/surface", a.planetSurface)
 	m.HandleFunc("GET /api/planet/state", a.planetState)
 	m.HandleFunc("GET /api/planet/projects", a.colonyList)

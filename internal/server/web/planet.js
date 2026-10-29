@@ -97,7 +97,7 @@
   }
   function draw() {
     const c = current;
-    if (!c) return;
+    if (!c?.g) return;
     const { canvas, g, camera } = c;
     const w = canvas.clientWidth,
       h = canvas.clientHeight;
@@ -216,7 +216,18 @@
         else
           rgb = [61 + (h - 460) / 9, 91 + (h - 460) / 10, 65 + (h - 460) / 12];
         const i = (y * canvas.width + x) * 4;
-        for (let c = 0; c < 3; c++) image.data[i + c] = rgb[c];
+        // Relief lighting uses the same persisted elevation field. No tiles,
+        // random visual land or changes to the canonical coast/river geometry.
+        const dx =
+            (g.heights[ids[1]] - g.heights[ids[0]]) * (1 - fy) +
+            (g.heights[ids[3]] - g.heights[ids[2]]) * fy,
+          dy =
+            (g.heights[ids[2]] - g.heights[ids[0]]) * (1 - fx) +
+            (g.heights[ids[3]] - g.heights[ids[1]]) * fx,
+          shade = water
+            ? 1
+            : Math.max(0.78, Math.min(1.16, 1 - (dx + dy) * 0.012));
+        for (let c = 0; c < 3; c++) image.data[i + c] = rgb[c] * shade;
         image.data[i + 3] = 255;
       }
     ctx.putImageData(image, 0, 0);
@@ -325,42 +336,26 @@
       dragged = true;
     };
   }
-  function card() {
-    const c = current;
-    if (!c) return;
-    const s = c.g.sectors.find((s) => s.number === selected) || c.g.sectors[0],
-      root = c.card;
-    root.replaceChildren(
-      n("p", c.data.name, "eyebrow"),
-      n("h3", tr("Сектор") + " " + s.number),
-    );
-    UI.row(root, "Тип", tr(s.type));
+  function block(root, title) {
+    const section = n("section", undefined, "planet-info-block");
+    section.append(n("h4", tr(title)));
+    root.append(section);
+    return section;
+  }
+  const area = (value) =>
+    UI.formatNumber(value, { maximumFractionDigits: 0 }) + " km²";
+  function planetInfo(c) {
+    const info = block(c.card, "Информация о планете");
+    info.append(n("h3", c.data.name), UI.objectTag(c.data.kind));
+    UI.row(info, "Размер", tr(c.g.size));
+    UI.row(info, "Площадь поверхности", area(c.g.area));
+    UI.row(info, "Количество секторов", UI.formatNumber(c.g.sectors.length));
     UI.row(
-      root,
-      "Площадь",
-      Math.round(s.area).toLocaleString(I18n.language) + " km²",
+      info,
+      "Температура планеты",
+      UI.formatNumber(c.g.temperature) + " °C",
     );
-    UI.row(
-      root,
-      "Суша",
-      s.land +
-        "% · " +
-        Math.round((s.area * s.land) / 100).toLocaleString(I18n.language) +
-        " km²",
-    );
-    UI.row(
-      root,
-      "Вода",
-      100 -
-        s.land +
-        "% · " +
-        Math.round((s.area * (100 - s.land)) / 100).toLocaleString(
-          I18n.language,
-        ) +
-        " km²",
-    );
-    UI.row(root, "Температура", c.g.temperature + " °C");
-    root.append(
+    info.append(
       n(
         "small",
         tr(
@@ -369,17 +364,89 @@
         "muted",
       ),
     );
-    UI.row(root, "Природные условия", tr(s.biome));
-    root.append(n("h4", tr("Предварительные ресурсы")));
-    for (const [id, estimate] of Object.entries(s.estimates))
-      UI.row(root, asset(id), tr(estimate));
-    root.append(
+    const land =
+      c.g.sectors.reduce((sum, s) => sum + s.land * s.area, 0) /
+      c.g.sectors.reduce((sum, s) => sum + s.area, 0);
+    UI.row(info, "Суша по секторам", UI.percent(land));
+    UI.row(
+      info,
+      "Вода по секторам",
+      UI.percent(100 - Math.round(land * 10) / 10),
+    );
+    info.append(
+      n(
+        "small",
+        tr(
+          "Средняя доля по площади секторов, а не отдельный климатический показатель.",
+        ),
+        "muted",
+      ),
+    );
+    c.sectorCard = n("div", undefined, "planet-sector-details");
+    c.card.append(c.sectorCard);
+  }
+  function card() {
+    const c = current;
+    if (!c?.g) return;
+    const s = c.g.sectors.find((s) => s.number === selected) || c.g.sectors[0],
+      container = c.sectorCard;
+    container.replaceChildren(
+      n("h3", tr("Выбранный сектор") + " · " + s.number),
+    );
+    const selectedInfo = block(container, "Природные условия");
+    UI.row(selectedInfo, "Географический тип", tr(s.type));
+    UI.row(
+      selectedInfo,
+      "Биом суши",
+      tr(s.land > 0 ? s.biome : "Суша отсутствует"),
+    );
+    selectedInfo.append(
+      n("small", tr("Локальный климат сектора пока не моделируется."), "muted"),
+    );
+    const geography = block(container, "География сектора"),
+      land =
+        typeof s.land === "number" && Number.isFinite(s.land)
+          ? Math.max(0, Math.min(100, s.land))
+          : NaN;
+    UI.row(geography, "Площадь", area(s.area));
+    UI.row(
+      geography,
+      "Суша",
+      UI.percent(land) + " · " + area((s.area * land) / 100),
+    );
+    UI.row(
+      geography,
+      "Вода",
+      UI.percent(100 - Math.round(land * 10) / 10) +
+        " · " +
+        area((s.area * (100 - land)) / 100),
+    );
+    const resources = block(container, "Природные ресурсы");
+    const levels = {
+      "Бедные залежи": 1,
+      "Умеренные залежи": 2,
+      "Богатые залежи": 3,
+      "Очень богатые залежи": 4,
+    };
+    for (const [id, estimate] of Object.entries(s.estimates)) {
+      const level = levels[estimate];
+      UI.row(
+        resources,
+        asset(id),
+        (level ? "▰".repeat(level) + "▱".repeat(4 - level) + " · " : "") +
+          tr(estimate),
+      );
+    }
+    if (!Object.keys(s.estimates).length)
+      resources.append(n("p", tr("Предварительных данных нет"), "muted"));
+    resources.append(
       n(
         "small",
         tr("Точные объёмы требуют будущей геологической разведки."),
         "muted",
       ),
     );
+    const root = block(container, "Владение и колонизация");
     const claim = c.state.claims.find((p) => p.sector === s.number);
     UI.row(root, "Владелец", claim?.owner || tr("Свободная территория"));
     UI.row(
@@ -406,7 +473,7 @@
               (reason.includes("стажа")
                 ? " · " + c.state.settings.min_level
                 : reason.includes("суши")
-                  ? " · " + c.state.settings.min_land + "%"
+                  ? " · " + UI.percent(c.state.settings.min_land)
                   : "")
           : tr("Сектор доступен для колонизации"),
         reason ? "muted" : "signal",
@@ -470,13 +537,26 @@
     const c = current;
     polling = true;
     try {
+      if (c.data.absent) {
+        const fresh = await api(
+          `planet/surface?star=${c.data.star}&planet=${c.data.planet}`,
+        );
+        if (current === c && !fresh.absent)
+          await open(c.data.star, c.data.planet);
+        return;
+      }
       const state = await api("planet/state?surface=" + c.data.id);
       if (current !== c) return;
       c.state = state;
       if (!c.card.contains(document.activeElement)) card();
       draw();
     } catch (e) {
-      if (current === c) notify(e.message, "error");
+      if (current === c) {
+        if (e.status === 404) {
+          invalidateProjects(c.data.id);
+          await open(c.data.star, c.data.planet);
+        } else notify(e.message, "error");
+      }
     } finally {
       polling = false;
     }
@@ -486,7 +566,15 @@
     Modules.open("galaxy");
     const data = await api(`planet/surface?star=${star}&planet=${planet}`);
     if (request !== epoch || !signedIn) return;
-    const state = await api("planet/state?surface=" + data.id);
+    let state;
+    if (!data.absent) {
+      try {
+        state = await api("planet/state?surface=" + data.id);
+      } catch (e) {
+        if (e.status === 404 && request === epoch) return open(star, planet);
+        throw e;
+      }
+    }
     if (request !== epoch || !signedIn) return;
     const root = document.querySelector("#window-galaxy .module-content");
     current?.resize?.disconnect();
@@ -510,7 +598,7 @@
       state,
       g: data.geography,
       camera: { zoom: 1, x: 0, y: 0 },
-      terrain: terrain(data.geography, data.kind),
+      terrain: data.absent ? null : terrain(data.geography, data.kind),
     };
     current = c;
     selected = 1;
@@ -523,6 +611,27 @@
       }),
       btn("Колонии", () => manager()),
     );
+    if (data.absent) {
+      const empty = n("div", undefined, "planet-surface-empty");
+      empty.append(
+        n("h3", tr("Генерация поверхности отсутствует")),
+        n(
+          "p",
+          tr(
+            "Поверхность удалена администратором. Астрономическая планета сохранена.",
+          ),
+        ),
+      );
+      if (gameData.state.user.role === "admin")
+        empty.append(
+          btn("Перегенерировать колонию", () =>
+            admin(star, planet, "regenerate"),
+          ),
+        );
+      host.append(tools, empty);
+      root.append(host);
+      return;
+    }
     const legend = n("div", undefined, "planet-legend");
     for (const [label, color] of [
       ["Свободная территория", "#b9cad0"],
@@ -544,8 +653,140 @@
     controls(c);
     c.resize = new ResizeObserver(draw);
     c.resize.observe(wrap);
+    planetInfo(c);
     card();
     requestAnimationFrame(draw);
+  }
+  function invalidateProjects(surface) {
+    for (const [id, root] of projectRoots) {
+      if (Number(root.dataset.surface) !== surface) continue;
+      Modules.close("colony-project-" + id);
+      root.replaceChildren();
+      projectRoots.delete(id);
+      contributionCache.delete(id);
+    }
+  }
+  async function admin(star, planet, operation) {
+    if (gameData.state?.user.role !== "admin") return;
+    const session = authEpoch,
+      info = await api(`admin/planet/surface?star=${star}&planet=${planet}`);
+    if (session !== authEpoch || !signedIn) return;
+    const title =
+        operation === "delete"
+          ? "Удалить генерацию колонии"
+          : "Перегенерировать колонию",
+      key = "surface-admin",
+      root = Modules.create(key, "Управление поверхностью", 640, 720),
+      phrase = operation === "delete" ? "УДАЛИТЬ" : "ПЕРЕГЕНЕРИРОВАТЬ",
+      request = Array.from(crypto.getRandomValues(new Uint32Array(4)), (v) =>
+        v.toString(16),
+      ).join("-");
+    root.replaceChildren(n("h3", info.name), n("h4", tr(title)));
+    for (const [label, key] of [
+      ["Количество секторов", "sectors"],
+      ["Колонии", "colonies"],
+      ["Проекты", "projects"],
+      ["Активные проекты", "active"],
+      ["Строительство", "building"],
+      ["Корпоративные проекты", "corporate"],
+      ["Высадки", "visits"],
+      ["Неполученные возвраты", "pending_refunds"],
+    ])
+      UI.row(root, label, UI.formatNumber(info[key]));
+    root.append(
+      n(
+        "p",
+        tr(
+          "Будут безвозвратно удалены поверхность, сектора, проекты, владения и история колонизации этой планеты. Планета, корабли, аккаунты и корпорации сохранятся.",
+        ),
+        "surface-warning",
+      ),
+    );
+    const invested = Object.entries(info.invested);
+    for (const [id, value] of invested)
+      UI.row(
+        root,
+        asset(id),
+        UI.formatNumber(value, { maximumFractionDigits: 0 }),
+      );
+    const check = n("input"),
+      label = n("label", undefined, "surface-forfeit");
+    check.type = "checkbox";
+    label.append(
+      check,
+      n(
+        "span",
+        tr(
+          "Подтверждаю безвозвратное списание вкладов без возврата кредитов и ресурсов.",
+        ),
+      ),
+    );
+    if (invested.length) root.append(label);
+    if (info.blocked) root.append(n("p", tr(info.blocked), "surface-warning"));
+    const input = UI.field(
+        root,
+        "Введите строку подтверждения",
+        "surface-confirm",
+        "",
+      ),
+      hint = n("p", tr("Строка подтверждения") + ": " + phrase, "muted"),
+      submit = btn(title, async () => {
+        submit.disabled = true;
+        cancel.disabled = true;
+        input.disabled = true;
+        check.disabled = true;
+        try {
+          const result = await api("admin/planet/surface", {
+            action: operation,
+            star,
+            planet,
+            token: info.token,
+            confirm: input.value,
+            forfeit: check.checked,
+            request,
+          });
+          if (authEpoch !== session || !signedIn) return;
+          invalidateProjects(result.old_surface);
+          if (current?.data.star === star && current?.data.planet === planet)
+            await open(star, planet);
+          if (Modules.isOpen("colonies")) await manager(true);
+          Modules.close(key);
+          notify(
+            tr(
+              operation === "delete"
+                ? "Генерация поверхности удалена"
+                : "Поверхность перегенерирована",
+            ),
+            "success",
+          );
+        } catch (e) {
+          if (authEpoch !== session || !signedIn) return;
+          notify(e.message, "error");
+          root.append(
+            btn("Обновить предупреждение", () =>
+              admin(star, planet, operation),
+            ),
+          );
+        } finally {
+          cancel.disabled = false;
+          input.disabled = false;
+          check.disabled = false;
+          validate();
+        }
+      }),
+      cancel = btn("Отмена", () => Modules.close(key));
+    function validate() {
+      submit.disabled =
+        !!info.blocked ||
+        input.value !== phrase ||
+        (invested.length > 0 && !check.checked) ||
+        (operation === "delete" && !info.surface);
+    }
+    input.oninput = validate;
+    check.onchange = validate;
+    validate();
+    root.append(hint, submit, cancel);
+    Modules.open(key);
   }
   const projectRoots = new Map(),
     contributionCache = new Map();
@@ -555,7 +796,9 @@
     background = false,
     contributionsBefore = 0,
   ) {
-    const epochAt = epoch,
+    const epochAt = epoch;
+    let data;
+    try {
       data = await api(
         "planet/project?id=" +
           id +
@@ -564,6 +807,17 @@
             ? "&contributions_before=" + contributionsBefore
             : ""),
       );
+    } catch (e) {
+      if (e.status === 404) {
+        Modules.close("colony-project-" + id);
+        projectRoots.get(id)?.replaceChildren();
+        projectRoots.delete(id);
+        contributionCache.delete(id);
+        if (!background) notify(e.message, "warning");
+        return;
+      }
+      throw e;
+    }
     if (
       !signedIn ||
       epochAt !== epoch ||
@@ -574,6 +828,7 @@
       key = "colony-project-" + id,
       root = Modules.create(key, "Проект колонизации", 760, 750);
     projectRoots.set(id, root);
+    root.dataset.surface = String(p.surface);
     if (!data.can_contribute && gameData.state.user.role !== "admin") {
       const cached = contributionCache.get(id);
       if (cached) {
@@ -710,8 +965,8 @@
             "Отмена проекта",
             tr("При отмене возвращается") +
               " " +
-              p.refund_percent +
-              "% · " +
+              UI.percent(p.refund_percent) +
+              " · " +
               tr(
                 "Ядро возвращается полностью. Возвраты направляются вкладчикам на исходные личные склады и счета.",
               ),
@@ -1003,7 +1258,7 @@
     root.append(form);
     return true;
   }
-  window.PlanetUI = { open, project, manager, settings, dismiss: close };
+  window.PlanetUI = { open, project, manager, settings, admin, dismiss: close };
   window.addEventListener("moduleresize", (e) => {
     if (e.detail === "galaxy") draw();
   });

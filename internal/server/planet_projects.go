@@ -82,70 +82,68 @@ func (a *App) planetSurface(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	star, _ := strconv.Atoi(r.URL.Query().Get("star"))
 	planet, _ := strconv.Atoi(r.URL.Query().Get("planet"))
-	p, err := a.planetAt(ctx, a.db, u.ID, star, planet)
+	tx, err := a.db.Begin(ctx)
 	if err != nil {
-		fail(w, 403, err.Error())
+		a.internal(w, err)
+		return
+	}
+	defer tx.Rollback(context.Background())
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(784218)`); err != nil {
+		a.internal(w, err)
+		return
+	}
+	p, err := a.planetAt(ctx, tx, u.ID, star, planet)
+	if err != nil {
+		fail(w, 403, "Планета недоступна или не исследована")
 		return
 	}
 	if p.Kind == "Газовый гигант" {
 		fail(w, 409, "У газового гиганта нет твёрдой поверхности")
 		return
 	}
+	var deleted bool
+	var revision int64
+	if err = tx.QueryRow(ctx, `SELECT COALESCE((SELECT deleted FROM planet_surface_controls WHERE star=$1 AND planet=$2),false),COALESCE((SELECT revision FROM planet_surface_controls WHERE star=$1 AND planet=$2),0)`, star, planet).Scan(&deleted, &revision); err != nil {
+		a.internal(w, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "private, no-store")
+	if deleted {
+		reply(w, 200, map[string]any{"absent": true, "star": star, "planet": planet, "name": p.Name, "kind": p.Kind, "revision": revision})
+		return
+	}
 	var id int64
 	var raw []byte
-	err = a.db.QueryRow(ctx, `SELECT id,data FROM planet_surfaces WHERE star=$1 AND planet=$2`, star, planet).Scan(&id, &raw)
+	err = tx.QueryRow(ctx, `SELECT id,data FROM planet_surfaces WHERE star=$1 AND planet=$2`, star, planet).Scan(&id, &raw)
 	if errors.Is(err, pgx.ErrNoRows) {
-		tx, e := a.db.Begin(ctx)
+		c, e := planetConfig(ctx, tx)
 		if e != nil {
 			a.internal(w, e)
 			return
 		}
-		defer tx.Rollback(context.Background())
-		if _, e = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(784218)`); e != nil {
+		g, e := a.loadUniverseFrom(ctx, tx)
+		if e != nil {
 			a.internal(w, e)
 			return
 		}
-		err = tx.QueryRow(ctx, `SELECT id,data FROM planet_surfaces WHERE star=$1 AND planet=$2`, star, planet).Scan(&id, &raw)
-		if errors.Is(err, pgx.ErrNoRows) {
-			c, e := planetConfig(ctx, tx)
-			if e != nil {
-				a.internal(w, e)
-				return
-			}
-			g, e := a.loadUniverseFrom(ctx, tx)
-			if e != nil {
-				a.internal(w, e)
-				return
-			}
-			seed := surfaceSeed(g, g.Stars[star-1], p)
-			surface := generateSurface(p, seed, c.Counts[planetSize(p)])
-			raw, _ = json.Marshal(surface)
-			err = tx.QueryRow(ctx, `INSERT INTO planet_surfaces(star,planet,version,seed,name,kind,data) VALUES($1,$2,1,$3,$4,$5,$6) RETURNING id`, star, planet, seed, p.Name, p.Kind, raw).Scan(&id)
-			if err == nil {
-				batch := &pgx.Batch{}
-				for _, sector := range surface.Sectors {
-					v, _ := json.Marshal(sector)
-					batch.Queue(`INSERT INTO planet_sectors(surface,number,data) VALUES($1,$2,$3)`, id, sector.Number, v)
-				}
-				results := tx.SendBatch(ctx, batch)
-				err = results.Close()
-			}
-		}
-		if err == nil {
-			err = tx.Commit(ctx)
-		}
+		seed := surfaceSeed(g, g.Stars[star-1], p)
+		surface := generateSurface(p, seed, c.Counts[planetSize(p)])
+		id, err = storeSurface(ctx, tx, star, p, seed, surface)
+		raw, _ = json.Marshal(surface)
+	}
+	if err == nil {
+		err = tx.Commit(ctx)
 	}
 	if err != nil {
 		a.internal(w, err)
 		return
 	}
-	w.Header().Set("Cache-Control", "private, no-store")
-	reply(w, 200, map[string]any{"id": id, "star": star, "planet": planet, "name": p.Name, "kind": p.Kind, "version": 1, "geography": json.RawMessage(raw)})
+	reply(w, 200, map[string]any{"id": id, "star": star, "planet": planet, "name": p.Name, "kind": p.Kind, "version": 1, "revision": revision, "geography": json.RawMessage(raw)})
 }
 func (a *App) checkSurface(ctx context.Context, q querier, uid, surface int64) (Planet, int, error) {
 	var star, planet int
 	if err := q.QueryRow(ctx, `SELECT star,planet FROM planet_surfaces WHERE id=$1`, surface).Scan(&star, &planet); err != nil {
-		return Planet{}, 0, errors.New("Планета недоступна")
+		return Planet{}, 0, err
 	}
 	p, err := a.planetAt(ctx, q, uid, star, planet)
 	return p, star, err
@@ -158,6 +156,10 @@ func (a *App) planetState(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id, _ := strconv.ParseInt(r.URL.Query().Get("surface"), 10, 64)
 	p, _, err := a.checkSurface(ctx, a.db, u.ID, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		fail(w, 404, "Генерация поверхности изменилась")
+		return
+	}
 	if err != nil {
 		fail(w, 403, err.Error())
 		return

@@ -71,6 +71,14 @@ func (a *App) colonyAction(w http.ResponseWriter, r *http.Request) {
 			fail(w, 409, "Идентификатор операции уже использован")
 			return
 		}
+		var receipt struct {
+			Reset bool `json:"surface_reset"`
+		}
+		_ = json.Unmarshal(result, &receipt)
+		if receipt.Reset {
+			fail(w, 409, "Генерация поверхности изменилась")
+			return
+		}
 		reply(w, 200, json.RawMessage(result))
 		return
 	}

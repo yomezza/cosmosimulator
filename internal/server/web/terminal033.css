@@ -3395,3 +3395,63 @@ button.picker-button.system-picker .picker-chevron {
   flex-direction: column;
   align-items: flex-start;
 }
+
+.planet-info-block {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.planet-info-block > h4 {
+  margin: 0 0 10px;
+  color: var(--accent);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.planet-info-block > h3 {
+  margin: 0 0 8px;
+}
+.planet-info-block .row {
+  gap: 12px;
+  align-items: baseline;
+}
+.planet-info-block .row > :last-child {
+  text-align: right;
+}
+.planet-sector-details > h3 {
+  margin: 16px 0 0;
+}
+.planet-surface-empty {
+  margin: auto;
+  max-width: 480px;
+  padding: 24px;
+  text-align: center;
+}
+.surface-warning {
+  padding: 12px;
+  border-left: 2px solid #e5a273;
+  color: #e8c2a1;
+  line-height: 1.6;
+}
+.surface-forfeit {
+  display: flex;
+  gap: 10px;
+  align-items: start;
+}
+.surface-forfeit input {
+  width: auto;
+  flex-shrink: 0;
+}
+.context-menu hr {
+  border: 0;
+  border-top: 1px solid #526b80;
+  margin: 6px 0;
+}
+.context-menu .context-parent::after {
+  content: "›";
+  float: right;
+  margin-left: 14px;
+}
+.context-submenu {
+  z-index: 12001;
+  animation: none;
+}

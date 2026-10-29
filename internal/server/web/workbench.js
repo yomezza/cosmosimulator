@@ -13,32 +13,122 @@
   context.setAttribute("role", "menu");
   document.body.append(context);
   let anchor;
+  const menus = [context];
+  function closeAfter(menu) {
+    while (menus.length > menus.indexOf(menu) + 1) {
+      const sub = menus.pop();
+      sub.opener?.setAttribute("aria-expanded", "false");
+      sub.remove();
+    }
+  }
+  function hideMenus() {
+    closeAfter(context);
+    context.hidden = true;
+  }
+  function positionMenu(menu, x, y, parent) {
+    menu.style.maxHeight = Math.max(80, innerHeight - 16) + "px";
+    menu.style.overflowY = "auto";
+    let left = parent ? parent.right : x;
+    if (parent && left + menu.offsetWidth > innerWidth - 8)
+      left = parent.left - menu.offsetWidth;
+    menu.style.left =
+      Math.max(8, Math.min(left, innerWidth - menu.offsetWidth - 8)) + "px";
+    menu.style.top =
+      Math.max(8, Math.min(y, innerHeight - menu.offsetHeight - 8)) + "px";
+  }
+  function populateMenu(menu, items) {
+    menu.replaceChildren();
+    for (const item of items) {
+      if (item.separator) {
+        const line = node("hr");
+        line.setAttribute("role", "separator");
+        menu.append(line);
+        continue;
+      }
+      if (item.heading) {
+        menu.append(node("p", tr(item.heading), "context-heading"));
+        continue;
+      }
+      const b = node("button", tr(item.label));
+      b.type = "button";
+      b.setAttribute("role", "menuitem");
+      b.disabled = !!item.disabled;
+      if (item.reason) b.dataset.help = item.reason;
+      if (item.children) {
+        b.classList.add("context-parent");
+        b.setAttribute("aria-label", tr(item.label));
+        b.setAttribute("aria-haspopup", "menu");
+        b.setAttribute("aria-expanded", "false");
+        const reveal = () => {
+          if (b.disabled) return;
+          if (menus[menus.indexOf(menu) + 1]?.opener === b) return;
+          closeAfter(menu);
+          menu
+            .querySelectorAll("[aria-expanded]")
+            .forEach((e) => e.setAttribute("aria-expanded", "false"));
+          const sub = node("div", undefined, "context-menu context-submenu");
+          sub.opener = b;
+          sub.setAttribute("role", "menu");
+          sub.onkeydown = menuKeys;
+          populateMenu(sub, item.children);
+          document.body.append(sub);
+          menus.push(sub);
+          b.setAttribute("aria-expanded", "true");
+          const r = b.getBoundingClientRect();
+          positionMenu(sub, r.right, r.top, r);
+        };
+        b.onpointerenter = reveal;
+        b.onclick = () => {
+          reveal();
+          menus.at(-1).querySelector("button:not(:disabled)")?.focus();
+        };
+      } else {
+        b.onpointerenter = () => closeAfter(menu);
+        b.onclick = () => {
+          hideMenus();
+          item.action?.();
+        };
+      }
+      menu.append(b);
+    }
+  }
+  function menuKeys(e) {
+    const menu = e.currentTarget;
+    if (e.key === "Escape") {
+      hideMenus();
+      anchor?.focus();
+    }
+    if (
+      e.key === "ArrowRight" &&
+      document.activeElement?.hasAttribute("aria-haspopup")
+    ) {
+      e.preventDefault();
+      document.activeElement.click();
+    }
+    if (e.key === "ArrowLeft" && menu !== context) {
+      e.preventDefault();
+      const opener = menu.opener;
+      closeAfter(menus[menus.indexOf(menu) - 1]);
+      opener.setAttribute("aria-expanded", "false");
+      opener.focus();
+    }
+    if (["ArrowDown", "ArrowUp"].includes(e.key)) {
+      e.preventDefault();
+      const buttons = [...menu.querySelectorAll("button:not(:disabled)")],
+        i = buttons.indexOf(document.activeElement);
+      buttons[
+        (i + (e.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length
+      ]?.focus();
+    }
+  }
   window.UI = {
     node,
     menu(items, x, y) {
-      context.replaceChildren();
+      hideMenus();
       anchor = document.activeElement;
-      for (const item of items) {
-        if (item.heading) {
-          context.append(node("p", tr(item.heading), "context-heading"));
-          continue;
-        }
-        const b = node("button", tr(item.label));
-        b.type = "button";
-        b.setAttribute("role", "menuitem");
-        b.disabled = !!item.disabled;
-        if (item.reason) b.dataset.help = item.reason;
-        b.onclick = () => {
-          context.hidden = true;
-          item.action?.();
-        };
-        context.append(b);
-      }
+      populateMenu(context, items);
       context.hidden = false;
-      context.style.left =
-        Math.max(8, Math.min(x, innerWidth - context.offsetWidth - 8)) + "px";
-      context.style.top =
-        Math.max(8, Math.min(y, innerHeight - context.offsetHeight - 8)) + "px";
+      positionMenu(context, x, y);
       context.querySelector("button:not(:disabled)")?.focus();
     },
     resource(id) {
@@ -291,7 +381,7 @@
   });
   window.addEventListener("signedout", () => {
     objects.clear();
-    context.hidden = true;
+    hideMenus();
     document.getElementById("tooltip").hidden = true;
     document.getElementById("tooltip").replaceChildren();
   });
@@ -342,22 +432,10 @@
     }
   });
   document.addEventListener("pointerdown", (e) => {
-    if (!context.contains(e.target)) context.hidden = true;
+    if (!menus.some((menu) => menu.contains(e.target))) hideMenus();
   });
-  context.onkeydown = (e) => {
-    if (e.key === "Escape") {
-      context.hidden = true;
-      anchor?.focus();
-    }
-    if (["ArrowDown", "ArrowUp"].includes(e.key)) {
-      e.preventDefault();
-      const buttons = [...context.querySelectorAll("button:not(:disabled)")],
-        i = buttons.indexOf(document.activeElement);
-      buttons[
-        (i + (e.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length
-      ]?.focus();
-    }
-  };
+  context.onkeydown = menuKeys;
+  window.addEventListener("signedout", hideMenus);
   window.Visuals = {
     object(ctx, x, y, r, site, scale = 1) {
       const kind = site.kind;

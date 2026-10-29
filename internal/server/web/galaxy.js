@@ -1239,11 +1239,12 @@
     return null;
   }
   function siteActions(site, x, y) {
+    const targetStar = local.star.id;
     selectedSite = site.id;
     systemPanel();
     draw();
     const ship = gameData.expedition?.ship,
-      current = ship?.star === local.star.id,
+      current = ship?.star === targetStar,
       moving = !!ship?.destination || !!ship?.local_target,
       blocked = !current || moving || !!gameData.expedition?.job,
       items = [
@@ -1269,7 +1270,7 @@
           site.kind === "Садовый мир"
             ? "Поверхность и колонизация"
             : "Поверхность планеты",
-        action: () => UI.openPlanet(local.star.id, site.details.id),
+        action: () => UI.openPlanet(targetStar, site.details.id),
       });
     if (site.details)
       items.push({
@@ -1294,7 +1295,7 @@
           label: "Рынок",
           action: () => {
             window.dispatchEvent(
-              new CustomEvent("stationmarket", { detail: local.star.id }),
+              new CustomEvent("stationmarket", { detail: targetStar }),
             );
             Modules.open("market");
           },
@@ -1303,13 +1304,40 @@
     if (site.kind === "Орбитальная станция")
       items.push({
         label: "Личное название и заметка",
-        action: () => UI.stationEditor(local.star.id, site.id),
+        action: () => UI.stationEditor(targetStar, site.id),
       });
     if (site.resources?.length)
       items.push({
         label: "Добыча",
         action: () => Modules.open("research"),
       });
+    if (site.details && gameData.state?.user.role === "admin")
+      items.push(
+        { separator: true },
+        {
+          label: "Телепортироваться",
+          action: () => Game.teleport(targetStar),
+        },
+        {
+          label: "Колония",
+          children: [
+            {
+              label: "Удалить генерацию колонии",
+              action: () =>
+                UI.adminPlanetSurface(targetStar, site.details.id, "delete"),
+            },
+            {
+              label: "Перегенерировать колонию",
+              action: () =>
+                UI.adminPlanetSurface(
+                  targetStar,
+                  site.details.id,
+                  "regenerate",
+                ),
+            },
+          ],
+        },
+      );
     UI.menu(items, x, y);
   }
   function systemPanel() {
@@ -1737,6 +1765,7 @@
           },
           ...(gameData.state?.user.role === "admin"
             ? [
+                { separator: true },
                 {
                   label: "Телепортироваться",
                   action: () => Game.teleport(star.id),
