@@ -48,9 +48,10 @@
 | `go vet ./...` | Прошёл |
 | Контроль CSS | Вычисленные стили desktop/narrow совпали после завершения переходов |
 | Визуальное ревью | [Планировщик](screenshots/desktop-planner.png), [корабль/трюм](screenshots/desktop-ship-cargo.png); синтетические данные, 1440×1000 |
-| Windows amd64 | `CGO_ENABLED=0`, embedded JS/CSS/PNG/SVG; новый EXE и SHA256 сохранены в downloads |
+| Windows amd64 | `CGO_ENABLED=0`, `-buildvcs=false -trimpath -ldflags='-s -w'`, embedded JS/CSS/PNG/SVG; новый EXE и SHA256 сохранены в downloads |
+| Чистая копия | Отдельный detached worktree исходного commit `61717a4`, `npm ci`, повторные **45 PASS**; Windows EXE побайтно совпал с пакетом выпуска. Все прежние SHA256 прошли проверку |
 
-Сохранённые журналы: [browser](../checks/refactor-0.13.0-browser.txt), [полный PostgreSQL](../checks/refactor-0.13.0-go-postgres.txt), [целевой race](../checks/refactor-0.13.0-race.txt).
+Сохранённые журналы: [browser из чистой копии](../checks/refactor-0.13.0-browser.txt), [полный PostgreSQL](../checks/refactor-0.13.0-go-postgres.txt), [целевой race](../checks/refactor-0.13.0-race.txt). Финальная сборка отключает VCS stamp, чтобы промежуточный commit/dirty-флаг не менял EXE с теми же исходниками; исходный commit указан здесь, контрольная сумма — в downloads/SHA256SUMS.
 
 Первый **полный** `go test -race ./...` не прошёл: достиг стандартного 10-минутного timeout, а сценарий 50 параллельных readers `TestPlanetConcurrencyPrivacy120` получил HTTP 500/403 при исчерпании контекстов под race instrumentation. Его нельзя выдавать за успешный или считать доказанно прежней проблемой без сравнения. Обычный полный прогон прошёл; затем отдельно прошли указанные конкурентные race-сценарии. Production deadlines не ослаблялись ради результата. CI воспроизводит полный обычный прогон и целевой race; это **не** полное race-покрытие планетарной нагрузки.
 

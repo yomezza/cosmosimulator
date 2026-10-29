@@ -295,7 +295,7 @@ TEST_DATABASE_URL='postgres://cosmos:password@127.0.0.1:5432/cosmosimulator_test
 Без `TEST_DATABASE_URL` интеграционные тесты пропускаются. Для них нужна одноразовая база с суффиксом `_test` и создание схем. Проверяются миграция из 0.3.2, изоляция схем, авторизация/права, флот, асинхронная разведка, квоты, конкурентная торговля, склады/доставки, корпорации, портал и отсутствие повторных начислений.
 
 ```sh
-CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o downloads/cosmosimulator-v0.13.0-windows-amd64.exe ./cmd/cosmosimulator
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags='-s -w' -o downloads/cosmosimulator-v0.13.0-windows-amd64.exe ./cmd/cosmosimulator
 sha256sum downloads/*.exe > downloads/SHA256SUMS
 ```
 
