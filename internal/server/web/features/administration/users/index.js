@@ -1,26 +1,36 @@
+import { pager } from "../../../ui/pager.js";
+
+import { FormState } from "../../../ui/form-state.js";
 import { Session, RequestScope } from "../../../core/session.js";
 import { scopedView } from "../../../core/scoped-view.js";
 import { I18n } from "../../../core/i18n.js";
-import { Format } from "../../../core/format.js";
+
 import { api } from "../../../core/api.js";
-import { refresh } from "../../../core/snapshot-store.js";
+
 import { UI, Modules } from "../../../ui/runtime.js";
 import { notify } from "../../../ui/feedback.js";
-import { Game, GalaxyAdmin, Scheduler, AdminResources, Logistics, scenes } from "../../../features/runtime.js";
-import { world, loadWorld } from "../../../core/world-store.js";
-import { performExpedition } from "../../../features/commands.js";
-import { d, w, res, num, station, fmtTime, money, known, fly, cargoCapacity, fuelCapacity } from "../../../features/selectors.js";
+import { AdminResources } from "../../../features/runtime.js";
+
+import { money } from "../../../features/selectors.js";
 import { reset } from "../../../ui/view-state.js";
-import { actionAmount } from "../../../ui/quantity.js";
-import { resourceName } from "../../../features/inventory/resource-label.js";
-import { can } from "../../../features/corporations/permissions.js";
 
 export function createAdministrationUsers({ roots, act, command }) {
-  const n=UI.node, tr=(s)=>I18n.t(s), b=UI.button, row=UI.row, field=UI.field, choice=UI.choice;
-let userPage = 1;
-let userQuery = "";
-const usersScope = new RequestScope(() => Session.signedIn && Session.data.state?.user.role === "admin" && Modules.isOpen("users"));
-async function drawrenderUsers(lease) {
+  const drafts = new FormState(() => Session.data.state?.user.id);
+  const n = UI.node,
+    tr = (s) => I18n.t(s),
+    b = UI.button,
+    field = (...args) => drafts.field(UI.field, ...args),
+    choice = UI.choice;
+  let userPage = 1;
+  let userQuery = "",
+    searchTimer;
+  const usersScope = new RequestScope(
+    () =>
+      Session.signedIn &&
+      Session.data.state?.user.role === "admin" &&
+      Modules.isOpen("users"),
+  );
+  async function drawUsers(lease) {
     const result = await api(
         "admin/users?page=" + userPage + "&q=" + encodeURIComponent(userQuery),
       ),
@@ -37,43 +47,35 @@ async function drawrenderUsers(lease) {
       userQuery,
       "search",
     );
-    let timer;
+
     search.oninput = () => {
       userQuery = search.value;
-      clearTimeout(timer);
-      timer = setTimeout(() => {
+      clearTimeout(searchTimer);
+      usersScope.invalidate();
+      searchTimer = setTimeout(() => {
         userPage = 1;
         renderUsers();
       }, 250);
     };
     search.onkeydown = (e) => {
       if (e.key === "Enter") {
-        clearTimeout(timer);
+        clearTimeout(searchTimer);
+        usersScope.invalidate();
         userQuery = search.value;
         userPage = 1;
         renderUsers();
       }
     };
-    const paging = n("div", undefined, "pagination sticky-toolbar");
-    paging.append(
-      b(
-        "‹",
-        () => {
-          userPage--;
-          renderUsers();
-        },
-        userPage <= 1,
-      ),
-      n("span", `${userPage} / ${result.pages} · ${num(result.total)}`),
-      b(
-        "›",
-        () => {
-          userPage++;
-          renderUsers();
-        },
-        userPage >= result.pages,
-      ),
-    );
+    const paging = pager({
+      page: userPage,
+      pages: result.pages,
+      total: result.total,
+      className: "pagination sticky-toolbar",
+      change: (value) => {
+        userPage = value;
+        return renderUsers();
+      },
+    });
     root.append(
       paging,
       UI.table(
@@ -93,9 +95,12 @@ async function drawrenderUsers(lease) {
       search.setSelectionRange(caret, caret);
     }
   }
-function editUser(u) {
+  function editUser(u) {
     const id = "user-" + u.id,
-      root = Modules.create(id, "Редактирование пользователя", 550, 640, {transient:true});
+      root = Modules.create(id, "Редактирование пользователя", 550, 640, {
+        transient: true,
+        audience: "admin",
+      });
     reset(root);
     const form = n("form");
     form.append(n("h3", tr("Основные сведения")));
@@ -161,7 +166,11 @@ function editUser(u) {
           role: role.value,
           password: pass.value,
         });
-        if (ok) {
+        if (
+          ok &&
+          Session.data.state?.user.role === "admin" &&
+          root.isConnected
+        ) {
           Object.assign(u, {
             username: name.value,
             credits: Number(credits.value),
@@ -184,7 +193,24 @@ function editUser(u) {
     root.append(form);
     Modules.open(id);
   }
-const renderUsers=scopedView(usersScope,drawrenderUsers,(error)=>notify(error.message,"error"));
-function clear() {userPage=1;userQuery="";usersScope.invalidate();}
-return {renderUsers,editUser,clear, close(){renderUsers.invalidate();}};
+  const renderUsers = scopedView(usersScope, drawUsers, (error) =>
+    notify(error.message, "error"),
+  );
+  function clear() {
+    clearTimeout(searchTimer);
+    drafts.clear();
+    userPage = 1;
+    userQuery = "";
+    usersScope.invalidate();
+  }
+  window.addEventListener("actionaccepted", () => drafts.clear());
+  return {
+    renderUsers,
+    editUser,
+    clear,
+    close() {
+      clearTimeout(searchTimer);
+      renderUsers.invalidate();
+    },
+  };
 }

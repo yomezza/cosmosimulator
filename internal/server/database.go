@@ -4,44 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
-	"unicode/utf8"
+
+	"github.com/yomezza/cosmosimulator/internal/platform/postgres"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func databaseConfig(dsn, schema string) (*pgxpool.Config, string, error) {
-	if schema == "" {
-		schema = "public"
-	}
-	// PostgreSQL expands "$user" in search_path even when quoted.
-	// PostgreSQL truncates identifiers beyond 63 bytes. Reject them rather than
-	// accidentally using another application's schema. A schema is one identifier,
-	// never a comma-separated search path or a SQL expression.
-	if !utf8.ValidString(schema) || len(schema) > 63 || strings.ContainsRune(schema, 0) || schema == "$user" || schema == "information_schema" || strings.HasPrefix(strings.ToLower(schema), "pg_") {
-		return nil, "", fmt.Errorf("DB_SCHEMA must be a valid PostgreSQL schema name (1–63 bytes), not a system schema")
-	}
-	config, err := pgxpool.ParseConfig(dsn)
-	if err != nil {
-		return nil, "", err
-	}
-	if config.ConnConfig.RuntimeParams == nil {
-		config.ConnConfig.RuntimeParams = make(map[string]string)
-	}
-	// Applied by PostgreSQL to every physical pool connection, including reconnects.
-	// Deliberately omit public and $user to avoid falling back to unrelated tables.
-	config.ConnConfig.RuntimeParams["search_path"] = pgx.Identifier{schema}.Sanitize()
-	return config, schema, nil
-}
-
 func openDatabase(ctx context.Context, dsn, schema string) (*pgxpool.Pool, error) {
-	config, schema, err := databaseConfig(dsn, schema)
-	if err != nil {
-		return nil, err
-	}
-	db, err := pgxpool.NewWithConfig(ctx, config)
+	db, schema, err := postgres.Open(ctx, dsn, schema)
 	if err != nil {
 		return nil, err
 	}
@@ -51,9 +23,6 @@ func openDatabase(ctx context.Context, dsn, schema string) (*pgxpool.Pool, error
 			db.Close()
 		}
 	}()
-	if err = db.Ping(ctx); err != nil {
-		return nil, fmt.Errorf("PostgreSQL connection: %w", err)
-	}
 	tx, err := db.Begin(ctx)
 	if err != nil {
 		return nil, err

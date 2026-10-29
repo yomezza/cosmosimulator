@@ -2,17 +2,21 @@ import { Preferences } from "./preferences.js";
 export const I18n = {
   language: Preferences.language(),
   catalogs: {},
-  t(text) {
+  t(text, parameters = {}) {
     const catalog = this.catalogs[this.language] || {};
-    return (
+    const translated =
       catalog[text] ??
       (typeof text === "string" && text.includes(" · ")
         ? text
             .split(" · ")
             .map((part) => catalog[part] ?? part)
             .join(" · ")
-        : text)
-    );
+        : text);
+    return typeof translated === "string"
+      ? translated.replace(/\{(\w+)\}/g, (match, key) =>
+          Object.hasOwn(parameters, key) ? String(parameters[key]) : match,
+        )
+      : translated;
   },
   apply() {
     document.documentElement.lang = this.language;
@@ -41,17 +45,17 @@ export const I18n = {
   },
 };
 export function initI18n() {
-I18n.ready = Promise.all(
-  ["ru", "en"].map(async (language) => {
-    const r = await fetch(language + ".json");
-    if (!r.ok) throw Error("Translation load failed");
-    I18n.catalogs[language] = await r.json();
-  }),
-)
-  .then(() => I18n.apply())
-  .catch((e) => {
-    console.error(e);
-  });
+  I18n.ready = Promise.all(
+    ["ru", "en"].map(async (language) => {
+      const r = await fetch(language + ".json");
+      if (!r.ok) throw Error("Translation load failed");
+      I18n.catalogs[language] = await r.json();
+    }),
+  )
+    .then(() => I18n.apply())
+    .catch((e) => {
+      console.error(e);
+    });
 
-return I18n.ready;
+  return I18n.ready;
 }

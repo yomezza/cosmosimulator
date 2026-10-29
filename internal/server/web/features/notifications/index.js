@@ -1,25 +1,28 @@
-import { Session, RequestScope } from "../../core/session.js";
-import { scopedView } from "../../core/scoped-view.js";
+import { loadPlanet } from "../planet/loader.js";
+
+import { FormState } from "../../ui/form-state.js";
+import { Session } from "../../core/session.js";
+
 import { I18n } from "../../core/i18n.js";
-import { Format } from "../../core/format.js";
+
 import { api } from "../../core/api.js";
-import { refresh } from "../../core/snapshot-store.js";
+
 import { UI, Modules } from "../../ui/runtime.js";
 import { notify } from "../../ui/feedback.js";
-import { Game, GalaxyAdmin, Scheduler, AdminResources, Logistics, scenes } from "../../features/runtime.js";
-import { world, loadWorld } from "../../core/world-store.js";
-import { performExpedition } from "../../features/commands.js";
-import { d, w, res, num, station, fmtTime, money, known, fly, cargoCapacity, fuelCapacity } from "../../features/selectors.js";
+
+import { world } from "../../core/world-store.js";
+
+import { res, fmtTime } from "../../features/selectors.js";
 import { reset } from "../../ui/view-state.js";
-import { actionAmount } from "../../ui/quantity.js";
-import { resourceName } from "../../features/inventory/resource-label.js";
-import { can } from "../../features/corporations/permissions.js";
 
 export function createNotifications({ roots, act, command }) {
-  const n=UI.node, tr=(s)=>I18n.t(s), b=UI.button, row=UI.row, field=UI.field, choice=UI.choice;
-let notifySelected = new Set();
-let noticeCursor = null;
-let eventNames = {
+  const drafts = new FormState(() => Session.data.state?.user.id);
+  const n = UI.node,
+    tr = (s) => I18n.t(s),
+    b = UI.button;
+  let notifySelected = new Set();
+  let noticeCursor = null;
+  let eventNames = {
     arrival: "Корабль прибыл",
     mining_complete: "Добыча завершена",
     research_complete: "Исследование завершено",
@@ -28,7 +31,7 @@ let eventNames = {
     project_complete: "Проект завершён",
     portal_open: "Портал активирован",
   };
-function eventText(item) {
+  function eventText(item) {
     const data = item.data || {};
     if (item.kind === "colony")
       return (
@@ -58,7 +61,7 @@ function eventText(item) {
         (data.quantity ? " × " + data.quantity : "")
     );
   }
-async function loadNotifications() {
+  async function loadNotifications() {
     if (!Session.signedIn) return;
     const epoch = Session.epoch,
       items = await api("notifications");
@@ -67,7 +70,7 @@ async function loadNotifications() {
     notificationBadge();
     if (Modules.isOpen("notifications")) renderNotifications();
   }
-function notificationBadge() {
+  function notificationBadge() {
     const info = Session.data.notifications || { count: 0, items: [] },
       badge = document.getElementById("notification-count");
     badge.hidden = !info.count;
@@ -81,7 +84,7 @@ function notificationBadge() {
     }
     noticeCursor = latest;
   }
-function renderNotifications() {
+  function renderNotifications() {
     const root = roots.notifications;
     reset(root);
     const items = Session.data.notifications?.items || [];
@@ -159,7 +162,7 @@ function renderNotifications() {
         if (item.kind === "colony")
           detail.append(
             b("Открыть проект", () =>
-              UI.loadPlanet().then((p) => p.project(item.data.project)),
+              loadPlanet().then((p) => p.project(item.data.project)),
             ),
           );
         if (item.data?.star)
@@ -196,6 +199,17 @@ function renderNotifications() {
     }
     if (!items.length) UI.empty(root, "Уведомлений пока нет");
   }
-function clear() {notifySelected=new Set();noticeCursor=null;}
-return {eventText,loadNotifications,notificationBadge,renderNotifications,clear};
+  function clear() {
+    drafts.clear();
+    notifySelected = new Set();
+    noticeCursor = null;
+  }
+  window.addEventListener("actionaccepted", () => drafts.clear());
+  return {
+    eventText,
+    loadNotifications,
+    notificationBadge,
+    renderNotifications,
+    clear,
+  };
 }

@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <link rel="icon" href="favicon.svg" />
     <title>Cosmosimulator · Edem</title>
-    <link rel="stylesheet" href="style.css" />
-    <link rel="stylesheet" href="terminal033.css" />
+    <link rel="stylesheet" href="styles/tokens.css" />
+    <link rel="stylesheet" href="styles/terminal.css" />
     <script type="module" src="bootstrap.js"></script>
   </head>
   <body>
@@ -40,15 +40,16 @@
     </div>
     <header>
       <a class="brand" href="/"
-        >◈ COSMOSIMULATOR <small>EDEM / 0.12.5</small></a
+        >◈ COSMOSIMULATOR <small>EDEM / 0.13.0</small></a
       >
       <div class="header-actions">
-        <div id="window-switcher" aria-label="Открытые окна"></div>
+        <div id="window-switcher" data-label="Открытые окна" aria-label="Открытые окна"></div>
         <button
           id="notifications-button"
           hidden
           data-open="notifications"
           data-help="Уведомления"
+          data-label="Уведомления"
           aria-label="Уведомления"
         >
           ♧<span id="notification-count" hidden></span>
@@ -382,7 +383,7 @@
     <footer>
       <span id="server-status" class="signal"
         ><span data-i18n="● СЕРВЕР ОНЛАЙН">● СЕРВЕР ОНЛАЙН</span></span
-      ><span>COSMOSIMULATOR · v0.12.5</span>
+      ><span>COSMOSIMULATOR · v0.13.0</span>
     </footer>
     <div id="toast" role="status" hidden></div>
     <div id="tooltip" role="tooltip" hidden></div>

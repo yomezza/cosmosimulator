@@ -1,25 +1,31 @@
+import { FormState } from "../../../ui/form-state.js";
 import { Session, RequestScope } from "../../../core/session.js";
 import { scopedView } from "../../../core/scoped-view.js";
 import { I18n } from "../../../core/i18n.js";
-import { Format } from "../../../core/format.js";
+
 import { api } from "../../../core/api.js";
-import { refresh } from "../../../core/snapshot-store.js";
+
 import { UI, Modules } from "../../../ui/runtime.js";
 import { notify } from "../../../ui/feedback.js";
-import { Game, GalaxyAdmin, Scheduler, AdminResources, Logistics, scenes } from "../../../features/runtime.js";
-import { world, loadWorld } from "../../../core/world-store.js";
-import { performExpedition } from "../../../features/commands.js";
-import { d, w, res, num, station, fmtTime, money, known, fly, cargoCapacity, fuelCapacity } from "../../../features/selectors.js";
+
+import { num, fmtTime } from "../../../features/selectors.js";
 import { reset } from "../../../ui/view-state.js";
-import { actionAmount } from "../../../ui/quantity.js";
-import { resourceName } from "../../../features/inventory/resource-label.js";
-import { can } from "../../../features/corporations/permissions.js";
 
 export function createAdministrationBenchmark({ roots, act, command }) {
-  const n=UI.node, tr=(s)=>I18n.t(s), b=UI.button, row=UI.row, field=UI.field, choice=UI.choice;
-let benchmarkSelected = null;
-const benchmarkScope = new RequestScope(() => Session.signedIn && Session.data.state?.user.role === "admin" && Modules.isOpen("benchmark"));
-async function drawrenderBenchmark(lease) {
+  const drafts = new FormState(() => Session.data.state?.user.id);
+  const n = UI.node,
+    tr = (s) => I18n.t(s),
+    b = UI.button,
+    field = (...args) => drafts.field(UI.field, ...args),
+    choice = UI.choice;
+  let benchmarkSelected = null;
+  const benchmarkScope = new RequestScope(
+    () =>
+      Session.signedIn &&
+      Session.data.state?.user.role === "admin" &&
+      Modules.isOpen("benchmark"),
+  );
+  async function drawBenchmark(lease) {
     const root = roots.benchmark,
       focused =
         root.contains(document.activeElement) &&
@@ -204,7 +210,20 @@ async function drawrenderBenchmark(lease) {
         root.append(n("p", selected.metrics.failure, "error"));
     }
   }
-const renderBenchmark=scopedView(benchmarkScope,drawrenderBenchmark,(error)=>notify(error.message,"error"));
-function clear() {benchmarkSelected=null;benchmarkScope.invalidate();}
-return {renderBenchmark,clear, close(){renderBenchmark.invalidate();}};
+  const renderBenchmark = scopedView(benchmarkScope, drawBenchmark, (error) =>
+    notify(error.message, "error"),
+  );
+  function clear() {
+    drafts.clear();
+    benchmarkSelected = null;
+    benchmarkScope.invalidate();
+  }
+  window.addEventListener("actionaccepted", () => drafts.clear());
+  return {
+    renderBenchmark,
+    clear,
+    close() {
+      renderBenchmark.invalidate();
+    },
+  };
 }

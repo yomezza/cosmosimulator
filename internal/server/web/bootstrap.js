@@ -6,38 +6,70 @@ import { refresh } from "./core/snapshot-store.js";
 import { UI, Modules } from "./ui/runtime.js";
 import { Game, scenes } from "./features/runtime.js";
 import { notify } from "./ui/feedback.js";
-import { initWindows } from "./windows.js";
-import { initWorkbench } from "./workbench.js";
-import { initPlanetLoader } from "./planet-loader.js";
-import { initControls } from "./controls.js";
-import { initHolograms } from "./holograms.js";
-import { initStationLabels } from "./station-labels.js";
-import { initApp } from "./app.js";
-import { initGalaxyAdmin } from "./galaxy-admin.js";
-import { initOperations070 } from "./operations070.js";
-import { initLogistics } from "./logistics.js";
-import { initIdeas } from "./ideas.js";
-import { initExpedition } from "./expedition.js";
-import { initStudies } from "./studies.js";
-import { initGalaxy } from "./galaxy.js";
+import { initWindows } from "./ui/windows.js";
+import { initMenu } from "./ui/menu.js";
+import { initConfirm } from "./ui/confirm.js";
+import { initObjectCards } from "./features/objects/cards.js";
+import { initVisuals } from "./features/objects/visuals.js";
+import { initPlanetLoader } from "./features/planet/loader.js";
+import { initControls } from "./ui/index.js";
+import { initHolograms } from "./ui/holograms.js";
+import { initStationLabels } from "./features/stations/index.js";
+import { initIcons } from "./features/shell/icons.js";
+import { initServerStatus } from "./features/shell/server-status.js";
+import { initApp } from "./features/shell/app.js";
+import { initGalaxyAdmin } from "./features/administration/galaxies/index.js";
+import { initScheduler } from "./features/automation/scheduler.js";
+import { initAdminResources } from "./features/administration/resources/index.js";
+import { initNavigation } from "./features/shell/navigation.js";
+import { initLogistics } from "./features/inventory/logistics.js";
+import { initIdeas } from "./features/feedback/ideas.js";
+import { initExpedition } from "./features/workspace/index.js";
+import { initStudies } from "./features/research/index.js";
+import { initGalaxy } from "./features/maps/galaxy.js";
 
 initI18n();
 initTooltip();
-initWindows();
-initWorkbench();
-initPlanetLoader();
 initControls();
+initWindows();
+initNavigation();
+initMenu();
+initConfirm();
+initObjectCards();
+initVisuals();
+initPlanetLoader();
+initIcons();
+initServerStatus();
 initHolograms();
 initStationLabels();
 const app = initApp();
 initGalaxyAdmin();
-initOperations070();
+initScheduler();
+initAdminResources();
 initLogistics();
 initIdeas();
 initExpedition();
 initStudies();
 initGalaxy();
 
-export const application = { session: Session, I18n, UI, Modules, Game, scenes, api, refresh, notify, ...app };
+export const application = {
+  session: Session,
+  I18n,
+  UI,
+  Modules,
+  Game,
+  scenes,
+  api,
+  refresh,
+  notify,
+  ...app,
+};
 
-document.addEventListener("keydown", (event) => { const menu=event.target.closest?.(".dropdown"); if (event.key==="Escape" && menu?.open) { event.stopPropagation(); menu.open=false; menu.querySelector("summary")?.focus(); } });
+document.addEventListener("keydown", (event) => {
+  const menu = event.target.closest?.(".dropdown");
+  if (event.key === "Escape" && menu?.open) {
+    event.stopPropagation();
+    menu.open = false;
+    menu.querySelector("summary")?.focus();
+  }
+});

@@ -1,10 +1,10 @@
-# Cosmosimulator · 0.12.5
+# Cosmosimulator · 0.13.0
 
 Лёгкая браузерная космическая экономическая песочница: Go + PostgreSQL, встроенные HTML/CSS/JavaScript и SVG. Один Windows x64 `.exe` подключается к существующей базе и обслуживает игру по HTTP. npm для запуска и сборки не нужен.
 
-[Изменения 0.12.5](release-notes/v0.12.5.md) · [Реестр игровых идей](docs/roadmap/README.md) · [72 улучшения интерфейса](docs/roadmap/ui-0.3.3.md) · [Отложенное](docs/roadmap/deferred.md) · [Отклонённое](docs/roadmap/rejected.md).
+[Изменения 0.13.0](release-notes/v0.13.0.md) · [Реестр игровых идей](docs/roadmap/README.md) · [72 улучшения интерфейса](docs/roadmap/ui-0.3.3.md) · [Отложенное](docs/roadmap/deferred.md) · [Отклонённое](docs/roadmap/rejected.md).
 
-[Рефакторинг интерфейса: M0, контракты и тесты](docs/refactoring/ui/README.ru.md) · [Границы космической и будущей планетарной служб](docs/refactoring/service-boundaries.ru.md). Node/Playwright используются только для разработки; Windows-службе они не нужны.
+[Рефакторинг интерфейса 0.13.0: архитектура и проверки](docs/refactoring/ui/IMPLEMENTATION-0.13.0.ru.md) · [Границы космической и будущей планетарной служб](docs/refactoring/service-boundaries.ru.md). Node/Playwright используются только для разработки; Windows-службе они не нужны.
 
 [Исходные эскизы голографических кораблей](docs/design/ship-holograms/README.md).
 
@@ -25,7 +25,7 @@ $env:HTTP_ADDR = '127.0.0.1:8080'
 # Только для первоначального создания администратора:
 $env:ADMIN_USERNAME = 'operator'
 $env:ADMIN_PASSWORD = 'YOUR_PASSWORD'
-.\downloads\cosmosimulator-v0.12.5-windows-amd64.exe
+.\downloads\cosmosimulator-v0.13.0-windows-amd64.exe
 ```
 
 Откройте `http://localhost:8080`. Остановка — Ctrl+C. После создания администратора удалите `ADMIN_USERNAME` и `ADMIN_PASSWORD`; bootstrap не меняет существующие пароли и не повышает игрока до администратора. `.env.example` — справочник, `.env` автоматически не читается.
@@ -54,6 +54,12 @@ sc.exe query Cosmosimulator
 Миграции выполняются транзакционно под advisory lock. Сохраняются аккаунты, кредиты, грузы, ID кораблей и систем, исследования, брони и задания добычи. Windows-сборка проверяется кросс-компиляцией; нативный SCM в облачной Linux-среде не проверялся.
 
 В 0.8.1 создаётся постоянный секрет скрытой генерации. Системы с исследованиями, наблюдениями, квотами, кораблями или объектными заданиями сохраняют объекты и месторождения; учебные системы 1 и 5 также сохраняются. В ранее не наблюдавшихся системах обновляются скрытые планеты и месторождения, при сохранении системных номеров, имён, координат, звёзд, коридоров и станций. Секрет хранится в игровой схеме и входит в её резервную копию. Старую версию после такой миграции запускайте только с соответствующей резервной копией.
+
+## Новое в 0.13.0
+
+Клиент переведён на ES-модули и разделён на core, общие UI-компоненты и игровые features. Исправлены поздние ответы после выхода, конфликты disabled, заголовки подтверждений и размещение всплывающих списков. Подключение PostgreSQL выделено в `internal/platform/postgres`, отдельно от миграций и симуляции космической службы. API и география сохранены; Node нужен только для тестов, Windows-служба запускается одним EXE.
+
+[Полный отчёт и результаты](docs/refactoring/ui/IMPLEMENTATION-0.13.0.ru.md) · [Каталог компонентов](docs/refactoring/ui/CATALOG.ru.md) · [Запуск браузерных тестов](tests/ui/README.ru.md).
 
 ## Новое в 0.12.5
 
@@ -289,7 +295,7 @@ TEST_DATABASE_URL='postgres://cosmos:password@127.0.0.1:5432/cosmosimulator_test
 Без `TEST_DATABASE_URL` интеграционные тесты пропускаются. Для них нужна одноразовая база с суффиксом `_test` и создание схем. Проверяются миграция из 0.3.2, изоляция схем, авторизация/права, флот, асинхронная разведка, квоты, конкурентная торговля, склады/доставки, корпорации, портал и отсутствие повторных начислений.
 
 ```sh
-CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o downloads/cosmosimulator-v0.12.5-windows-amd64.exe ./cmd/cosmosimulator
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o downloads/cosmosimulator-v0.13.0-windows-amd64.exe ./cmd/cosmosimulator
 sha256sum downloads/*.exe > downloads/SHA256SUMS
 ```
 

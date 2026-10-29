@@ -98,7 +98,7 @@ func (a *App) runBenchmark(ctx context.Context, cancel context.CancelFunc, id in
 	defer cancel()
 	defer func() { benchmarkControl.Lock(); delete(benchmarkControl.cancel, id); benchmarkControl.Unlock() }()
 	status := "failed"
-	metrics := map[string]any{"isolation": "temporary PostgreSQL schema", "version": "0.12.5", "scenario": scenario}
+	metrics := map[string]any{"isolation": "temporary PostgreSQL schema", "version": "0.13.0", "scenario": scenario}
 	var total, failed, conflicts atomic.Int64
 	defer func() {
 		if status == "failed" && ctx.Err() != nil {

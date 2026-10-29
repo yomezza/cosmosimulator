@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/yomezza/cosmosimulator/internal/platform/postgres"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -343,7 +344,7 @@ func Test033UpgradePreservesLegacyAssets(t *testing.T) {
 	if _, err = base.Exec(ctx, "CREATE SCHEMA "+pgx.Identifier{schema}.Sanitize()); err != nil {
 		t.Fatal(err)
 	}
-	config, _, err := databaseConfig(dsn, schema)
+	config, _, err := postgres.Config(dsn, schema)
 	if err != nil {
 		t.Fatal(err)
 	}

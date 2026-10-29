@@ -1,0 +1,15 @@
+?   	github.com/yomezza/cosmosimulator/cmd/cosmosimulator	[no test files]
+=== RUN   TestOpenDoesNotInitializeGame
+--- PASS: TestOpenDoesNotInitializeGame (0.04s)
+=== RUN   TestDatabaseConfig
+--- PASS: TestDatabaseConfig (0.00s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/platform/postgres	1.058s
+=== RUN   TestLastHullPurchase040
+--- PASS: TestLastHullPurchase040 (8.69s)
+=== RUN   TestConcurrentLogistics080
+--- PASS: TestConcurrentLogistics080 (7.15s)
+=== RUN   TestBatchLogistics100
+--- PASS: TestBatchLogistics100 (8.01s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/server	25.030s

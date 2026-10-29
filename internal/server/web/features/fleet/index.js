@@ -1,36 +1,54 @@
-import { Session, RequestScope } from "../../core/session.js";
-import { scopedView } from "../../core/scoped-view.js";
+import { arrangeShip } from "./layout.js";
+import { resourceTile } from "../inventory/resource-tile.js";
+import { shipName } from "./presentation.js";
+import { stationLabel, stationRef } from "../stations/index.js";
+import { showResource } from "../objects/cards.js";
+import { FormState } from "../../ui/form-state.js";
+import { Session } from "../../core/session.js";
+
 import { I18n } from "../../core/i18n.js";
-import { Format } from "../../core/format.js";
-import { api } from "../../core/api.js";
-import { refresh } from "../../core/snapshot-store.js";
+
 import { UI, Modules } from "../../ui/runtime.js";
-import { notify } from "../../ui/feedback.js";
-import { Game, GalaxyAdmin, Scheduler, AdminResources, Logistics, scenes } from "../../features/runtime.js";
-import { world, loadWorld } from "../../core/world-store.js";
+
+import { Game, Logistics } from "../../features/runtime.js";
+import { world } from "../../core/world-store.js";
 import { performExpedition } from "../../features/commands.js";
-import { d, w, res, num, station, fmtTime, money, known, fly, cargoCapacity, fuelCapacity } from "../../features/selectors.js";
+import {
+  d,
+  w,
+  res,
+  num,
+  station,
+  money,
+  fly,
+  cargoCapacity,
+  fuelCapacity,
+} from "../../features/selectors.js";
 import { reset } from "../../ui/view-state.js";
 import { actionAmount } from "../../ui/quantity.js";
-import { resourceName } from "../../features/inventory/resource-label.js";
-import { can } from "../../features/corporations/permissions.js";
 
 export function createFleet({ roots, act, command }) {
-  const n=UI.node, tr=(s)=>I18n.t(s), b=UI.button, row=UI.row, field=UI.field, choice=UI.choice;
-let cargoCategory = "all";
-let cargoSort = "name";
-let yardQuery = "";
-let yardLocation = "";
-let yardClass = "all";
-let yardRole = "all";
-let yardPage = 1;
-function cargoMenu(id, q, tile, e) {
+  const drafts = new FormState(() => Session.data.expedition?.ship.id);
+  const n = UI.node,
+    tr = (s) => I18n.t(s),
+    b = UI.button,
+    row = UI.row,
+    field = (...args) => drafts.field(UI.field, ...args),
+    choice = UI.choice;
+  let cargoCategory = "all";
+  let cargoSort = "name";
+  let yardQuery = "";
+  let yardLocation = "";
+  let yardClass = "all";
+  let yardRole = "all";
+  let yardPage = 1;
+  function cargoMenu(id, q, tile, e) {
     e.preventDefault();
     const r = tile.getBoundingClientRect();
     UI.menu(
       [
         { heading: res(id)?.name || id },
-        { label: "Информация", action: () => UI.resource(id) },
+        { label: "Информация", action: () => showResource(id) },
         {
           label: "Переместить ресурс",
           action: () =>
@@ -65,11 +83,11 @@ function cargoMenu(id, q, tile, e) {
       e.clientY || r.bottom,
     );
   }
-function renderCargo() {
+  function renderCargo() {
     if (Logistics?.dragging) return;
     const root = roots.cargo;
     reset(root);
-    Modules.title("cargo", tr("Трюм") + " · " + UI.shipName(d().ship));
+    Modules.title("cargo", tr("Трюм") + " · " + shipName(d().ship));
     const used = Object.values(d().ship.cargo).reduce((a, b) => a + b, 0),
       reserved = d().job?.quantity || 0;
     root.append(UI.bar(used + reserved, cargoCapacity(), "Вместимость"));
@@ -119,17 +137,9 @@ function renderCargo() {
     );
     for (const [id, q] of items) {
       const r = res(id),
-        tile = b("", (e) => cargoMenu(id, q, tile, e));
-      tile.className = "cargo-tile" + (r.rarity === "Редкий" ? " rare" : "");
-      tile.dataset.resource = id;
-      tile.append(n("small", tr(r.kind)), n("b", r.code), n("span", num(q)));
+        tile = resourceTile(r, id, q, (e, tile) => cargoMenu(id, q, tile, e));
       tile.oncontextmenu = (e) => cargoMenu(id, q, tile, e);
-      Logistics?.draggable(
-        tile,
-        { kind: "ship", ship: d().ship.id },
-        id,
-        q,
-      );
+      Logistics?.draggable(tile, { kind: "ship", ship: d().ship.id }, id, q);
       grid.append(tile);
     }
     if (!items.length) UI.empty(grid, "Трюм пуст");
@@ -141,18 +151,18 @@ function renderCargo() {
         () => {
           Modules.link("ship", "cargo", !Modules.linked("cargo"));
           renderCargo();
-          Modules.arrangeShip();
+          arrangeShip();
         },
       ),
     );
   }
-function refuelReason(ship) {
+  function refuelReason(ship) {
     if (fly(ship)) return "Корабль в пути";
     if (ship.fuel >= ship.spec.fuel) return "Бак полон";
     if (!ship.cargo.agni) return "Нужен водород в трюме выбранного корабля";
     return "1 ед. водорода = до 5 единиц топлива";
   }
-function renderShip() {
+  function renderShip() {
     const container = roots.ship,
       s = d().ship;
     let layout = container.querySelector(".ship-inline-layout");
@@ -189,16 +199,20 @@ function renderShip() {
     reset(controls);
     Modules.title(
       "ship",
-      tr("Корабль") + " · " + UI.shipName(s) + " · " + d().system.name,
+      tr("Корабль") + " · " + shipName(s) + " · " + d().system.name,
     );
     const ships = Session.data.fleet.ships;
-    row(root, "Лимит флота", ships.length + " / " + Session.data.fleet.ship_limit);
+    row(
+      root,
+      "Лимит флота",
+      ships.length + " / " + Session.data.fleet.ship_limit,
+    );
     choice(
       controls,
       "Корабль",
       ships.map((s) => [
         s.id,
-        UI.shipName(s) +
+        shipName(s) +
           " · " +
           (world.data?.stars.find((star) => star.id === s.star)?.name ||
             s.star),
@@ -258,7 +272,7 @@ function renderShip() {
       root,
       "Положение",
       station()
-        ? UI.stationRef(s.star, s.object_id)
+        ? stationRef(s.star, s.object_id)
         : d().sites.find((v) => v.id === s.object_id)?.name ||
             tr("Точка гиперперехода"),
     );
@@ -268,7 +282,7 @@ function renderShip() {
       b("Трюм", () => {
         Modules.link("ship", "cargo", true);
         Modules.open("cargo");
-        Modules.arrangeShip();
+        arrangeShip();
       }),
       b("Найти на карте", () => {
         window.dispatchEvent(new CustomEvent("findship", { detail: s.id }));
@@ -334,7 +348,7 @@ function renderShip() {
       b("Задания", () => Modules.open("tasks")),
     );
   }
-function shipStats(root, c) {
+  function shipStats(root, c) {
     row(root, "Класс корабля", tr(c.role));
     row(root, "Требуемый стаж", c.required_level);
     row(root, "Длина корпуса", c.length + " " + tr("м"));
@@ -348,7 +362,7 @@ function shipStats(root, c) {
       "Добыча за цикл в базовой комплектации. Установленный добытчик может изменить значение.";
     row(root, "Добыча", mining);
   }
-function renderShipyards(root) {
+  function renderShipyards(root) {
     root.append(
       n(
         "p",
@@ -457,7 +471,7 @@ function renderShipyards(root) {
         const available = y.offers.reduce((sum, o) => sum + o.quantity, 0);
         button.append(
           n("span", String(y.star), "system-id"),
-          UI.stationLabel(y.star, y.station, y.name),
+          stationLabel(y.star, y.station, y.name),
           n("small", num(available)),
         );
         list.append(button);
@@ -491,7 +505,7 @@ function renderShipyards(root) {
           d().ship.star === y.star &&
           d().ship.object_id === y.station;
       const yardTitle = n("h3");
-      yardTitle.append(UI.stationLabel(y.star, y.station, y.name));
+      yardTitle.append(stationLabel(y.star, y.station, y.name));
       right.append(yardTitle);
       const route = b("Построить маршрут", () => {
         Modules.open("galaxy");
@@ -546,7 +560,8 @@ function renderShipyards(root) {
                 ? "На верфи нет доступных кораблей"
                 : Session.data.profile.level < c.required_level
                   ? "Недостаточный стаж для покупки"
-                  : Session.data.fleet.ships.length >= Session.data.fleet.ship_limit
+                  : Session.data.fleet.ships.length >=
+                      Session.data.fleet.ship_limit
                     ? "Достигнут лимит кораблей по стажу"
                     : d().credits < offer.price
                       ? "Недостаточно кредитов"
@@ -563,71 +578,36 @@ function renderShipyards(root) {
     };
     draw();
   }
-UI.shipActivity = (card, s, hasQueue = false) => {
-    if (s.destination)
-      card.append(
-        n(
-          "p",
-          `${world.data?.stars[s.star - 1]?.name || s.star} → ${world.data?.stars[s.destination - 1]?.name || s.destination} · ${fmtTime(s.arrival)}`,
-        ),
-      );
-    if (s.local_target)
-      card.append(
-        n(
-          "p",
-          tr("Манёвр") +
-            " → " +
-            s.local_target +
-            " · " +
-            fmtTime(s.local_arrival),
-        ),
-      );
-    if (s.waypoints?.length)
-      card.append(
-        n(
-          "p",
-          tr("Маршрут") +
-            ": " +
-            s.waypoints
-              .map((id) => world.data?.stars[id - 1]?.name || id)
-              .join(" → "),
-        ),
-        b("Отменить оставшийся маршрут", () =>
-          command({ action: "cancel_route", ship: s.id }),
-        ),
-      );
-    const research = w().research?.find((j) => j.ship === s.id);
-    if (research) {
-      card.append(
-        UI.bar(research.scanned, research.total, "Объекты"),
-        n("p", tr(research.paused ? "Приостановлено" : "Сканирование")),
-        b(research.paused ? "Продолжить" : "Приостановить", () =>
-          command({
-            action: research.paused ? "resume_research" : "pause_research",
-            ship: s.id,
-          }),
-        ),
-      );
-    }
-    for (const job of (w().mining || []).filter((j) => j.ship_id === s.id))
-      card.append(
-        n(
-          "p",
-          tr("Добыча") +
-            " · " +
-            tr(res(job.resource).name) +
-            " × " +
-            job.quantity,
-        ),
-      );
-    if (
-      !hasQueue &&
-      !fly(s) &&
-      !research &&
-      !w().mining?.some((j) => j.ship_id === s.id)
-    )
-      card.append(n("p", tr("Ожидает задания"), "muted"));
+
+  function clear() {
+    drafts.clear();
+    yardQuery = "";
+    yardLocation = "";
+    yardClass = "all";
+    yardRole = "all";
+    yardPage = 1;
+  }
+  window.addEventListener("actionaccepted", () => drafts.clear());
+  return {
+    cargoMenu,
+    renderCargo,
+    refuelReason,
+    renderShip,
+    shipStats,
+    renderShipyards,
+    clear,
+    filterShipyards({
+      classID = yardClass,
+      role = yardRole,
+      query = yardQuery,
+    } = {}) {
+      yardClass = classID;
+      yardRole = role;
+      yardQuery = query;
+      yardPage = 1;
+    },
+    setYardLocation(value) {
+      yardLocation = value;
+    },
   };
-function clear() {yardQuery="";yardLocation="";yardClass="all";yardRole="all";yardPage=1;}
-return {cargoMenu,renderCargo,refuelReason,renderShip,shipStats,renderShipyards,clear, filterShipyards({classID=yardClass,role=yardRole,query=yardQuery}={}) {yardClass=classID;yardRole=role;yardQuery=query;yardPage=1;}, setYardLocation(value){yardLocation=value;}};
 }

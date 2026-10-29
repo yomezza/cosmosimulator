@@ -1,24 +1,30 @@
+import { loadPlanet } from "../../planet/loader.js";
+
+import { FormState } from "../../../ui/form-state.js";
 import { Session, RequestScope } from "../../../core/session.js";
 import { scopedView } from "../../../core/scoped-view.js";
 import { I18n } from "../../../core/i18n.js";
-import { Format } from "../../../core/format.js";
+
 import { api } from "../../../core/api.js";
-import { refresh } from "../../../core/snapshot-store.js";
+
 import { UI, Modules } from "../../../ui/runtime.js";
 import { notify } from "../../../ui/feedback.js";
-import { Game, GalaxyAdmin, Scheduler, AdminResources, Logistics, scenes } from "../../../features/runtime.js";
-import { world, loadWorld } from "../../../core/world-store.js";
-import { performExpedition } from "../../../features/commands.js";
-import { d, w, res, num, station, fmtTime, money, known, fly, cargoCapacity, fuelCapacity } from "../../../features/selectors.js";
+
 import { reset } from "../../../ui/view-state.js";
-import { actionAmount } from "../../../ui/quantity.js";
-import { resourceName } from "../../../features/inventory/resource-label.js";
-import { can } from "../../../features/corporations/permissions.js";
 
 export function createAdministrationGameplay({ roots, act, command }) {
-  const n=UI.node, tr=(s)=>I18n.t(s), b=UI.button, row=UI.row, field=UI.field, choice=UI.choice;
-const gameplayScope = new RequestScope(() => Session.signedIn && Session.data.state?.user.role === "admin" && Modules.isOpen("gameplay"));
-async function drawrenderGameplay(lease) {
+  const drafts = new FormState(() => Session.data.state?.user.id);
+  const n = UI.node,
+    tr = (s) => I18n.t(s),
+    b = UI.button,
+    field = (...args) => drafts.field(UI.field, ...args);
+  const gameplayScope = new RequestScope(
+    () =>
+      Session.signedIn &&
+      Session.data.state?.user.role === "admin" &&
+      Modules.isOpen("gameplay"),
+  );
+  async function drawGameplay(lease) {
     const result = await api("admin/gameplay"),
       root = roots.gameplay;
     if (!lease.current()) return false;
@@ -119,7 +125,7 @@ async function drawrenderGameplay(lease) {
     root.append(
       form,
       b("Настройки колонизации", () =>
-        UI.loadPlanet().then((p) => {
+        loadPlanet().then((p) => {
           const r = Modules.create(
             "colony-settings",
             "Настройки колонизации",
@@ -128,7 +134,11 @@ async function drawrenderGameplay(lease) {
           );
           r.replaceChildren();
           p.settings(r).then((ok) => {
-            if (ok && Session.signedIn && Session.data.state.user.role === "admin")
+            if (
+              ok &&
+              Session.signedIn &&
+              Session.data.state.user.role === "admin"
+            )
               Modules.open("colony-settings");
           });
         }),
@@ -144,7 +154,19 @@ async function drawrenderGameplay(lease) {
       ),
     );
   }
-const renderGameplay=scopedView(gameplayScope,drawrenderGameplay,(error)=>notify(error.message,"error"));
-function clear() {gameplayScope.invalidate();}
-return {renderGameplay,clear, close(){renderGameplay.invalidate();}};
+  const renderGameplay = scopedView(gameplayScope, drawGameplay, (error) =>
+    notify(error.message, "error"),
+  );
+  function clear() {
+    drafts.clear();
+    gameplayScope.invalidate();
+  }
+  window.addEventListener("actionaccepted", () => drafts.clear());
+  return {
+    renderGameplay,
+    clear,
+    close() {
+      renderGameplay.invalidate();
+    },
+  };
 }

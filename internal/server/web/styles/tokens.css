@@ -1,0 +1,24 @@
+:root {
+  --bg: #10151b;
+  --panel: #171e26;
+  --border: #2d3945;
+  --muted: #8a9aab;
+  --text: #dce5ed;
+  --accent: #efad58;
+  --control: 32px;
+  --radius: 8px;
+  --space: 12px;
+  --header: 58px;
+  --focus: #78c7d9;
+  --panel-alt: #141d26;
+  --action-height: 26px;
+  --action-pad-y: 3px;
+  --action-pad-x: 9px;
+  --action-radius: 1px;
+  --action-bg: #192a35;
+  --action-border: #405966;
+  --action-hover-bg: #263f4b;
+  --action-hover-border: #6d9c9e;
+  --font-control: 11px;
+  --line-control: 18px;
+}

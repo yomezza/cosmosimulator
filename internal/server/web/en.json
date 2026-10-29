@@ -1533,5 +1533,7 @@
   "Управление поверхностью": "Surface management",
   "Загружаем текстуры поверхности…": "Loading surface textures…",
   "Повторить загрузку текстур": "Retry loading textures",
-  "Часть текстур недоступна. Используется доступное оформление.": "Some textures are unavailable. Available surface styling is being used."
+  "Часть текстур недоступна. Используется доступное оформление.": "Some textures are unavailable. Available surface styling is being used.",
+  "Галактическая карта Эдема": "Edem galactic map",
+  "Скрыть пароль": "Hide password"
 }

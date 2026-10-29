@@ -3,7 +3,8 @@ export class Lifetime {
   #cleanup = new Set();
   #disposed = false;
   own(cleanup) {
-    if (this.#disposed) cleanup(); else this.#cleanup.add(cleanup);
+    if (this.#disposed) cleanup();
+    else this.#cleanup.add(cleanup);
     return cleanup;
   }
   listen(target, event, callback, options) {

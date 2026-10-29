@@ -1,95 +1,63 @@
-# Предлагаемые правила разработки интерфейса Cosmosimulator
+# Разработка интерфейса после 0.13.0
 
-Это проект правил по результатам аудита 0.12.5, а не внесённые изменения или новый обязательный framework. После согласования guide и каталог можно разместить рядом с исходниками UI и указать в AGENTS/README. Сейчас production-файлы не менялись.
+Начинать с [действующего каталога](CATALOG.ru.md) и владельца состояния. Исторические components/preferences реестры полезны для совместимости, но старые JS-пути из M0 больше не являются текущим графом импортов.
 
-## Перед новой задачей
+## Граница новой функции
 
-1. Найти тип задачи в [components.md](components.md), текущее поведение в [preferences.md](preferences.md) и реальную функцию в source-references.md. Быстрый поиск — `rg` по имени существующего UI/Modules helper и его callers.
-2. Записать, кто владеет данными: сервер, feature snapshot, transient form, manual preference или public asset cache.
-3. Проверить existing behavior: default, reopen, reload, language, logout/login и empty/loading/error. Не менять их попутно.
-4. Выбрать reuse / extend / feature-specific реализацию. Одинаковая верстка ещё не означает одинаковую игровую механику.
-5. Зафиксировать один значимый сценарий до изменения. Проверки выбирать пропорционально риску, не писать implementation-mirroring тест на каждую мелкую правку текста.
+1. Определить владельца: серверные данные, принятый snapshot, private feature state, draft, ручная preference или public art cache.
+2. Найти существующий механизм в каталоге. Одинаковый вид не означает одинаковую игру: local trade, reservation и физическая доставка сохраняют свои API.
+3. До изменения проверить defaults, close/reopen, reload, язык, logout/login и loading/empty/error.
+4. Использовать core/UI либо расширить существующую единственную реализацию. Новый feature-specific компонент нужен, когда действительно различаются lifecycle или игровые правила.
+5. Добавить проверку значимого риска и выполнить нужные существующие тесты.
 
-## Где уже есть общие решения
+`core` не импортирует UI/features. Generic `ui` не импортирует features, не читает цены/роли/кошелёк и не создаёт игровые команды. В `features` остаются presentation adapters станций/объектов, resource tile с доменными данными, права и ограничения источников груза. Нельзя вернуть неявные script globals или второй HTTP wrapper.
 
-| Задача | Текущий инструмент | Ограничение / правильная граница |
-|---|---|---|
-| Небольшой DOM-элемент | UI.node | textContent, без HTML из пользовательских данных. SVG требует namespace helper. |
-| Рабочее окно | Modules.create/open/close/title | close не destroy; повтор create не меняет title/size. У transient windows есть выявленные ограничения P2/P3. |
-| Кнопка | UI.button | Busy/error wrapper есть; disabled сейчас возвращается к первоначальному аргументу. Не строить конкурирующую третью кнопку. |
-| Поле / информационная строка | UI.field / UI.row | Game validity/payload — в feature, а не в helper. |
-| Выбор | UI.picker / UI.choice | Не делать новый searchable dropdown; station/system options — feature adapters. Async callbacks требуют явного promise/error contract. |
-| Таблица / вкладки | UI.table / UI.tabs | Data source и права не внутри generic widget. Нужна дальнейшая keyboard/ARIA спецификация. |
-| Ветка | UI.fold / UI.rememberFolds | Persistence opt-in; key stable, defaults feature-owned. Не менять все defaults на один. |
-| Подтверждение | UI.confirm / специализированный existing reset flow | Не копировать позиционирование и lifecycle заново. Preview, obligations, forfeit и idempotency — domain policy. |
-| Числа | UI.formatNumber / UI.percent | Точность выбирается по величине; percent default нельзя применять к малой светимости. |
-| Всплывающая помощь | data-help / existing rich resource card | Не создавать ещё один независимый tooltip host/placement для тех же действий. |
-| Краткий feedback | notify(text,level,persist=false) | Technical action toast не должен автоматически попадать в inbox. |
-| Голограмма | UI.hologram / UI.updateHologram | Не дублировать SVG cloning/IDs/clock; менять domain model отдельно. |
-| Личные названия станций | UI.stationLabel / stationRef / stationEditor | Не подменять все строки вручную в новом модуле. Это feature presentation. |
-| Перенос ресурсов | Logistics.draggable/dropzone/chooseDestination | Сохранять source constraints, quantity, direct/queue, receipt. Не новый arbitrary transfer API. |
+## Async и окна
 
-У этих helpers есть смешанные обязанности и известные дефекты. Catalog не объявляет всё идеальным: сначала использовать/улучшать единственную реализацию после разрешения, не наращивать параллельные копии.
+Для заменяемого чтения использовать `RequestScope` и проверять lease до DOM:
 
-## Reuse, extend или новый компонент
+```js
+const scope = new RequestScope(() => Session.signedIn && Modules.isOpen(id));
+async function render() {
+  const lease = scope.begin();
+  try {
+    const data = await api(path, undefined, lease.signal);
+    if (!lease.current()) return;
+    draw(data);
+  } catch (error) {
+    if (lease.current() && error.name !== 'AbortError') notify(error.message, 'error');
+  }
+}
+```
 
-**Reuse:** поведение, lifecycle и ownership совпадают, различается только содержимое. Пример — общая таблица для разных столбцов.
+На close/смену параметров/logout инвалидировать scope и свои timers. Для admin view active predicate учитывает роль; privacy logout очищает private buffers/DOM даже у dirty/pinned редактора. Обработчик не должен применить результат только потому, что HTTP успешно завершился. Abort не отменяет уже принятую сервером команду.
 
-**Extend:** нужен независимый небольшой variant с ясным контрактом. Пример — passive tooltip и content slot, отдельная политика dismiss, optional persistent Disclosure. Variant не должен требовать knowledge/ship/corporation внутри core.
+Рабочие окна обычно немодальные. `Modules.close` сохраняет обычное окно, `Modules.destroy` освобождает динамическое. Для краткого editor указывать `{transient:true}`; dirty/pin имеют явную политику. Чувствительным административным окнам указывать `audience:'admin'`. Заголовок менять через registry API; не заводить параллельный resize listener на каждый render.
 
-**Новый feature-specific компонент:** различаются authority, координаты, gameplay semantics или data volume. Пример — planet material renderer, route planner, corporate role editor, transfer form. Он использует общую инфраструктуру, но не становится универсальным widget для всех сценариев.
+## Actions и формы
 
-**Не создавать абстракцию:** общий код — несколько простых span/hr/div и дальнейшего reuse нет. Native HTML и общий CSS class часто лучше слоя классов с конфигурацией.
+`UI.button`/`bindAction` владеют pending, а feature — desired disabled. Callback обязан вернуть promise своей операции. Не отрывать `async` работу через fire-and-forget, не выводить disabled из длины переведённой надписи. `finally` не должен безусловно включать кнопку, которую новая валидация оставила заблокированной.
 
-## Контракты компонентов
+`UI.field`, `UI.dirty`, `FormState` отвечают за форму. Draft хранится у feature с нужной областью (аккаунт/корабль/вкладка/источник) и очищается при logout. Restore не вызывает onChange бизнес-команды. Сервер независимо проверяет деньги, диапазоны и полномочия. Существующие request/receipt ID и expected price не менять при UI-переносе.
 
-- Общий UI принимает data/slots/labels/callbacks; ничего не знает об endpoint именах, правах, кошельке и seed.
-- Feature получает authoritative DTO и capabilities, собирает view model и выполняет действие через свой API adapter. Сервер повторно проверяет права и инварианты.
-- У stateful controller явные update и dispose; у простого formatter/node factory они не нужны.
-- Владелец запроса проверяет session/generation/instance **перед** DOM update. Abort — оптимизация; stale acceptance guard остаётся.
-- Action callback возвращает promise до окончания действия. Не запускать async build/render внутри callback без return/await/catch, если error boundary должен его увидеть.
-- Не автоматизировать повтор финансовой/разрушительной мутации. Повтор использует тот же request ID только по существующему domain idempotency contract.
-- Один владелец busy/validity. Не смешивать несколько finally, которые независимо включают кнопку.
-- Runtime-render не должен править исходный server DTO или переводить имена игроков. Не deep-clone весь мир на каждую hover-операцию ради формальной immutable архитектуры.
+## Popup и представление
 
-## Настройки и идентичность
+Menu, picker и tooltip используют общий `floating` host/placement. Native modal требует host внутри top layer; одного большого z-index недостаточно. Не объединять passive tooltip и keyboard menu в один interaction policy. Async callback picker/menu должен возвращать promise; ошибки принадлежат актуальному окну/сессии.
 
-- Default — правило feature; manual preference — выбор игрока; draft/selection/pending — transient; balance/inventory/ownership — server data.
-- Stable key: feature + component role + entity/mode + schema version. Не summary text, translated label или номер строки в изменяемом списке.
-- Browser scope допустим для языка до входа. Account scope нужен персональным предпочтениям. Instance scope отличает galaxy/system, корабли и задачи.
-- Restoration не вызывает business action и не записывает новый manual preference само по себе. Не определять origin только наличием native toggle event.
-- Повреждённое/недоступное storage даёт default и рабочий UI. Не требовать PostgreSQL для каждого UI toggle.
-- Миграция сохраняет старый выбор. Reset допустим только по явному согласованному правилу, как v2 planner в 0.12.3, а не автоматически при любом рефакторинге.
+Форматирование — `Format`, перевод — `I18n`, пользовательские имена и заметки — raw text. Не менять DTO ради локального имени станции: использовать `features/stations` projection/reference. DOM с пользовательским текстом строить через textContent/`UI.node`, не через innerHTML.
 
-## События, окна и overlays
+Нумерованные страницы используют `pager`, курсорная выдача — отдельный cursor contract. Общие resource tiles не должны разрешать смешивание источников, обход docking, capacity или permission checks. Selection inbox по notification IDs не является cargo selection.
 
-- App-lifetime и instance-lifetime listeners различаются. Dynamic controller хранит disposer/AbortController для событий, timers, observers и requests.
-- Hide, pause и destroy — разные операции. Close окна не отменяет серверную добычу или очередь.
-- Новые events именовать по feature/действию, payload документировать через typed refs, например star/planet/surface/ship. Старые events не переименовывать одновременно без facade/migration.
-- Не читать чужой DOM для получения игрового выбора. Передавать явную navigation command или обращаться к feature selector.
-- Workspace остаётся немодальным там, где пользователь работает с несколькими окнами. Confirmation/editor policy выбирается явно, а не потому, что все сейчас построены через dialog.
-- Outside click, Escape, focus return и placement — инфраструктура OverlayHost. Для header admin menu action-dismiss=false может быть правильным; Escape — отдельная policy.
-- Проверять top-layer/native modal и portal descendants. Не лечить stack конфликт очередным огромным z-index.
+## Настройки, CSS и сцены
 
-## Оформление и тексты
+Preferences opt-in; default и scope выбирает feature. Сохранять старые ключи и plain-string совместимость. Poll/перевод/повторный render не считаются ручным действием игрока. Без отдельной задачи не переселять все browser-scoped keys в account scope.
 
-- Сначала reuse token/variant существующего component bucket. Новую literal метрику обосновать; не добавлять поздний CSS override, если можно изменить единственный согласованный source.
-- В будущем использовать предсказуемые UI/feature prefixes, например ui-button и fleet-card. Идентификаторы — для экземпляра/доступности, не глобальная styling стратегия.
-- Не вводить ещё один глобальный `.selected`, влияющий на чужие features. State передавать class/data attribute в пределах component.
-- Тонкие прямоугольные controls, квадратные system ID, одобренные menu/tooltip/notification варианты сохраняются. Унификация не означает одинаковые corners всех объектов.
-- Новая статическая строка проходит через действующий I18n. Динамические сообщения строятся из key/parameters; пользовательские имена/заметки — raw text.
-- Форматирование явно выбирает precision, unit, locale, unknown policy. Не менять исходные числа или server payload.
-- Не вводить второй каталог переводов, не переписывать все русские ключи на английские IDs только ради новой структуры папок.
-- Нужны label/aria-name, корректная клавиатура и focus states. Одного role=combobox/tab недостаточно для полного interaction contract.
+Новые стили добавлять в соответствующий component bucket `styles/terminal.css`, общие значения — в `styles/tokens.css`. Удалять заменённую декларацию, а не добавлять очередной override в конец. Сохранять тонкие прямоугольные actions, квадратный system ID и отдельно согласованные rounded элементы. Обычные media/state правила не являются дубликатами только из-за одинакового селектора.
 
-## Карты, assets и будущий 2D-режим
+Draw scheduling не управляет серверной симуляцией. При закрытой/фоновой карте приостанавливать рисование, очищать private scene state при logout. Public PNG/SVG cache ограничен и не содержит игровые API-ответы. Planet loader остаётся lazy; canonical geography и её revision задаёт космический сервер. Нельзя вводить независимый клиентский генератор береговой линии или повышать cadence до 60 fps без измерения.
 
-- Общими делать только действительно совпадающие camera/math/listener/asset conventions. Граф галактики и шестиугольная поверхность — разные renderers.
-- Каноническая geography и ownership принадлежат космическому серверу. Texture pixels не задают игровую воду, запас ресурса или возможность колонизации.
-- Публичные PNG/SVG можно кешировать независимо от аккаунта. Private snapshots, labels/notes, выбранный корабль и открытая карта имеют session boundaries.
-- Загружать тяжёлые материалы/локальные sprites по входу в соответствующий режим. Не увеличивать частоту кадров без trace и не делать terrain raster заново на каждый pointermove.
-- Future local-sector scene имеет собственный render/input scope и согласованную server geography; это не причина встроить всю 2D-игру в generic UI components.
+## Проверка перед выпуском
 
-## Перед завершением согласованного этапа
+Запуск: [tests/ui/README.ru.md](../../../tests/ui/README.ru.md). Browser mocks проверяют клиентское поведение, Go integration с одноразовой БД — серверные транзакции. Для новых concurrent mutations выбирать реальные race-сценарии; не считать целевой race полным прогоном. Проверить RU/EN, narrow viewport, отсутствие private DOM после logout и состояние preferences.
 
-Проверить изменённый контракт и затронутые реальные flows; для session/forms/overlays обязательно late response, repeat action, close/reopen, RU/EN и нужные viewport/input modes. Обновить component/preference registry и кратко описать изменения, проверки и ограничения. Не переходить к следующему этапу без разрешения пользователя.
+Windows EXE включает web assets через Go embed. npm/Playwright — dev-only, frontend build framework не нужен. Версии в downloads сохраняются, SHA256 обновляется для нового файла. Правила будущей второй службы — в [service-boundaries](../service-boundaries.ru.md).

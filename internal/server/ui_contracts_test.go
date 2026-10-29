@@ -1,9 +1,11 @@
 package server
 
 import (
+	"io/fs"
 	"mime"
 	"net/http"
 	"net/http/httptest"
+	"path"
 	"strings"
 	"testing"
 )
@@ -43,19 +45,28 @@ func TestUIAnonymousAPIBoundary(t *testing.T) {
 
 func TestUIEmbeddedDelivery(t *testing.T) {
 	h := (&App{}).routes()
-	for _, resource := range []struct{ path, media string }{
-		{"/", "text/html"},
-		{"/app.js", "text/javascript"},
-		{"/windows.js", "text/javascript"},
-		{"/controls.js", "text/javascript"},
-		{"/planet-loader.js", "text/javascript"},
-		{"/planet.js", "text/javascript"},
-		{"/ru.json", "application/json"},
-		{"/en.json", "application/json"},
-		{"/terminal033.css", "text/css"},
-		{"/pilgrim.svg", "image/svg+xml"},
-		{"/surface-ground-grass.png", "image/png"},
-	} {
+	var resources []struct{ path, media string }
+	err := fs.WalkDir(assets, "web", func(name string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if name == "web/index.html" {
+			return nil
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		media := map[string]string{".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png"}[path.Ext(name)]
+		if media != "" {
+			resources = append(resources, struct{ path, media string }{"/" + strings.TrimPrefix(name, "web/"), media})
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resources = append(resources, struct{ path, media string }{"/", "text/html"})
+	for _, resource := range resources {
 		t.Run(resource.path, func(t *testing.T) {
 			w := httptest.NewRecorder()
 			h.ServeHTTP(w, httptest.NewRequest("GET", resource.path, nil))

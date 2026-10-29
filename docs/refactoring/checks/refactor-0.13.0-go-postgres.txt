@@ -1,0 +1,580 @@
+?   	github.com/yomezza/cosmosimulator/cmd/cosmosimulator	[no test files]
+=== RUN   TestOpenDoesNotInitializeGame
+--- PASS: TestOpenDoesNotInitializeGame (0.02s)
+=== RUN   TestDatabaseConfig
+--- PASS: TestDatabaseConfig (0.00s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/platform/postgres	0.020s
+=== RUN   TestStationCommerce040
+--- PASS: TestStationCommerce040 (2.22s)
+=== RUN   TestShipClasses040
+--- PASS: TestShipClasses040 (2.32s)
+=== RUN   TestLastHullPurchase040
+--- PASS: TestLastHullPurchase040 (2.31s)
+=== RUN   TestLegacyCommerceMigration040
+--- PASS: TestLegacyCommerceMigration040 (2.55s)
+=== RUN   TestDatabaseSchemaIsolation
+--- PASS: TestDatabaseSchemaIsolation (4.34s)
+=== RUN   TestExpedition
+--- PASS: TestExpedition (2.33s)
+=== RUN   TestPlanetGeneration
+--- PASS: TestPlanetGeneration (0.08s)
+=== RUN   TestFleetProgression060
+--- PASS: TestFleetProgression060 (0.00s)
+=== RUN   TestFleetPurchases060
+=== RUN   TestFleetPurchases060/pilgrim
+=== RUN   TestFleetPurchases060/wanderer
+=== RUN   TestFleetPurchases060/forge
+=== RUN   TestFleetPurchases060/ark
+=== RUN   TestFleetPurchases060/hermes
+=== RUN   TestFleetPurchases060/vesper
+=== RUN   TestFleetPurchases060/astra
+=== RUN   TestFleetPurchases060/argus
+=== RUN   TestFleetPurchases060/crucible
+=== RUN   TestFleetPurchases060/titan
+=== RUN   TestFleetPurchases060/atlas
+=== RUN   TestFleetPurchases060/leviathan
+=== RUN   TestFleetPurchases060/iris
+=== RUN   TestFleetPurchases060/zephyr
+=== RUN   TestFleetPurchases060/lightning
+--- PASS: TestFleetPurchases060 (2.72s)
+    --- PASS: TestFleetPurchases060/pilgrim (0.13s)
+    --- PASS: TestFleetPurchases060/wanderer (0.03s)
+    --- PASS: TestFleetPurchases060/forge (0.03s)
+    --- PASS: TestFleetPurchases060/ark (0.03s)
+    --- PASS: TestFleetPurchases060/hermes (0.04s)
+    --- PASS: TestFleetPurchases060/vesper (0.04s)
+    --- PASS: TestFleetPurchases060/astra (0.02s)
+    --- PASS: TestFleetPurchases060/argus (0.03s)
+    --- PASS: TestFleetPurchases060/crucible (0.03s)
+    --- PASS: TestFleetPurchases060/titan (0.03s)
+    --- PASS: TestFleetPurchases060/atlas (0.03s)
+    --- PASS: TestFleetPurchases060/leviathan (0.04s)
+    --- PASS: TestFleetPurchases060/iris (0.03s)
+    --- PASS: TestFleetPurchases060/zephyr (0.03s)
+    --- PASS: TestFleetPurchases060/lightning (0.03s)
+=== RUN   TestFleetMigration060
+--- PASS: TestFleetMigration060 (2.57s)
+=== RUN   TestFounderColoniesAndFrontier
+    founder_settlements_test.go:66: 440 founder systems, 2560 neutral, 36 colonies, 4.41% map footprint; 28/286 inner systems with founder ports; 583 clean outer systems
+--- PASS: TestFounderColoniesAndFrontier (2.03s)
+=== RUN   TestFounderSettlementMigrationPreservesProperty
+--- PASS: TestFounderSettlementMigrationPreservesProperty (4.27s)
+=== RUN   TestSecondShipRefueling
+--- PASS: TestSecondShipRefueling (2.26s)
+=== RUN   TestManagedGalaxyPreviewAndApply
+--- PASS: TestManagedGalaxyPreviewAndApply (5.58s)
+=== RUN   TestPartialSystemDiscovery
+--- PASS: TestPartialSystemDiscovery (2.17s)
+=== RUN   TestAdminChangeLogPages
+--- PASS: TestAdminChangeLogPages (2.18s)
+=== RUN   TestGalaxy
+--- PASS: TestGalaxy (0.51s)
+=== RUN   TestGameplay032
+--- PASS: TestGameplay032 (3.05s)
+=== RUN   TestResourceDistribution
+--- PASS: TestResourceDistribution (0.01s)
+=== RUN   TestEdemChronology
+--- PASS: TestEdemChronology (0.00s)
+=== RUN   TestTranslationCatalogs
+--- PASS: TestTranslationCatalogs (0.00s)
+=== RUN   Test090IdeasPersistenceOwnershipAndReplay
+--- PASS: Test090IdeasPersistenceOwnershipAndReplay (2.58s)
+=== RUN   Test090PlannerViewsAndResourceCompatibility
+--- PASS: Test090PlannerViewsAndResourceCompatibility (2.40s)
+=== RUN   TestLogisticsTransfers080
+--- PASS: TestLogisticsTransfers080 (2.46s)
+=== RUN   TestConcurrentLogistics080
+--- PASS: TestConcurrentLogistics080 (2.17s)
+=== RUN   TestAgniShipment080
+--- PASS: TestAgniShipment080 (2.09s)
+=== RUN   TestGalaxyDeletion080
+--- PASS: TestGalaxyDeletion080 (4.28s)
+=== RUN   TestCurrentMiningStats092
+=== RUN   TestCurrentMiningStats092/pilgrim
+=== RUN   TestCurrentMiningStats092/forge
+=== RUN   TestCurrentMiningStats092/titan
+--- PASS: TestCurrentMiningStats092 (2.33s)
+    --- PASS: TestCurrentMiningStats092/pilgrim (0.13s)
+    --- PASS: TestCurrentMiningStats092/forge (0.04s)
+    --- PASS: TestCurrentMiningStats092/titan (0.03s)
+=== RUN   TestSystemNamingMigration
+--- PASS: TestSystemNamingMigration (0.08s)
+=== RUN   TestPublicServerStatus
+--- PASS: TestPublicServerStatus (2.08s)
+=== RUN   TestSystemAndPortNamesStayConsistent
+--- PASS: TestSystemAndPortNamesStayConsistent (3.06s)
+=== RUN   TestAdminTeleport
+--- PASS: TestAdminTeleport (2.36s)
+=== RUN   TestFrontierRingsUpgrade
+--- PASS: TestFrontierRingsUpgrade (4.99s)
+=== RUN   TestTransientAcknowledgementsDoNotFillInbox
+--- PASS: TestTransientAcknowledgementsDoNotFillInbox (2.48s)
+=== RUN   TestObjectHolograms080
+=== RUN   TestObjectHolograms080/web/object-asteroids.svg
+=== RUN   TestObjectHolograms080/web/object-black-hole.svg
+=== RUN   TestObjectHolograms080/web/object-desert.svg
+=== RUN   TestObjectHolograms080/web/object-garden.svg
+=== RUN   TestObjectHolograms080/web/object-gas.svg
+=== RUN   TestObjectHolograms080/web/object-ice-field.svg
+=== RUN   TestObjectHolograms080/web/object-icy.svg
+=== RUN   TestObjectHolograms080/web/object-lava.svg
+=== RUN   TestObjectHolograms080/web/object-rocky.svg
+=== RUN   TestObjectHolograms080/web/object-star-a.svg
+=== RUN   TestObjectHolograms080/web/object-star-b.svg
+=== RUN   TestObjectHolograms080/web/object-star-f.svg
+=== RUN   TestObjectHolograms080/web/object-star-g.svg
+=== RUN   TestObjectHolograms080/web/object-star-k.svg
+=== RUN   TestObjectHolograms080/web/object-star-m.svg
+=== RUN   TestObjectHolograms080/web/object-star-o.svg
+=== RUN   TestObjectHolograms080/web/object-station.svg
+--- PASS: TestObjectHolograms080 (0.05s)
+    --- PASS: TestObjectHolograms080/web/object-asteroids.svg (0.00s)
+    --- PASS: TestObjectHolograms080/web/object-black-hole.svg (0.00s)
+    --- PASS: TestObjectHolograms080/web/object-desert.svg (0.00s)
+    --- PASS: TestObjectHolograms080/web/object-garden.svg (0.00s)
+    --- PASS: TestObjectHolograms080/web/object-gas.svg (0.00s)
+    --- PASS: TestObjectHolograms080/web/object-ice-field.svg (0.00s)
+    --- PASS: TestObjectHolograms080/web/object-icy.svg (0.00s)
+    --- PASS: TestObjectHolograms080/web/object-lava.svg (0.00s)
+    --- PASS: TestObjectHolograms080/web/object-rocky.svg (0.00s)
+    --- PASS: TestObjectHolograms080/web/object-star-a.svg (0.00s)
+    --- PASS: TestObjectHolograms080/web/object-star-b.svg (0.00s)
+    --- PASS: TestObjectHolograms080/web/object-star-f.svg (0.00s)
+    --- PASS: TestObjectHolograms080/web/object-star-g.svg (0.00s)
+    --- PASS: TestObjectHolograms080/web/object-star-k.svg (0.00s)
+    --- PASS: TestObjectHolograms080/web/object-star-m.svg (0.00s)
+    --- PASS: TestObjectHolograms080/web/object-star-o.svg (0.00s)
+    --- PASS: TestObjectHolograms080/web/object-station.svg (0.00s)
+=== RUN   TestPlanetGeography120
+--- PASS: TestPlanetGeography120 (0.09s)
+=== RUN   TestPlanetProjects120
+--- PASS: TestPlanetProjects120 (3.06s)
+=== RUN   TestPlanetConcurrencyPrivacy120
+    planet120_test.go:303: 50 map reads: 4.115068277s
+--- PASS: TestPlanetConcurrencyPrivacy120 (7.31s)
+=== RUN   TestPlanetCorporateRightsAndRefunds120
+--- PASS: TestPlanetCorporateRightsAndRefunds120 (2.70s)
+=== RUN   TestPlanetSettingsSnapshot120
+--- PASS: TestPlanetSettingsSnapshot120 (2.54s)
+=== RUN   TestPlanetContributionPages120
+--- PASS: TestPlanetContributionPages120 (2.51s)
+=== RUN   TestPlanetColdCacheSaturatedPool120
+--- PASS: TestPlanetColdCacheSaturatedPool120 (2.65s)
+=== RUN   TestPlanetReset124
+2026/10/29 09:48:35 request failed: ERROR: test-only failed sector insert (SQLSTATE P0001)
+--- PASS: TestPlanetReset124 (4.17s)
+=== RUN   TestPlanetResetVisits124
+--- PASS: TestPlanetResetVisits124 (3.13s)
+=== RUN   Test081NoRoundTripProfitOrReputation
+--- PASS: Test081NoRoundTripProfitOrReputation (2.38s)
+=== RUN   Test081PublicDiscoveryAndIndependentWorlds
+--- PASS: Test081PublicDiscoveryAndIndependentWorlds (2.14s)
+=== RUN   Test081DiscoveryUpgradePreservesObservedObjects
+--- PASS: Test081DiscoveryUpgradePreservesObservedObjects (3.61s)
+=== RUN   Test081SlowBodyDoesNotLockGame
+--- PASS: Test081SlowBodyDoesNotLockGame (2.18s)
+=== RUN   Test081ProxyIdentityAndRequestValidation
+--- PASS: Test081ProxyIdentityAndRequestValidation (0.00s)
+=== RUN   Test081ForgedCommandsAndAdminPermissions
+--- PASS: Test081ForgedCommandsAndAdminPermissions (2.24s)
+=== RUN   TestValidName
+--- PASS: TestValidName (0.00s)
+=== RUN   TestIntegration
+--- PASS: TestIntegration (2.53s)
+=== RUN   TestShipHolograms
+=== RUN   TestShipHolograms/pilgrim
+=== RUN   TestShipHolograms/wanderer
+=== RUN   TestShipHolograms/forge
+=== RUN   TestShipHolograms/ark
+=== RUN   TestShipHolograms/hermes
+=== RUN   TestShipHolograms/vesper
+=== RUN   TestShipHolograms/astra
+=== RUN   TestShipHolograms/argus
+=== RUN   TestShipHolograms/crucible
+=== RUN   TestShipHolograms/titan
+=== RUN   TestShipHolograms/atlas
+=== RUN   TestShipHolograms/leviathan
+=== RUN   TestShipHolograms/iris
+=== RUN   TestShipHolograms/zephyr
+=== RUN   TestShipHolograms/lightning
+--- PASS: TestShipHolograms (0.08s)
+    --- PASS: TestShipHolograms/pilgrim (0.00s)
+    --- PASS: TestShipHolograms/wanderer (0.00s)
+    --- PASS: TestShipHolograms/forge (0.00s)
+    --- PASS: TestShipHolograms/ark (0.01s)
+    --- PASS: TestShipHolograms/hermes (0.00s)
+    --- PASS: TestShipHolograms/vesper (0.00s)
+    --- PASS: TestShipHolograms/astra (0.00s)
+    --- PASS: TestShipHolograms/argus (0.01s)
+    --- PASS: TestShipHolograms/crucible (0.01s)
+    --- PASS: TestShipHolograms/titan (0.01s)
+    --- PASS: TestShipHolograms/atlas (0.01s)
+    --- PASS: TestShipHolograms/leviathan (0.01s)
+    --- PASS: TestShipHolograms/iris (0.00s)
+    --- PASS: TestShipHolograms/zephyr (0.01s)
+    --- PASS: TestShipHolograms/lightning (0.00s)
+=== RUN   TestShipHologramViewports
+=== RUN   TestShipHologramViewports/pilgrim
+=== RUN   TestShipHologramViewports/wanderer
+=== RUN   TestShipHologramViewports/forge
+=== RUN   TestShipHologramViewports/ark
+=== RUN   TestShipHologramViewports/hermes
+=== RUN   TestShipHologramViewports/vesper
+=== RUN   TestShipHologramViewports/astra
+=== RUN   TestShipHologramViewports/argus
+=== RUN   TestShipHologramViewports/crucible
+=== RUN   TestShipHologramViewports/titan
+=== RUN   TestShipHologramViewports/atlas
+=== RUN   TestShipHologramViewports/leviathan
+=== RUN   TestShipHologramViewports/iris
+=== RUN   TestShipHologramViewports/zephyr
+=== RUN   TestShipHologramViewports/lightning
+--- PASS: TestShipHologramViewports (0.90s)
+    --- PASS: TestShipHologramViewports/pilgrim (0.04s)
+    --- PASS: TestShipHologramViewports/wanderer (0.05s)
+    --- PASS: TestShipHologramViewports/forge (0.06s)
+    --- PASS: TestShipHologramViewports/ark (0.08s)
+    --- PASS: TestShipHologramViewports/hermes (0.06s)
+    --- PASS: TestShipHologramViewports/vesper (0.04s)
+    --- PASS: TestShipHologramViewports/astra (0.05s)
+    --- PASS: TestShipHologramViewports/argus (0.07s)
+    --- PASS: TestShipHologramViewports/crucible (0.06s)
+    --- PASS: TestShipHologramViewports/titan (0.09s)
+    --- PASS: TestShipHologramViewports/atlas (0.06s)
+    --- PASS: TestShipHologramViewports/leviathan (0.07s)
+    --- PASS: TestShipHologramViewports/iris (0.04s)
+    --- PASS: TestShipHologramViewports/zephyr (0.07s)
+    --- PASS: TestShipHologramViewports/lightning (0.06s)
+=== RUN   TestSurfaceTextureAssets125
+=== RUN   TestSurfaceTextureAssets125/grass
+=== RUN   TestSurfaceTextureAssets125/dry
+=== RUN   TestSurfaceTextureAssets125/sand
+=== RUN   TestSurfaceTextureAssets125/rock
+=== RUN   TestSurfaceTextureAssets125/snow
+=== RUN   TestSurfaceTextureAssets125/volcanic
+--- PASS: TestSurfaceTextureAssets125 (0.10s)
+    --- PASS: TestSurfaceTextureAssets125/grass (0.02s)
+    --- PASS: TestSurfaceTextureAssets125/dry (0.02s)
+    --- PASS: TestSurfaceTextureAssets125/sand (0.01s)
+    --- PASS: TestSurfaceTextureAssets125/rock (0.01s)
+    --- PASS: TestSurfaceTextureAssets125/snow (0.02s)
+    --- PASS: TestSurfaceTextureAssets125/volcanic (0.02s)
+=== RUN   TestBatchLogistics100
+--- PASS: TestBatchLogistics100 (2.36s)
+=== RUN   TestPersonalStationLabels100
+--- PASS: TestPersonalStationLabels100 (2.35s)
+=== RUN   TestPlannerPriorities100
+--- PASS: TestPlannerPriorities100 (2.28s)
+=== RUN   TestTerminal
+--- PASS: TestTerminal (3.00s)
+=== RUN   TestCompanyTags
+--- PASS: TestCompanyTags (0.00s)
+=== RUN   TestIceFieldTemperature
+--- PASS: TestIceFieldTemperature (0.00s)
+=== RUN   TestUIAnonymousAPIBoundary
+=== RUN   TestUIAnonymousAPIBoundary/GET_/api/state
+=== RUN   TestUIAnonymousAPIBoundary/GET_/api/fleet
+=== RUN   TestUIAnonymousAPIBoundary/GET_/api/galaxy
+=== RUN   TestUIAnonymousAPIBoundary/GET_/api/system?id=1
+=== RUN   TestUIAnonymousAPIBoundary/GET_/api/workbench
+=== RUN   TestUIAnonymousAPIBoundary/GET_/api/admin/users?page=1&q=pilot
+=== RUN   TestUIAnonymousAPIBoundary/GET_/api/planet/surface?star=1&planet=planet-1
+=== RUN   TestUIAnonymousAPIBoundary/GET_/api/planet/state?star=1&planet=planet-1
+=== RUN   TestUIAnonymousAPIBoundary/POST_/api/admin/tick
+=== RUN   TestUIAnonymousAPIBoundary/POST_/api/planet/action
+=== RUN   TestUIAnonymousAPIBoundary/POST_/api/planner
+=== RUN   TestUIAnonymousAPIBoundary/POST_/api/logistics
+--- PASS: TestUIAnonymousAPIBoundary (0.00s)
+    --- PASS: TestUIAnonymousAPIBoundary/GET_/api/state (0.00s)
+    --- PASS: TestUIAnonymousAPIBoundary/GET_/api/fleet (0.00s)
+    --- PASS: TestUIAnonymousAPIBoundary/GET_/api/galaxy (0.00s)
+    --- PASS: TestUIAnonymousAPIBoundary/GET_/api/system?id=1 (0.00s)
+    --- PASS: TestUIAnonymousAPIBoundary/GET_/api/workbench (0.00s)
+    --- PASS: TestUIAnonymousAPIBoundary/GET_/api/admin/users?page=1&q=pilot (0.00s)
+    --- PASS: TestUIAnonymousAPIBoundary/GET_/api/planet/surface?star=1&planet=planet-1 (0.00s)
+    --- PASS: TestUIAnonymousAPIBoundary/GET_/api/planet/state?star=1&planet=planet-1 (0.00s)
+    --- PASS: TestUIAnonymousAPIBoundary/POST_/api/admin/tick (0.00s)
+    --- PASS: TestUIAnonymousAPIBoundary/POST_/api/planet/action (0.00s)
+    --- PASS: TestUIAnonymousAPIBoundary/POST_/api/planner (0.00s)
+    --- PASS: TestUIAnonymousAPIBoundary/POST_/api/logistics (0.00s)
+=== RUN   TestUIEmbeddedDelivery
+=== RUN   TestUIEmbeddedDelivery//argus.svg
+=== RUN   TestUIEmbeddedDelivery//ark.svg
+=== RUN   TestUIEmbeddedDelivery//astra.svg
+=== RUN   TestUIEmbeddedDelivery//atlas.svg
+=== RUN   TestUIEmbeddedDelivery//bootstrap.js
+=== RUN   TestUIEmbeddedDelivery//core/api-client.js
+=== RUN   TestUIEmbeddedDelivery//core/api.js
+=== RUN   TestUIEmbeddedDelivery//core/asset-cache.js
+=== RUN   TestUIEmbeddedDelivery//core/format.js
+=== RUN   TestUIEmbeddedDelivery//core/i18n.js
+=== RUN   TestUIEmbeddedDelivery//core/lifetime.js
+=== RUN   TestUIEmbeddedDelivery//core/preferences.js
+=== RUN   TestUIEmbeddedDelivery//core/scene-loop.js
+=== RUN   TestUIEmbeddedDelivery//core/scoped-view.js
+=== RUN   TestUIEmbeddedDelivery//core/session.js
+=== RUN   TestUIEmbeddedDelivery//core/snapshot-store.js
+=== RUN   TestUIEmbeddedDelivery//core/world-store.js
+=== RUN   TestUIEmbeddedDelivery//crucible.svg
+=== RUN   TestUIEmbeddedDelivery//en.json
+=== RUN   TestUIEmbeddedDelivery//favicon.svg
+=== RUN   TestUIEmbeddedDelivery//features/administration/benchmark/index.js
+=== RUN   TestUIEmbeddedDelivery//features/administration/galaxies/index.js
+=== RUN   TestUIEmbeddedDelivery//features/administration/gameplay/index.js
+=== RUN   TestUIEmbeddedDelivery//features/administration/resources/index.js
+=== RUN   TestUIEmbeddedDelivery//features/administration/users/index.js
+=== RUN   TestUIEmbeddedDelivery//features/automation/index.js
+=== RUN   TestUIEmbeddedDelivery//features/automation/scheduler.js
+=== RUN   TestUIEmbeddedDelivery//features/commands.js
+=== RUN   TestUIEmbeddedDelivery//features/corporations/flag.js
+=== RUN   TestUIEmbeddedDelivery//features/corporations/index.js
+=== RUN   TestUIEmbeddedDelivery//features/corporations/permissions.js
+=== RUN   TestUIEmbeddedDelivery//features/feedback/ideas.js
+=== RUN   TestUIEmbeddedDelivery//features/finance/amount.js
+=== RUN   TestUIEmbeddedDelivery//features/finance/index.js
+=== RUN   TestUIEmbeddedDelivery//features/fleet/activity.js
+=== RUN   TestUIEmbeddedDelivery//features/fleet/index.js
+=== RUN   TestUIEmbeddedDelivery//features/fleet/layout.js
+=== RUN   TestUIEmbeddedDelivery//features/fleet/presentation.js
+=== RUN   TestUIEmbeddedDelivery//features/guide/index.js
+=== RUN   TestUIEmbeddedDelivery//features/inventory/logistics.js
+=== RUN   TestUIEmbeddedDelivery//features/inventory/resource-label.js
+=== RUN   TestUIEmbeddedDelivery//features/inventory/resource-tile.js
+=== RUN   TestUIEmbeddedDelivery//features/maps/galaxy.js
+=== RUN   TestUIEmbeddedDelivery//features/markets/data.js
+=== RUN   TestUIEmbeddedDelivery//features/markets/delivery.js
+=== RUN   TestUIEmbeddedDelivery//features/markets/global.js
+=== RUN   TestUIEmbeddedDelivery//features/markets/index.js
+=== RUN   TestUIEmbeddedDelivery//features/markets/local.js
+=== RUN   TestUIEmbeddedDelivery//features/markets/orders.js
+=== RUN   TestUIEmbeddedDelivery//features/markets/trade-form.js
+=== RUN   TestUIEmbeddedDelivery//features/mining/index.js
+=== RUN   TestUIEmbeddedDelivery//features/navigation/pickers.js
+=== RUN   TestUIEmbeddedDelivery//features/notifications/index.js
+=== RUN   TestUIEmbeddedDelivery//features/objects/cards.js
+=== RUN   TestUIEmbeddedDelivery//features/objects/presentation.js
+=== RUN   TestUIEmbeddedDelivery//features/objects/visuals.js
+=== RUN   TestUIEmbeddedDelivery//features/planet/index.js
+=== RUN   TestUIEmbeddedDelivery//features/planet/loader.js
+=== RUN   TestUIEmbeddedDelivery//features/planet/terrain.js
+=== RUN   TestUIEmbeddedDelivery//features/portal/index.js
+=== RUN   TestUIEmbeddedDelivery//features/profile/index.js
+=== RUN   TestUIEmbeddedDelivery//features/research/index.js
+=== RUN   TestUIEmbeddedDelivery//features/runtime.js
+=== RUN   TestUIEmbeddedDelivery//features/selectors.js
+=== RUN   TestUIEmbeddedDelivery//features/shell/app.js
+=== RUN   TestUIEmbeddedDelivery//features/shell/icons.js
+=== RUN   TestUIEmbeddedDelivery//features/shell/navigation.js
+=== RUN   TestUIEmbeddedDelivery//features/shell/server-status.js
+=== RUN   TestUIEmbeddedDelivery//features/stations/index.js
+=== RUN   TestUIEmbeddedDelivery//features/workspace/index.js
+=== RUN   TestUIEmbeddedDelivery//forge.svg
+=== RUN   TestUIEmbeddedDelivery//hermes.svg
+=== RUN   TestUIEmbeddedDelivery//iris.svg
+=== RUN   TestUIEmbeddedDelivery//leviathan.svg
+=== RUN   TestUIEmbeddedDelivery//lightning.svg
+=== RUN   TestUIEmbeddedDelivery//object-asteroids.svg
+=== RUN   TestUIEmbeddedDelivery//object-black-hole.svg
+=== RUN   TestUIEmbeddedDelivery//object-desert.svg
+=== RUN   TestUIEmbeddedDelivery//object-garden.svg
+=== RUN   TestUIEmbeddedDelivery//object-gas.svg
+=== RUN   TestUIEmbeddedDelivery//object-ice-field.svg
+=== RUN   TestUIEmbeddedDelivery//object-icy.svg
+=== RUN   TestUIEmbeddedDelivery//object-lava.svg
+=== RUN   TestUIEmbeddedDelivery//object-rocky.svg
+=== RUN   TestUIEmbeddedDelivery//object-star-a.svg
+=== RUN   TestUIEmbeddedDelivery//object-star-b.svg
+=== RUN   TestUIEmbeddedDelivery//object-star-f.svg
+=== RUN   TestUIEmbeddedDelivery//object-star-g.svg
+=== RUN   TestUIEmbeddedDelivery//object-star-k.svg
+=== RUN   TestUIEmbeddedDelivery//object-star-m.svg
+=== RUN   TestUIEmbeddedDelivery//object-star-o.svg
+=== RUN   TestUIEmbeddedDelivery//object-station.svg
+=== RUN   TestUIEmbeddedDelivery//pilgrim.svg
+=== RUN   TestUIEmbeddedDelivery//ru.json
+=== RUN   TestUIEmbeddedDelivery//styles/terminal.css
+=== RUN   TestUIEmbeddedDelivery//styles/tokens.css
+=== RUN   TestUIEmbeddedDelivery//surface-ground-dry.png
+=== RUN   TestUIEmbeddedDelivery//surface-ground-grass.png
+=== RUN   TestUIEmbeddedDelivery//surface-ground-rock.png
+=== RUN   TestUIEmbeddedDelivery//surface-ground-sand.png
+=== RUN   TestUIEmbeddedDelivery//surface-ground-snow.png
+=== RUN   TestUIEmbeddedDelivery//surface-ground-volcanic.png
+=== RUN   TestUIEmbeddedDelivery//titan.svg
+=== RUN   TestUIEmbeddedDelivery//ui/actions.js
+=== RUN   TestUIEmbeddedDelivery//ui/combobox.js
+=== RUN   TestUIEmbeddedDelivery//ui/confirm.js
+=== RUN   TestUIEmbeddedDelivery//ui/disclosure.js
+=== RUN   TestUIEmbeddedDelivery//ui/dom.js
+=== RUN   TestUIEmbeddedDelivery//ui/feedback.js
+=== RUN   TestUIEmbeddedDelivery//ui/fields.js
+=== RUN   TestUIEmbeddedDelivery//ui/floating.js
+=== RUN   TestUIEmbeddedDelivery//ui/form-state.js
+=== RUN   TestUIEmbeddedDelivery//ui/holograms.js
+=== RUN   TestUIEmbeddedDelivery//ui/index.js
+=== RUN   TestUIEmbeddedDelivery//ui/menu.js
+=== RUN   TestUIEmbeddedDelivery//ui/pager.js
+=== RUN   TestUIEmbeddedDelivery//ui/quantity.js
+=== RUN   TestUIEmbeddedDelivery//ui/runtime.js
+=== RUN   TestUIEmbeddedDelivery//ui/table.js
+=== RUN   TestUIEmbeddedDelivery//ui/tabs.js
+=== RUN   TestUIEmbeddedDelivery//ui/tooltip.js
+=== RUN   TestUIEmbeddedDelivery//ui/view-state.js
+=== RUN   TestUIEmbeddedDelivery//ui/windows.js
+=== RUN   TestUIEmbeddedDelivery//vesper.svg
+=== RUN   TestUIEmbeddedDelivery//wanderer.svg
+=== RUN   TestUIEmbeddedDelivery//zephyr.svg
+=== RUN   TestUIEmbeddedDelivery//
+--- PASS: TestUIEmbeddedDelivery (0.04s)
+    --- PASS: TestUIEmbeddedDelivery//argus.svg (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//ark.svg (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//astra.svg (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//atlas.svg (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//bootstrap.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//core/api-client.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//core/api.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//core/asset-cache.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//core/format.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//core/i18n.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//core/lifetime.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//core/preferences.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//core/scene-loop.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//core/scoped-view.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//core/session.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//core/snapshot-store.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//core/world-store.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//crucible.svg (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//en.json (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//favicon.svg (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/administration/benchmark/index.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/administration/galaxies/index.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/administration/gameplay/index.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/administration/resources/index.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/administration/users/index.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/automation/index.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/automation/scheduler.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/commands.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/corporations/flag.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/corporations/index.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/corporations/permissions.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/feedback/ideas.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/finance/amount.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/finance/index.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/fleet/activity.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/fleet/index.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/fleet/layout.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/fleet/presentation.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/guide/index.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/inventory/logistics.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/inventory/resource-label.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/inventory/resource-tile.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/maps/galaxy.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/markets/data.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/markets/delivery.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/markets/global.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/markets/index.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/markets/local.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/markets/orders.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/markets/trade-form.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/mining/index.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/navigation/pickers.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/notifications/index.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/objects/cards.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/objects/presentation.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/objects/visuals.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/planet/index.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/planet/loader.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/planet/terrain.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/portal/index.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/profile/index.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/research/index.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/runtime.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/selectors.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/shell/app.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/shell/icons.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/shell/navigation.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/shell/server-status.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/stations/index.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//features/workspace/index.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//forge.svg (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//hermes.svg (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//iris.svg (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//leviathan.svg (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//lightning.svg (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//object-asteroids.svg (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//object-black-hole.svg (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//object-desert.svg (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//object-garden.svg (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//object-gas.svg (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//object-ice-field.svg (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//object-icy.svg (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//object-lava.svg (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//object-rocky.svg (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//object-star-a.svg (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//object-star-b.svg (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//object-star-f.svg (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//object-star-g.svg (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//object-star-k.svg (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//object-star-m.svg (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//object-star-o.svg (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//object-station.svg (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//pilgrim.svg (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//ru.json (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//styles/terminal.css (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//styles/tokens.css (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//surface-ground-dry.png (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//surface-ground-grass.png (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//surface-ground-rock.png (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//surface-ground-sand.png (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//surface-ground-snow.png (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//surface-ground-volcanic.png (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//titan.svg (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//ui/actions.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//ui/combobox.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//ui/confirm.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//ui/disclosure.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//ui/dom.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//ui/feedback.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//ui/fields.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//ui/floating.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//ui/form-state.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//ui/holograms.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//ui/index.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//ui/menu.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//ui/pager.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//ui/quantity.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//ui/runtime.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//ui/table.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//ui/tabs.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//ui/tooltip.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//ui/view-state.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//ui/windows.js (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//vesper.svg (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//wanderer.svg (0.00s)
+    --- PASS: TestUIEmbeddedDelivery//zephyr.svg (0.00s)
+    --- PASS: TestUIEmbeddedDelivery// (0.00s)
+=== RUN   Test033ResearchDataAndNotifications
+--- PASS: Test033ResearchDataAndNotifications (2.42s)
+=== RUN   Test033FleetStorageOrdersAndDelivery
+--- PASS: Test033FleetStorageOrdersAndDelivery (2.34s)
+=== RUN   Test033CorporateRolesAndPortal
+--- PASS: Test033CorporateRolesAndPortal (3.27s)
+=== RUN   Test033UpgradePreservesLegacyAssets
+--- PASS: Test033UpgradePreservesLegacyAssets (2.29s)
+=== RUN   Test033BuiltPortAndPhysicalCorporateStorage
+--- PASS: Test033BuiltPortAndPhysicalCorporateStorage (2.20s)
+=== RUN   TestWalletExperienceAndResources070
+--- PASS: TestWalletExperienceAndResources070 (2.42s)
+=== RUN   TestCreateGalaxiesAndPortals070
+--- PASS: TestCreateGalaxiesAndPortals070 (7.50s)
+=== RUN   TestOfflinePlanner070
+--- PASS: TestOfflinePlanner070 (2.28s)
+=== RUN   TestPlannerRecovery070
+--- PASS: TestPlannerRecovery070 (2.32s)
+=== RUN   TestFleetAllowances110
+--- PASS: TestFleetAllowances110 (0.00s)
+=== RUN   TestFleetPublicAndLimits110
+--- PASS: TestFleetPublicAndLimits110 (2.31s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/server	160.691s

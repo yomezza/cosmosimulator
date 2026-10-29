@@ -1,30 +1,48 @@
+import { ledgerAmount } from "../finance/amount.js";
+import { paintFlag } from "./flag.js";
+import { stationRef } from "../stations/index.js";
+import { FormState } from "../../ui/form-state.js";
 import { Session, RequestScope } from "../../core/session.js";
 import { scopedView } from "../../core/scoped-view.js";
 import { I18n } from "../../core/i18n.js";
-import { Format } from "../../core/format.js";
+
 import { api } from "../../core/api.js";
-import { refresh } from "../../core/snapshot-store.js";
+
 import { UI, Modules } from "../../ui/runtime.js";
 import { notify } from "../../ui/feedback.js";
-import { Game, GalaxyAdmin, Scheduler, AdminResources, Logistics, scenes } from "../../features/runtime.js";
-import { world, loadWorld } from "../../core/world-store.js";
-import { performExpedition } from "../../features/commands.js";
-import { d, w, res, num, station, fmtTime, money, known, fly, cargoCapacity, fuelCapacity } from "../../features/selectors.js";
+
+import {
+  d,
+  w,
+  res,
+  num,
+  fmtTime,
+  money,
+  cargoCapacity,
+} from "../../features/selectors.js";
 import { reset } from "../../ui/view-state.js";
 import { actionAmount } from "../../ui/quantity.js";
 import { resourceName } from "../../features/inventory/resource-label.js";
 import { can } from "../../features/corporations/permissions.js";
 
 export function createCorporations({ roots, act, command }) {
-  const n=UI.node, tr=(s)=>I18n.t(s), b=UI.button, row=UI.row, field=UI.field, choice=UI.choice;
-let corpTab = "overview";
-let corpScope = "all";
-let selectedCorp = null;
-let requestID = 0;
-let companyList = [];
-let createCorp = false;
-const companyScope = new RequestScope(() => Session.signedIn && Modules.isOpen("corporations"));
-function flagPicker(root, initial, change) {
+  const drafts = new FormState(() => Session.data.state?.user.id);
+  const n = UI.node,
+    tr = (s) => I18n.t(s),
+    b = UI.button,
+    row = UI.row,
+    field = (...args) => drafts.field(UI.field, ...args),
+    choice = UI.choice;
+  let corpTab = "overview";
+  let corpScope = "all";
+  let selectedCorp = null;
+  let requestID = 0;
+  let companyList = [];
+  let createCorp = false;
+  const companyScope = new RequestScope(
+    () => Session.signedIn && Modules.isOpen("corporations"),
+  );
+  function flagPicker(root, initial, change) {
     const host = n("div", undefined, "flag-picker"),
       preview = b(initial, () => {
         const old = host.querySelector(".flag-grid");
@@ -52,7 +70,7 @@ function flagPicker(root, initial, change) {
     root.append(host);
     return preview;
   }
-async function drawrenderCompanies(lease) {
+  async function drawCompanies(lease) {
     const key = ++requestID,
       root = roots.corporations;
     const result = await api("companies?scope=" + corpScope);
@@ -108,7 +126,7 @@ async function drawrenderCompanies(lease) {
       });
       button.className = "company-list-row";
       const badge = n("span", c.flag + " " + c.tag, "corp-badge");
-      UI.paintFlag(badge, c);
+      paintFlag(badge, c);
       button.append(
         badge,
         n("span", c.starter || c.founder ? tr(c.name) : c.name),
@@ -294,7 +312,7 @@ async function drawrenderCompanies(lease) {
     if (corpTab === "storage") {
       for (const store of w().company_storage || []) {
         const warehouseTitle = n("h3");
-        warehouseTitle.append(UI.stationRef(store.star, store.station));
+        warehouseTitle.append(stationRef(store.star, store.station));
         side.append(warehouseTitle);
         side.append(
           UI.table(
@@ -409,7 +427,7 @@ async function drawrenderCompanies(lease) {
       );
     }
   }
-function renderInvitations(root) {
+  function renderInvitations(root) {
     for (const req of (w().requests || []).filter(
       (r) => r.user_id === Session.data.state.user.id,
     )) {
@@ -430,7 +448,7 @@ function renderInvitations(root) {
       root.append(line);
     }
   }
-function renderCorpCreate(root) {
+  function renderCorpCreate(root) {
     root.append(n("h3", tr("Создать корпорацию")));
     const form = n("form"),
       head = n("div", undefined, "corp-create-header"),
@@ -480,7 +498,7 @@ function renderCorpCreate(root) {
     };
     root.append(form);
   }
-function renderFlagDesign(root, c) {
+  function renderFlagDesign(root, c) {
     const form = n("section");
     form.append(n("h3", tr("Конструктор флага")));
     const preview = flagPicker(form, c.flag),
@@ -521,7 +539,7 @@ function renderFlagDesign(root, c) {
     );
     root.append(form);
   }
-function renderProjects(root) {
+  function renderProjects(root) {
     for (const p of w().projects || []) {
       const card = n("article", undefined, "project-card");
       card.append(
@@ -597,7 +615,28 @@ function renderProjects(root) {
       );
     }
   }
-const renderCompanies=scopedView(companyScope,drawrenderCompanies,(error)=>notify(error.message,"error"));
-function clear() {selectedCorp=null;requestID=0;companyScope.invalidate();companyList=[];createCorp=false;}
-return {flagPicker,renderCompanies,renderInvitations,renderCorpCreate,renderFlagDesign,renderProjects,clear, close(){renderCompanies.invalidate();}};
+  const renderCompanies = scopedView(companyScope, drawCompanies, (error) =>
+    notify(error.message, "error"),
+  );
+  function clear() {
+    drafts.clear();
+    selectedCorp = null;
+    requestID = 0;
+    companyScope.invalidate();
+    companyList = [];
+    createCorp = false;
+  }
+  window.addEventListener("actionaccepted", () => drafts.clear());
+  return {
+    flagPicker,
+    renderCompanies,
+    renderInvitations,
+    renderCorpCreate,
+    renderFlagDesign,
+    renderProjects,
+    clear,
+    close() {
+      renderCompanies.invalidate();
+    },
+  };
 }
