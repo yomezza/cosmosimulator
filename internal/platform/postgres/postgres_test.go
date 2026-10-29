@@ -1,9 +1,10 @@
 package postgres
 
 import (
-	"github.com/jackc/pgx/v5"
 	"strings"
 	"testing"
+
+	"github.com/jackc/pgx/v5"
 )
 
 func TestDatabaseConfig(t *testing.T) {

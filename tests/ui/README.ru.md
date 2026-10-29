@@ -37,7 +37,7 @@ CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium npm test
 
 Итого **45 тестов**, без TODO и скрытых ожидаемых ошибок. Пять диагностических требований M0 стали обычными регрессиями; прежнего `knownDefect` wrapper нет. `npm run test:baseline` и `npm run test:regressions` запускают соответствующие поднаборы.
 
-Fixtures синтетические. Они повторяют необходимые DTO, но не реализуют игровую экономику и серверную авторизацию. Mock 403 не доказывает защиту Go API. Реальные anonymous guards, CSP/MIME и доставку всех embedded assets проверяет `internal/server/ui_contracts_test.go`. Полномочия вошедшего игрока и транзакционные инварианты проверяются в DB integration.
+Fixtures синтетические. Они повторяют необходимые DTO, но не реализуют игровую экономику и серверную авторизацию. Mock 403 не доказывает защиту Go API. Реальные anonymous guards, CSP/MIME и доставку всех embedded assets проверяет `internal/server/integration/ui_contracts_test.go`. Полномочия вошедшего игрока и транзакционные инварианты проверяются в DB integration.
 
 ## Go и PostgreSQL
 
@@ -54,7 +54,7 @@ DB-тесты в этом режиме пропускаются. Полный п
 
 ```sh
 go test ./... -count=1 -timeout=15m
-go test -race ./... -count=1 -timeout=5m -run '^(TestConcurrentLogistics080|TestLastHullPurchase040|TestBatchLogistics100|TestOpenDoesNotInitializeGame|TestDatabaseConfig)$'
+go test -race ./... -count=1 -timeout=5m -run '^(TestConcurrentLogistics080|TestLastHullPurchase040|TestBatchLogistics100|TestOpenDoesNotInitializeGame|TestDatabaseConfig|TestColdCacheSaturatedPool|TestBenchmarkCompositionIsolation)$'
 go vet ./...
 ```
 
