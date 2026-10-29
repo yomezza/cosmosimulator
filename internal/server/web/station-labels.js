@@ -1,9 +1,16 @@
-"use strict";
-(() => {
+import { Session } from "./core/session.js";
+import { I18n } from "./core/i18n.js";
+import { notify } from "./ui/feedback.js";
+import { UI, Modules } from "./ui/runtime.js";
+import { Game } from "./features/runtime.js";
+import { world } from "./core/world-store.js";
+
+export function initStationLabels() {
+
   const tr = (s) => I18n.t(s),
     n = UI.node;
   const own = (star, station) =>
-    gameData.workbench?.notes?.find(
+    Session.data.workbench?.notes?.find(
       (note) => note.star === Number(star) && note.object_id === station,
     );
   function sites(data) {
@@ -18,6 +25,14 @@
   }
   UI.personalizeStations = (data) => {
     if (!data || typeof data !== "object") return data;
+    // Presentation projection: never rewrite the transport/raw snapshot DTO.
+    data = { ...data };
+    for (const key of ["ports", "stations", "sites"])
+      if (Array.isArray(data[key])) data[key] = data[key].map((item) => ({...item}));
+    if (data.expedition) data.expedition = {...data.expedition, sites:(data.expedition.sites || []).map((item) => ({...item}))};
+    if (data.workbench) data.workbench = {...data.workbench,
+      stations:(data.workbench.stations || []).map((item) => ({...item})),
+      shipyards:(data.workbench.shipyards || []).map((item) => ({...item}))};
     for (const list of [data.ports, data.stations])
       if (Array.isArray(list))
         for (const port of list) {
@@ -46,7 +61,7 @@
     const star = Number(label.dataset.stationStar),
       station = label.dataset.stationObject,
       note = own(star, station),
-      port = gameData.workbench?.stations?.find(
+      port = Session.data.workbench?.stations?.find(
         (p) => p.star === star && p.object_id === station,
       ),
       subject = note?.label || port?.name || label.dataset.stationFallback;
@@ -68,7 +83,7 @@
   }
   UI.stationLabel = (star, station, name, tag = "span") => {
     const note = own(star, station),
-      port = gameData.workbench?.stations?.find(
+      port = Session.data.workbench?.stations?.find(
         (p) => p.star === Number(star) && p.object_id === station,
       ),
       subject = note?.label || port?.name || name,
@@ -108,14 +123,14 @@
     document.querySelectorAll("[data-station-star]").forEach(updateLabel),
   );
   UI.stationRef = (star, station) => {
-    const port = gameData.workbench?.stations?.find(
+    const port = Session.data.workbench?.stations?.find(
       (p) => p.star === Number(star) && p.object_id === station,
     );
     return UI.stationLabel(
       star,
       station,
       port?.name ||
-        (window.MapData?.stars.find((s) => s.id === Number(star))?.name ||
+        (world.data?.stars.find((s) => s.id === Number(star))?.name ||
           star) +
           " · " +
           station,
@@ -123,7 +138,7 @@
     );
   };
   UI.stationEditor = (star, station) => {
-    const port = gameData.workbench?.stations?.find(
+    const port = Session.data.workbench?.stations?.find(
       (p) => p.star === Number(star) && p.object_id === station,
     );
     if (!port) return;
@@ -193,4 +208,5 @@
       .querySelector("#window-station-label .module-content")
       ?.replaceChildren(),
   );
-})();
+
+}

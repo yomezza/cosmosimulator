@@ -1,5 +1,11 @@
-"use strict";
-(() => {
+import { Session } from "./core/session.js";
+import { I18n } from "./core/i18n.js";
+import { api } from "./core/api.js";
+import { notify } from "./ui/feedback.js";
+import { UI, Modules } from "./ui/runtime.js";
+
+export function initIdeas() {
+
   const n = UI.node,
     tr = (s) => I18n.t(s),
     b = UI.button;
@@ -37,7 +43,7 @@
       selected: null,
     },
   };
-  const admin = () => signedIn && gameData.state?.user.role === "admin";
+  const admin = () => Session.signedIn && Session.data.state?.user.role === "admin";
   const count = (s) => Array.from(s.trim()).length;
   const date = (v) =>
     new Date(v).toLocaleString(I18n.language, {
@@ -118,7 +124,7 @@
     async function send() {
       if (sending || !form.reportValidity()) return;
       const serial = ++submission,
-        epoch = authEpoch,
+        epoch = Session.epoch,
         payload = { ...draft };
       sending = true;
       form
@@ -126,13 +132,13 @@
         .forEach((e) => (e.disabled = true));
       try {
         const result = await api("ideas", payload);
-        if (serial !== submission || epoch !== authEpoch || !signedIn) return;
+        if (serial !== submission || epoch !== Session.epoch || !Session.signedIn) return;
         saved = result.id;
         draft = blank();
         views.ideas.page = 1;
         await load("ideas");
       } catch (e) {
-        if (serial === submission && epoch === authEpoch && signedIn)
+        if (serial === submission && epoch === Session.epoch && Session.signedIn)
           notify(e.message, "error");
       } finally {
         if (serial === submission) {
@@ -304,7 +310,7 @@
   async function load(id) {
     const state = views[id],
       request = ++state.request,
-      epoch = authEpoch;
+      epoch = Session.epoch;
     state.loading = true;
     try {
       const data = await api(
@@ -315,8 +321,8 @@
       );
       if (
         request !== state.request ||
-        epoch !== authEpoch ||
-        !signedIn ||
+        epoch !== Session.epoch ||
+        !Session.signedIn ||
         !Modules.isOpen(id)
       )
         return;
@@ -325,14 +331,14 @@
       state.loaded = Date.now();
       renderHistory(id);
     } catch (e) {
-      if (epoch === authEpoch && signedIn && request === state.request)
+      if (epoch === Session.epoch && Session.signedIn && request === state.request)
         notify(e.message, "error");
     } finally {
       if (request === state.request) state.loading = false;
     }
   }
   window.addEventListener("moduleopen", (e) => {
-    if (!(e.detail in roots) || !signedIn) return;
+    if (!(e.detail in roots) || !Session.signedIn) return;
     if (e.detail === "adminideas" && !admin()) {
       Modules.close(e.detail);
       return;
@@ -377,4 +383,5 @@
       Modules.close(id);
     }
   });
-})();
+
+}

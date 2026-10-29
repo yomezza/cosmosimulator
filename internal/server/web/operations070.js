@@ -1,5 +1,14 @@
-"use strict";
-(() => {
+import { Session } from "./core/session.js";
+import { I18n } from "./core/i18n.js";
+import { api } from "./core/api.js";
+import { refresh } from "./core/snapshot-store.js";
+import { notify } from "./ui/feedback.js";
+import { UI, Modules } from "./ui/runtime.js";
+import { Scheduler, AdminResources } from "./features/runtime.js";
+import { world } from "./core/world-store.js";
+
+export function initOperations070() {
+
   const n = UI.node,
     tr = (s) => I18n.t(s),
     button = UI.button;
@@ -9,7 +18,7 @@
     return { star: Number(star), station };
   };
   let request = 0;
-  window.Scheduler = {
+  Object.assign(Scheduler, {
     async render(root) {
       UI.rememberFolds(root);
       let host = root.querySelector(".planner");
@@ -32,7 +41,7 @@
           body = n("div"),
           list = n("div", undefined, "planner-list");
         form.onsubmit = (e) => e.preventDefault();
-        let shipID = gameData.expedition.ship.id,
+        let shipID = Session.data.expedition.ship.id,
           kind = "mine",
           source,
           dest,
@@ -42,11 +51,11 @@
         UI.choice(
           form,
           "Корабль",
-          gameData.fleet.ships.map((s) => [s.id, UI.shipName(s)]),
+          Session.data.fleet.ships.map((s) => [s.id, UI.shipName(s)]),
           shipID,
           (value) => {
             shipID = Number(value);
-            build();
+            return build();
           },
         );
         UI.choice(
@@ -59,7 +68,7 @@
           kind,
           (value) => {
             kind = value;
-            build();
+            return build();
           },
         );
         const layout = n("div", undefined, "planner-workspace"),
@@ -83,19 +92,19 @@
         let historyRequest = 0;
         async function loadHistory() {
           const serial = ++historyRequest,
-            epoch = authEpoch;
+            epoch = Session.epoch;
           try {
             const tasks = await api("planner?view=history");
             if (
               serial !== historyRequest ||
-              epoch !== authEpoch ||
+              epoch !== Session.epoch ||
               !host.isConnected ||
               !history.open
             )
               return;
             historyList.replaceChildren();
             for (const task of tasks) {
-              const res = gameData.expedition.resources.find(
+              const res = Session.data.expedition.resources.find(
                 (r) => r.id === task.resource,
               );
               const line = n(
@@ -115,7 +124,7 @@
             if (!tasks.length)
               UI.empty(historyList, "Завершённых задач пока нет");
           } catch (e) {
-            if (epoch === authEpoch && signedIn) notify(e.message, "error");
+            if (epoch === Session.epoch && Session.signedIn) notify(e.message, "error");
           }
         }
         history.ontoggle = () => {
@@ -124,17 +133,17 @@
         let generation = 0;
         async function build() {
           const key = ++generation,
-            epoch = authEpoch;
+            epoch = Session.epoch;
           body.replaceChildren();
           const inputs = n("form");
           inputs.onsubmit = (e) => e.preventDefault();
           body.append(inputs);
-          const ship = gameData.fleet.ships.find((s) => s.id === shipID);
+          const ship = Session.data.fleet.ships.find((s) => s.id === shipID);
           if (!ship) return;
-          const ports = gameData.workbench.stations || [];
+          const ports = Session.data.workbench.stations || [];
           if (kind === "mine") {
             const data = await api("system?id=" + ship.star);
-            if (key !== generation || epoch !== authEpoch || !host.isConnected)
+            if (key !== generation || epoch !== Session.epoch || !host.isConnected)
               return;
             const sites = data.sites.filter((s) => s.resources?.length);
             if (!sites.length) {
@@ -155,7 +164,7 @@
                 "Ресурс",
                 site.resources.map((id) => [
                   id,
-                  gameData.expedition.resources.find((r) => r.id === id)
+                  Session.data.expedition.resources.find((r) => r.id === id)
                     ?.name || id,
                 ]),
                 resource,
@@ -225,11 +234,11 @@
               );
               inputs.append(field);
             }
-            resource = gameData.expedition.resources[0].id;
+            resource = Session.data.expedition.resources[0].id;
             UI.choice(
               inputs,
               "Ресурс",
-              gameData.expedition.resources.map((r) => [r.id, r.name]),
+              Session.data.expedition.resources.map((r) => [r.id, r.name]),
               resource,
               (value) => (resource = value),
             );
@@ -267,9 +276,9 @@
         build().catch((e) => notify(e.message, "error"));
       }
       const key = ++request,
-        epoch = authEpoch,
+        epoch = Session.epoch,
         result = await api("planner");
-      if (key !== request || epoch !== authEpoch || !host.isConnected) return;
+      if (key !== request || epoch !== Session.epoch || !host.isConnected) return;
       const list = host.querySelector(".planner-list");
       UI.rememberFolds(list);
       list.replaceChildren();
@@ -290,7 +299,7 @@
         counts = new Map();
       for (const task of active)
         counts.set(task.ship_id, (counts.get(task.ship_id) || 0) + 1);
-      for (const ship of gameData.fleet.ships) {
+      for (const ship of Session.data.fleet.ships) {
         const group = UI.fold(
             `planner:ship:v2:${ship.id}`,
             false,
@@ -328,10 +337,10 @@
             true,
           ),
           taskHeading = n("summary"),
-          resource = gameData.expedition.resources.find(
+          resource = Session.data.expedition.resources.find(
             (r) => r.id === task.resource,
           ),
-          ship = gameData.fleet.ships.find((s) => s.id === task.ship_id);
+          ship = Session.data.fleet.ships.find((s) => s.id === task.ship_id);
         card.dataset.task = String(task.id);
         card.dataset.status = task.status;
         taskHeading.append(
@@ -388,7 +397,7 @@
         groups.get(task.ship_id)?.append(card);
       }
     },
-  };
+  });
   const grantRoot = Modules.create(
     "resourcegrant",
     "Выдача ресурсов",
@@ -397,18 +406,18 @@
   );
   let targetUser = 0,
     grantRequest = 0;
-  window.AdminResources = {
+  Object.assign(AdminResources, {
     async render() {
-      if (!signedIn || gameData.state?.user.role !== "admin") {
+      if (!Session.signedIn || Session.data.state?.user.role !== "admin") {
         Modules.close("resourcegrant");
         return;
       }
-      const epoch = authEpoch,
+      const epoch = Session.epoch,
         key = ++grantRequest;
-      targetUser ||= gameData.state.user.id;
+      targetUser ||= Session.data.state.user.id;
       const info = await api("admin/resources?user=" + targetUser);
       if (
-        epoch !== authEpoch ||
+        epoch !== Session.epoch ||
         key !== grantRequest ||
         !Modules.isOpen("resourcegrant")
       )
@@ -428,14 +437,14 @@
       const drawUsers = async () => {
         const req = ++userSearchRequest;
         const result = await api(
-          "admin/users?search=" +
+          "admin/users?q=" +
             encodeURIComponent(search.value) +
             "&page=" +
             page,
         );
         if (
           req !== userSearchRequest ||
-          epoch !== authEpoch ||
+          epoch !== Session.epoch ||
           key !== grantRequest
         )
           return;
@@ -452,8 +461,8 @@
         page = 1;
         drawUsers().catch((e) => notify(e.message, "error"));
       };
-      const userName = await api("admin/users?search=" + targetUser);
-      if (epoch !== authEpoch || key !== grantRequest) return;
+      const userName = await api("admin/users?q=" + targetUser);
+      if (epoch !== Session.epoch || key !== grantRequest) return;
       const selected = (userName.users || userName.items || []).find(
         (u) => u.id === targetUser,
       );
@@ -462,7 +471,7 @@
           "p",
           tr("Игрок") +
             ": " +
-            (selected?.username || gameData.state.user.username),
+            (selected?.username || Session.data.state.user.username),
         ),
       );
       const form = n("form", undefined, "resource-grant-form");
@@ -471,8 +480,8 @@
       let target = "ship",
         ship = info.ships[0]?.id,
         company = info.companies[0]?.id,
-        port = (gameData.workbench.stations || [])[0],
-        resource = gameData.expedition.resources[0].id;
+        port = (Session.data.workbench.stations || [])[0],
+        resource = Session.data.expedition.resources[0].id;
       const controls = n("div");
       UI.choice(
         form,
@@ -498,7 +507,7 @@
               s.id,
               UI.shipName(s) +
                 " · " +
-                (window.MapData?.stars[s.star - 1]?.name || ""),
+                (world.data?.stars[s.star - 1]?.name || ""),
             ]),
             ship,
             (value) => (ship = Number(value)),
@@ -517,7 +526,7 @@
             label.append(n("span", tr("Станция")));
             UI.stationPicker(
               label,
-              gameData.workbench.stations,
+              Session.data.workbench.stations,
               stationKey(port),
               (value) => (port = parseStation(value)),
             );
@@ -530,7 +539,7 @@
       UI.choice(
         form,
         "Ресурс",
-        gameData.expedition.resources.map((r) => [r.id, r.name]),
+        Session.data.expedition.resources.map((r) => [r.id, r.name]),
         resource,
         (value) => (resource = value),
       );
@@ -563,10 +572,10 @@
       );
     },
     open(user) {
-      targetUser = user || gameData.state.user.id;
+      targetUser = user || Session.data.state.user.id;
       Modules.open("resourcegrant");
     },
-  };
+  });
   window.addEventListener("moduleopen", (e) => {
     if (e.detail === "resourcegrant")
       AdminResources.render().catch((e) => notify(e.message, "error"));
@@ -578,4 +587,5 @@
     grantRoot.replaceChildren();
     Modules.close("resourcegrant");
   });
-})();
+
+}

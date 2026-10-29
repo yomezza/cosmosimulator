@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { game, knownDefect } from "./harness.mjs";
+import { game } from "./harness.mjs";
 
 test("M1: a late Users response must not reinsert private data after logout", async (t) => {
   const g = await game(t, { signedIn: true, role: "admin" });
@@ -16,7 +16,7 @@ test("M1: a late Users response must not reinsert private data after logout", as
   respond();
   await delivered;
   await g.page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-  await knownDefect(t, async () => assert.equal(await g.page.locator("#window-users .module-content").textContent(), ""));
+  assert.equal(await g.page.locator("#window-users .module-content").textContent(), "");
 });
 
 test("M3: reused confirmation must show the current title", async (t) => {
@@ -26,7 +26,7 @@ test("M3: reused confirmation must show the current title", async (t) => {
     UI.confirm("First", "one", () => {});
     UI.confirm("Second", "two", () => {});
   });
-  await knownDefect(t, async () => assert.equal(await g.page.locator("#title-confirm").textContent(), "Second"));
+  assert.equal(await g.page.locator("#title-confirm").textContent(), "Second");
 });
 
 test("M4: an open picker must stay inside a resized viewport", async (t) => {
@@ -41,7 +41,7 @@ test("M4: an open picker must stay inside a resized viewport", async (t) => {
   await g.page.waitForSelector(".picker-popover");
   await g.page.setViewportSize({ width: 600, height: 800 });
   const box = await g.page.locator(".picker-popover").boundingBox();
-  await knownDefect(t, async () => assert.ok(box.x >= 0 && box.x + box.width <= 600));
+  assert.ok(box.x >= 0 && box.x + box.width <= 600);
 });
 
 test("M5: button completion must preserve the callback's disabled state", async (t) => {
@@ -55,7 +55,7 @@ test("M5: button completion must preserve the callback's disabled state", async 
     await new Promise((resolve) => setTimeout(resolve, 0));
     return button.disabled;
   });
-  await knownDefect(t, async () => assert.equal(disabled, true));
+  assert.equal(disabled, true);
 });
 
 test("M2: non-JSON HTTP failure must retain its status", async (t) => {
@@ -65,5 +65,5 @@ test("M2: non-JSON HTTP failure must retain its status", async (t) => {
   const status = await g.page.evaluate(async () => {
     try { await api("test-http-error"); } catch (e) { return e.status ?? null; }
   });
-  await knownDefect(t, async () => assert.equal(status, 502));
+  assert.equal(status, 502);
 });

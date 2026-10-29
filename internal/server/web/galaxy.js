@@ -1,5 +1,16 @@
-"use strict";
-(() => {
+import { Format } from "./core/format.js";
+import { loadWorld } from "./core/world-store.js";
+import { Session } from "./core/session.js";
+import { I18n } from "./core/i18n.js";
+import { api } from "./core/api.js";
+import { notify } from "./ui/feedback.js";
+import { UI, Modules } from "./ui/runtime.js";
+import { Game, Visuals, scenes } from "./features/runtime.js";
+import { performExpedition } from "./features/commands.js";
+import { world } from "./core/world-store.js";
+
+export function initGalaxy() {
+
   const root = document.querySelector("#window-galaxy .module-content"),
     tr = (s) => I18n.t(s),
     e = UI.node;
@@ -40,7 +51,7 @@
     filterOwner,
     filterModes;
   function syncFilters() {
-    const owner = gameData.state?.user?.id;
+    const owner = Session.data.state?.user?.id;
     if (!owner) return;
     if (filterOwner !== owner) {
       filterOwner = owner;
@@ -266,17 +277,17 @@
   let presenceSource,
     presence = new Map();
   function systemPlayers(star) {
-    if (presenceSource !== gameData.fleet) {
-      presenceSource = gameData.fleet;
+    if (presenceSource !== Session.data.fleet) {
+      presenceSource = Session.data.fleet;
       presence = new Map();
       const add = (star, id, name) => {
         if (!presence.has(star)) presence.set(star, new Map());
         const owners = presence.get(star);
         if (!owners.has(id) && owners.size < 11) owners.set(id, name);
       };
-      for (const ship of gameData.fleet?.ships || [])
-        add(ship.star, gameData.state.user.id, gameData.state.user.username);
-      for (const ship of gameData.fleet?.public_ships || [])
+      for (const ship of Session.data.fleet?.ships || [])
+        add(ship.star, Session.data.state.user.id, Session.data.state.user.username);
+      for (const ship of Session.data.fleet?.public_ships || [])
         add(ship.star, ship.owner, ship.owner_name);
     }
     const names = [...(presence.get(star)?.values() || [])];
@@ -309,7 +320,7 @@
     hideSummary();
     hoverID = closest.id;
     const generation = hoverGeneration,
-      epoch = authEpoch,
+      epoch = Session.epoch,
       star = closest;
     hoverTimer = setTimeout(async () => {
       if (hoverID !== star.id) return;
@@ -346,7 +357,7 @@
       );
       const known = Game.known(star.id),
         progress =
-          gameData.workbench?.research?.find((r) => r.star === star.id)
+          Session.data.workbench?.research?.find((r) => r.star === star.id)
             ?.scanned || 0;
       summary.append(
         e(
@@ -372,9 +383,9 @@
         }
         if (
           generation !== hoverGeneration ||
-          epoch !== authEpoch ||
+          epoch !== Session.epoch ||
           hoverID !== star.id ||
-          !signedIn
+          !Session.signedIn
         )
           return;
         const text = [
@@ -458,7 +469,7 @@
   function updateSystemPicker() {
     if (!galaxy) return;
     if (galaxy.stars[selected - 1]?.deleted)
-      selected = gameData.expedition.ship.star;
+      selected = Session.data.expedition.ship.star;
     const picker = UI.systems(selected, (id) => {
       request++;
       selected = Number(id);
@@ -482,14 +493,14 @@
     system.replaceWith(picker);
     system = picker;
   }
-  const now = () => Date.now() + (gameData.serverOffset || 0),
+  const now = () => Date.now() + (Session.data.serverOffset || 0),
     cam = () => camera[mode],
-    fleet = () => gameData.fleet?.ships || [];
-  const shipOwner = (s) => s.owner ?? gameData.state.user.id;
+    fleet = () => Session.data.fleet?.ships || [];
+  const shipOwner = (s) => s.owner ?? Session.data.state.user.id;
   const shipColor = (s) => `hsl(${(shipOwner(s) * 137.508) % 360} 72% 72%)`;
   const mapShips = () => [
     ...(flags.ships ? fleet() : []),
-    ...(flags.others ? gameData.fleet?.public_ships || [] : []),
+    ...(flags.others ? Session.data.fleet?.public_ships || [] : []),
   ];
   function action(text, fn) {
     const b = e("button", tr(text));
@@ -994,7 +1005,7 @@
         ),
         UI.button("Найти на карте", () => findShip(ship.id)),
       );
-      if (ship.id !== gameData.expedition.ship.id)
+      if (ship.id !== Session.data.expedition.ship.id)
         card.append(
           UI.button("Выбрать", () =>
             Game.command({ action: "select_ship", ship: ship.id }),
@@ -1047,7 +1058,7 @@
           "Система уже исследована",
         ),
       );
-      const knowledge = gameData.workbench.known?.find(
+      const knowledge = Session.data.workbench.known?.find(
         (item) => item.star === selected,
       );
       if (knowledge)
@@ -1062,7 +1073,7 @@
             "muted",
           ),
         );
-      const note = gameData.workbench.notes?.find(
+      const note = Session.data.workbench.notes?.find(
         (v) => v.star === selected && !v.object_id,
       );
       const text = UI.field(
@@ -1092,7 +1103,7 @@
       return;
     }
     side.append(e("h3", tr("Планировщик маршрута")));
-    const from = gameData.expedition?.ship.star || 1;
+    const from = Session.data.expedition?.ship.star || 1;
     UI.row(side, "Отправление", galaxy.stars[from - 1].name);
     const target = UI.systems(selected, (value) => {
       selected = Number(value);
@@ -1126,13 +1137,13 @@
     const path = plannedRoute(from, [...routeStops, selected]),
       jumps = path ? path.length - 1 : 0;
     result.textContent = path
-      ? `${jumps} ${tr("переходов")} · ${jumps * (gameData.expedition.ship.spec?.jump_seconds || 5)} s · ${jumps * (gameData.expedition.ship.spec?.jump_fuel || 2)} ${tr("Топливо")}`
+      ? `${jumps} ${tr("переходов")} · ${jumps * (Session.data.expedition.ship.spec?.jump_seconds || 5)} s · ${jumps * (Session.data.expedition.ship.spec?.jump_fuel || 2)} ${tr("Топливо")}`
       : tr("Нет пути: системы не связаны гиперкоридорами.");
     side.append(result);
     if (
       path &&
-      jumps * (gameData.expedition.ship.spec?.jump_fuel || 2) * 2 >
-        gameData.expedition.ship.fuel
+      jumps * (Session.data.expedition.ship.spec?.jump_fuel || 2) * 2 >
+        Session.data.expedition.ship.fuel
     )
       side.append(
         e("p", tr("Топлива на обратный путь может не хватить"), "error"),
@@ -1147,8 +1158,8 @@
           }),
         !path ||
           !jumps ||
-          jumps * (gameData.expedition.ship.spec?.jump_fuel || 2) >
-            gameData.expedition.ship.fuel,
+          jumps * (Session.data.expedition.ship.spec?.jump_fuel || 2) >
+            Session.data.expedition.ship.fuel,
         "Недостаточно топлива или нет пути",
       ),
     );
@@ -1160,7 +1171,7 @@
     side.append(way);
     const bookmarks = UI.fold("map:bookmarks");
     bookmarks.append(e("summary", tr("Закладки")));
-    for (const item of gameData.workbench.notes?.filter((n) => n.bookmark) ||
+    for (const item of Session.data.workbench.notes?.filter((n) => n.bookmark) ||
       [])
       bookmarks.append(
         UI.button(galaxy.stars[item.star - 1]?.name || item.star, () => {
@@ -1184,7 +1195,7 @@
     return full;
   }
   function updateRoute() {
-    const ship = gameData.expedition?.ship;
+    const ship = Session.data.expedition?.ship;
     if (!ship) return;
     const key = JSON.stringify([
       galaxy.revision,
@@ -1243,10 +1254,10 @@
     selectedSite = site.id;
     systemPanel();
     draw();
-    const ship = gameData.expedition?.ship,
+    const ship = Session.data.expedition?.ship,
       current = ship?.star === targetStar,
       moving = !!ship?.destination || !!ship?.local_target,
-      blocked = !current || moving || !!gameData.expedition?.job,
+      blocked = !current || moving || !!Session.data.expedition?.job,
       items = [
         { heading: site.name },
         { label: "Информация", action: () => UI.object(site, local.star) },
@@ -1311,7 +1322,7 @@
         label: "Добыча",
         action: () => Modules.open("research"),
       });
-    if (site.details && gameData.state?.user.role === "admin")
+    if (site.details && Session.data.state?.user.role === "admin")
       items.push(
         { separator: true },
         {
@@ -1352,7 +1363,7 @@
       routePanel();
       return;
     }
-    UI.personalizeStations(local);
+    local = UI.personalizeStations(local);
     side.append(e("h3", local.star.name), e("p", tr(local.region)));
     const stellar = e("p");
     stellar.append(
@@ -1362,12 +1373,12 @@
       ),
       document.createTextNode(" · "),
       hint(
-        local.star.mass + " M☉",
+        Format.science(local.star.mass) + " M☉",
         "M☉ — масса Солнца. Значение 1 означает массу, равную солнечной.",
       ),
       document.createTextNode(" · "),
       hint(
-        local.star.luminosity + " L☉",
+        Format.science(local.star.luminosity) + " L☉",
         "L☉ — светимость Солнца: полная мощность излучения, а не видимая яркость на небе.",
       ),
     );
@@ -1453,7 +1464,7 @@
     const key = ++request;
     try {
       const d = await api("system?id=" + id);
-      if (key !== request || !signedIn) return;
+      if (key !== request || !Session.signedIn) return;
       if (local?.star.id !== id) {
         selectedSite = null;
         camera.system = { zoom: 1, x: 0, y: 0 };
@@ -1479,8 +1490,8 @@
   }
   async function load() {
     if (galaxy) {
-      if (window.MapData && window.MapData !== galaxy) {
-        galaxy = window.MapData;
+      if (world.data && world.data !== galaxy) {
+        galaxy = world.data;
         updateSystemPicker();
       }
       if (mode === "galaxy") routePanel();
@@ -1492,9 +1503,9 @@
     if (loading) return;
     loading = true;
     try {
-      galaxy = window.MapData || (await api("galaxy"));
-      window.MapData = galaxy;
-      selected = gameData.expedition.ship.star;
+      galaxy = world.data || (await loadWorld());
+      world.data = galaxy;
+      selected = Session.data.expedition.ship.star;
       viewedGalaxy = starGalaxy(selected);
       updateSystemPicker();
       updateGalaxyPicker();
@@ -1504,10 +1515,10 @@
       const focusRequested = pendingFind || pendingStar;
       if (pendingFind) findShip(pendingFind);
       if (pendingStar) showStar(pendingStar);
-      if (!focusRequested) findShip(gameData.expedition.ship.id);
+      if (!focusRequested) findShip(Session.data.expedition.ship.id);
       if (currentSystemRequested) {
         currentSystemRequested = false;
-        await openSystem(gameData.expedition.ship.star);
+        await openSystem(Session.data.expedition.ship.star);
       }
     } catch (error) {
       notify(error.message);
@@ -1538,20 +1549,20 @@
     draw();
   }
   window.addEventListener("returntoplanetsystem", async (event) => {
-    if (!signedIn) return;
+    if (!Session.signedIn) return;
     await load();
-    if (galaxy && signedIn) openSystem(event.detail);
+    if (galaxy && Session.signedIn) openSystem(event.detail);
   });
   window.addEventListener("showcurrentsystem", () => {
-    window.PlanetUI?.dismiss(false);
-    if (galaxy && signedIn) openSystem(gameData.expedition.ship.star);
+    scenes.planet?.dismiss(false);
+    if (galaxy && Session.signedIn) openSystem(Session.data.expedition.ship.star);
     else {
       currentSystemRequested = true;
       load();
     }
   });
   window.addEventListener("showstar", (event) => {
-    window.PlanetUI?.dismiss(false);
+    scenes.planet?.dismiss(false);
     showStar(Number(event.detail));
   });
   function findShip(id) {
@@ -1763,7 +1774,7 @@
             reason: "Система уже исследована",
             action: () => Game.explore(star.id),
           },
-          ...(gameData.state?.user.role === "admin"
+          ...(Session.data.state?.user.role === "admin"
             ? [
                 { separator: true },
                 {
@@ -1800,8 +1811,8 @@
     request++;
     hideSummary();
     summaryCache.clear();
-    galaxy = window.MapData;
-    selected = gameData.expedition.ship.star;
+    galaxy = world.data;
+    selected = Session.data.expedition.ship.star;
     viewedGalaxy = starGalaxy(selected);
     updateGalaxyPicker();
     label.textContent = galaxyTitle();
@@ -1845,15 +1856,15 @@
       players.textContent =
         tr("Присутствуют игроки") + ": " + systemPlayers(hoverID);
     knownStars = new Set(
-      (gameData.workbench?.known || []).map((item) => item.star),
+      (Session.data.workbench?.known || []).map((item) => item.star),
     );
-    if (galaxy && gameData.workbench?.universe_revision > galaxy.revision) {
+    if (galaxy && Session.data.workbench?.universe_revision > galaxy.revision) {
       if (!loading) {
         loading = true;
         api("galaxy")
           .then((data) => {
-            if (!signedIn) return;
-            window.MapData = data;
+            if (!Session.signedIn) return;
+            world.data = data;
             window.dispatchEvent(new Event("universechange"));
           })
           .catch((error) => notify(error.message, "error"))
@@ -1899,4 +1910,5 @@
   });
   new ResizeObserver(draw).observe(canvas);
   setInterval(draw, 100);
-})();
+
+}

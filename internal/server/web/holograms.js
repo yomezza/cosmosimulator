@@ -1,5 +1,8 @@
-"use strict";
-(() => {
+import { I18n } from "./core/i18n.js";
+import { UI } from "./ui/runtime.js";
+
+export function initHolograms() {
+
   const templates = new Map(),
     states = new WeakMap();
   let serial = 0;
@@ -104,4 +107,5 @@
     UI.updateHologram(holder, source, label);
     return holder;
   };
-})();
+
+}

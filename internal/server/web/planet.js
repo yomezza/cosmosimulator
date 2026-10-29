@@ -1,5 +1,15 @@
-"use strict";
-(() => {
+import { Format } from "./core/format.js";
+import { Session } from "./core/session.js";
+import { I18n } from "./core/i18n.js";
+import { api } from "./core/api.js";
+import { refresh } from "./core/snapshot-store.js";
+import { notify } from "./ui/feedback.js";
+import { UI, Modules } from "./ui/runtime.js";
+import { scenes } from "./features/runtime.js";
+import { world } from "./core/world-store.js";
+
+export function initPlanet() {
+
   const n = UI.node,
     tr = (s) => I18n.t(s),
     btn = UI.button;
@@ -19,9 +29,9 @@
   const asset = (id) =>
     id === "credits"
       ? "CR"
-      : tr(gameData.expedition.resources.find((r) => r.id === id)?.name || id);
+      : tr(Session.data.expedition.resources.find((r) => r.id === id)?.name || id);
   async function send(input) {
-    const session = authEpoch;
+    const session = Session.epoch;
     const key = JSON.stringify(input);
     let request = actions.get(key);
     if (!request) {
@@ -32,7 +42,7 @@
     }
     try {
       const result = await api("planet/action", { ...input, request });
-      if (!signedIn || session !== authEpoch) return null;
+      if (!Session.signedIn || session !== Session.epoch) return null;
       actions.delete(key);
       notify(
         tr(
@@ -87,7 +97,7 @@
     if (claim) {
       if (claim.status === "funding") return "#eac85e";
       if (claim.status === "building") return "#eea45f";
-      if (claim.owner_user === gameData.state.user.id) return "#7ad7a7";
+      if (claim.owner_user === Session.data.state.user.id) return "#7ad7a7";
       if (claim.owner_company === current.state.company) return "#baa0ef";
       return "#e09091";
     }
@@ -816,7 +826,7 @@
     const request = ++epoch;
     Modules.open("galaxy");
     const data = await api(`planet/surface?star=${star}&planet=${planet}`);
-    if (request !== epoch || !signedIn) return;
+    if (request !== epoch || !Session.signedIn) return;
     let state;
     if (!data.absent) {
       try {
@@ -826,7 +836,7 @@
         throw e;
       }
     }
-    if (request !== epoch || !signedIn) return;
+    if (request !== epoch || !Session.signedIn) return;
     const root = document.querySelector("#window-galaxy .module-content");
     current?.resize?.disconnect();
     root.querySelector(".planet-ui")?.remove();
@@ -873,7 +883,7 @@
           ),
         ),
       );
-      if (gameData.state.user.role === "admin")
+      if (Session.data.state.user.role === "admin")
         empty.append(
           btn("Перегенерировать колонию", () =>
             admin(star, planet, "regenerate"),
@@ -924,10 +934,10 @@
     }
   }
   async function admin(star, planet, operation) {
-    if (gameData.state?.user.role !== "admin") return;
-    const session = authEpoch,
+    if (Session.data.state?.user.role !== "admin") return;
+    const session = Session.epoch,
       info = await api(`admin/planet/surface?star=${star}&planet=${planet}`);
-    if (session !== authEpoch || !signedIn) return;
+    if (session !== Session.epoch || !Session.signedIn) return;
     const title =
         operation === "delete"
           ? "Удалить генерацию колонии"
@@ -1002,7 +1012,7 @@
             forfeit: check.checked,
             request,
           });
-          if (authEpoch !== session || !signedIn) return;
+          if (Session.epoch !== session || !Session.signedIn) return;
           invalidateProjects(result.old_surface);
           if (current?.data.star === star && current?.data.planet === planet)
             await open(star, planet);
@@ -1017,7 +1027,7 @@
             "success",
           );
         } catch (e) {
-          if (authEpoch !== session || !signedIn) return;
+          if (Session.epoch !== session || !Session.signedIn) return;
           notify(e.message, "error");
           root.append(
             btn("Обновить предупреждение", () =>
@@ -1076,7 +1086,7 @@
       throw e;
     }
     if (
-      !signedIn ||
+      !Session.signedIn ||
       epochAt !== epoch ||
       (background && !Modules.isOpen("colony-project-" + id))
     )
@@ -1086,14 +1096,14 @@
       root = Modules.create(key, "Проект колонизации", 760, 750);
     projectRoots.set(id, root);
     root.dataset.surface = String(p.surface);
-    if (!data.can_contribute && gameData.state.user.role !== "admin") {
+    if (!data.can_contribute && Session.data.state.user.role !== "admin") {
       const cached = contributionCache.get(id);
       if (cached) {
         for (const [key, item] of cached.items)
-          if (item.actor !== gameData.state.user.id) cached.items.delete(key);
+          if (item.actor !== Session.data.state.user.id) cached.items.delete(key);
         if (cached.events)
           for (const [key, item] of cached.events)
-            if (item.actor !== gameData.state.user.id)
+            if (item.actor !== Session.data.state.user.id)
               cached.events.delete(key);
       }
     }
@@ -1140,7 +1150,7 @@
       root.append(
         n(
           "p",
-          tr("Осталось на финансирование, часов") + ": " + remaining.toFixed(1),
+          tr("Осталось на финансирование, часов") + ": " + Format.number(remaining),
         ),
         n(
           "p",
@@ -1232,7 +1242,7 @@
           ),
         ),
       );
-    if (p.status === "funding" && gameData.state.user.role === "admin")
+    if (p.status === "funding" && Session.data.state.user.role === "admin")
       tools.append(
         btn("Пополнить ресурсы", () =>
           confirm(
@@ -1297,7 +1307,7 @@
             " × " +
             item.amount +
             " · " +
-            new Date(item.created_at).toLocaleString(I18n.language) +
+            Format.timestamp(item.created_at) +
             (item.admin_grant
               ? " · " + tr("Выдача администратора")
               : returned
@@ -1307,7 +1317,7 @@
       );
       if (
         p.status === "funding" &&
-        item.actor === gameData.state.user.id &&
+        item.actor === Session.data.state.user.id &&
         !item.admin_grant &&
         !returned
       )
@@ -1344,7 +1354,7 @@
       root.append(
         n(
           "p",
-          new Date(e.created_at).toLocaleString(I18n.language) +
+          Format.timestamp(e.created_at) +
             " · " +
             tr(
               {
@@ -1402,11 +1412,11 @@
     Modules.open("colony-location");
   }
   async function manager(background = false) {
-    const session = authEpoch;
+    const session = Session.epoch;
     const data = await api("planet/projects");
     if (
-      !signedIn ||
-      session !== authEpoch ||
+      !Session.signedIn ||
+      session !== Session.epoch ||
       (background && !Modules.isOpen("colonies"))
     )
       return;
@@ -1440,14 +1450,14 @@
     if (!background) Modules.open("colonies");
   }
   async function settings(root) {
-    const session = authEpoch;
+    const session = Session.epoch;
     const data = await api("admin/planet/settings"),
       form = n("form"),
       fields = {};
     if (
-      !signedIn ||
-      session !== authEpoch ||
-      gameData.state.user.role !== "admin"
+      !Session.signedIn ||
+      session !== Session.epoch ||
+      Session.data.state.user.role !== "admin"
     )
       return false;
     form.onsubmit = (e) => e.preventDefault();
@@ -1515,7 +1525,7 @@
     root.append(form);
     return true;
   }
-  window.PlanetUI = { open, project, manager, settings, admin, dismiss: close };
+  scenes.planet = { open, project, manager, settings, admin, dismiss: close };
   window.addEventListener("moduleresize", (e) => {
     if (e.detail === "galaxy") draw();
   });
@@ -1553,4 +1563,5 @@
         w.querySelector(".module-content")?.replaceChildren();
       });
   });
-})();
+
+}

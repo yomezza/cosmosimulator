@@ -1,5 +1,15 @@
-"use strict";
-(() => {
+import { Format } from "./core/format.js";
+import { loadWorld } from "./core/world-store.js";
+import { Session } from "./core/session.js";
+import { I18n } from "./core/i18n.js";
+import { api } from "./core/api.js";
+import { notify } from "./ui/feedback.js";
+import { UI, Modules } from "./ui/runtime.js";
+import { Game } from "./features/runtime.js";
+import { world } from "./core/world-store.js";
+
+export function initStudies() {
+
   const n = UI.node,
     tr = (s) => I18n.t(s),
     b = UI.button,
@@ -9,13 +19,13 @@
     scope = "all",
     page = 1,
     epoch = 0;
-  const ship = () => gameData.expedition?.ship,
-    known = () => gameData.workbench?.known || [];
+  const ship = () => Session.data.expedition?.ship,
+    known = () => Session.data.workbench?.known || [];
   const personal = (item) => item.source === "survey";
-  const star = (id) => window.MapData?.stars.find((s) => s.id === id);
+  const star = (id) => world.data?.stars.find((s) => s.id === id);
   const region = (s) =>
     tr(
-      window.MapData?.regions?.find((r) => r.id === s?.region)?.name ||
+      world.data?.regions?.find((r) => r.id === s?.region)?.name ||
         "Регион неизвестен",
     );
   const source = (item) =>
@@ -115,7 +125,7 @@
       body.append(
         heading,
         tag,
-        n("small", new Date(item.received_at).toLocaleString(I18n.language)),
+        n("small", Format.timestamp(item.received_at)),
       );
       card.append(
         n("span", s?.class || "✦", "study-star"),
@@ -152,11 +162,11 @@
     );
   }
   function render() {
-    if (!signedIn || !ship() || !Modules.isOpen("studies")) return;
+    if (!Session.signedIn || !ship() || !Modules.isOpen("studies")) return;
     layout();
-    const e = gameData.expedition,
+    const e = Session.data.expedition,
       s = ship(),
-      jobs = gameData.workbench?.research || [],
+      jobs = Session.data.workbench?.research || [],
       job = jobs.find((j) => j.ship === s.id && j.star === s.star),
       survey = known().find((item) => item.star === s.star),
       stats = root.querySelector(".studies-stats"),
@@ -229,7 +239,7 @@
     const active = n("section", undefined, "studies-active");
     active.append(n("h3", tr("Текущие экспедиции")));
     for (const j of jobs) {
-      const vessel = gameData.fleet?.ships.find((v) => v.id === j.ship),
+      const vessel = Session.data.fleet?.ships.find((v) => v.id === j.ship),
         card = n("div", undefined, "study-job");
       card.append(
         n("b", vessel ? UI.shipName(vessel) : tr("Корабль")),
@@ -244,14 +254,14 @@
     entries();
   }
   window.addEventListener("moduleopen", async (event) => {
-    if (event.detail !== "studies" || !signedIn) return;
+    if (event.detail !== "studies" || !Session.signedIn) return;
     const current = ++epoch;
     render();
-    if (!window.MapData) {
+    if (!world.data) {
       try {
         const map = await api("galaxy");
-        if (current !== epoch || !signedIn) return;
-        window.MapData = map;
+        if (current !== epoch || !Session.signedIn) return;
+        world.data = map;
         render();
       } catch (error) {
         notify(error.message, "error");
@@ -271,4 +281,5 @@
     root.replaceChildren();
     Modules.close("studies");
   });
-})();
+
+}

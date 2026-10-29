@@ -1,0 +1,43 @@
+import { initTooltip } from "./ui/tooltip.js";
+import { initI18n, I18n } from "./core/i18n.js";
+import { Session } from "./core/session.js";
+import { api } from "./core/api.js";
+import { refresh } from "./core/snapshot-store.js";
+import { UI, Modules } from "./ui/runtime.js";
+import { Game, scenes } from "./features/runtime.js";
+import { notify } from "./ui/feedback.js";
+import { initWindows } from "./windows.js";
+import { initWorkbench } from "./workbench.js";
+import { initPlanetLoader } from "./planet-loader.js";
+import { initControls } from "./controls.js";
+import { initHolograms } from "./holograms.js";
+import { initStationLabels } from "./station-labels.js";
+import { initApp } from "./app.js";
+import { initGalaxyAdmin } from "./galaxy-admin.js";
+import { initOperations070 } from "./operations070.js";
+import { initLogistics } from "./logistics.js";
+import { initIdeas } from "./ideas.js";
+import { initExpedition } from "./expedition.js";
+import { initStudies } from "./studies.js";
+import { initGalaxy } from "./galaxy.js";
+
+initI18n();
+initTooltip();
+initWindows();
+initWorkbench();
+initPlanetLoader();
+initControls();
+initHolograms();
+initStationLabels();
+const app = initApp();
+initGalaxyAdmin();
+initOperations070();
+initLogistics();
+initIdeas();
+initExpedition();
+initStudies();
+initGalaxy();
+
+export const application = { session: Session, I18n, UI, Modules, Game, scenes, api, refresh, notify, ...app };
+
+document.addEventListener("keydown", (event) => { const menu=event.target.closest?.(".dropdown"); if (event.key==="Escape" && menu?.open) { event.stopPropagation(); menu.open=false; menu.querySelector("summary")?.focus(); } });

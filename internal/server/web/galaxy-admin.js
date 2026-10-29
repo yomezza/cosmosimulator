@@ -1,12 +1,22 @@
-"use strict";
-(() => {
+import { Format } from "./core/format.js";
+import { Session } from "./core/session.js";
+import { I18n } from "./core/i18n.js";
+import { api } from "./core/api.js";
+import { refresh } from "./core/snapshot-store.js";
+import { notify } from "./ui/feedback.js";
+import { UI, Modules } from "./ui/runtime.js";
+import { GalaxyAdmin } from "./features/runtime.js";
+import { world } from "./core/world-store.js";
+
+export function initGalaxyAdmin() {
+
   const n = UI.node,
     tr = (s) => I18n.t(s);
   let selected = "edem",
     request = 0,
     logRequest = 0,
     draft = null;
-  const admin = () => signedIn && gameData.state?.user.role === "admin";
+  const admin = () => Session.signedIn && Session.data.state?.user.role === "admin";
   const labels = {
     systems: "Системы",
     lanes: "Гиперкоридоры",
@@ -25,18 +35,18 @@
     galaxy_update: "Изменение галактики",
     galaxy_delete: "Удаление галактики",
   };
-  window.GalaxyAdmin = {
+  Object.assign(GalaxyAdmin, {
     async render(root) {
       if (!admin()) {
         root.replaceChildren();
         return false;
       }
       const key = ++request,
-        epoch = authEpoch,
+        epoch = Session.epoch,
         result = await api("admin/galaxies");
       if (
         key !== request ||
-        epoch !== authEpoch ||
+        epoch !== Session.epoch ||
         !admin() ||
         !Modules.isOpen("galaxies")
       )
@@ -113,7 +123,7 @@
             const review = await api("admin/galaxies/delete-preview", {
               id: d.id,
             });
-            if (epoch !== authEpoch || !admin()) return;
+            if (epoch !== Session.epoch || !admin()) return;
             const box = Modules.create(
               "galaxy-delete",
               "Удаление галактики",
@@ -169,7 +179,7 @@
                   });
                   Modules.close("galaxy-delete");
                   selected = "edem";
-                  window.MapData = await api("galaxy");
+                  world.data = await api("galaxy");
                   window.dispatchEvent(new Event("universechange"));
                   await refresh(true);
                   await GalaxyAdmin.render(root);
@@ -323,7 +333,7 @@
           "muted",
         ),
       );
-      for (const resource of gameData.expedition.resources.filter(
+      for (const resource of Session.data.expedition.resources.filter(
         (r) => !["adamant", "electrum", "nectar", "soma"].includes(r.id),
       )) {
         const f = UI.field(
@@ -371,11 +381,11 @@
           if (!snapshot || !form.reportValidity()) return;
           const body = { ...values(), preview: snapshot.preview };
           await api("admin/galaxies/apply", body);
-          if (epoch !== authEpoch || !admin()) return;
+          if (epoch !== Session.epoch || !admin()) return;
           selected = d.id;
           draft = null;
           notify("Галактика обновлена");
-          window.MapData = await api("galaxy");
+          world.data = await api("galaxy");
           window.dispatchEvent(new Event("universechange"));
           await refresh(true);
           await GalaxyAdmin.render(root);
@@ -390,7 +400,7 @@
         if (
           current !== dirty ||
           key !== request ||
-          epoch !== authEpoch ||
+          epoch !== Session.epoch ||
           !admin()
         )
           return;
@@ -416,7 +426,7 @@
           points = new Map(proposal.stars.map((s) => [s.id, s]));
         for (const area of proposal.territories || []) {
           const center = points.get(area.anchor),
-            owner = window.MapData?.founders?.find(
+            owner = world.data?.founders?.find(
               (c) => c.founder_key === area.founder,
             );
           if (!center || !owner) continue;
@@ -448,7 +458,7 @@
         ctx.stroke();
         for (const star of proposal.stars) {
           ctx.fillStyle =
-            star.id > (window.MapData?.stars.length || 0)
+            star.id > (world.data?.stars.length || 0)
               ? "#efad58"
               : "#9db4c4";
           ctx.beginPath();
@@ -473,7 +483,7 @@
         preview.append(
           UI.table(
             ["Ресурс", "Систем с ресурсом до", "После изменения"],
-            gameData.expedition.resources
+            Session.data.expedition.resources
               .filter((r) => resourceFields[r.id])
               .map((r) => [
                 tr(r.name),
@@ -507,7 +517,7 @@
         return false;
       }
       root.replaceChildren();
-      const epoch = authEpoch,
+      const epoch = Session.epoch,
         bar = n("div", undefined, "admin-log-toolbar"),
         search = n("input"),
         rows = n("section");
@@ -539,7 +549,7 @@
           );
           if (
             key !== logRequest ||
-            epoch !== authEpoch ||
+            epoch !== Session.epoch ||
             !admin() ||
             !Modules.isOpen("adminchanges")
           )
@@ -549,7 +559,7 @@
           for (const item of result.items) {
             const entry = n("details", undefined, "admin-log-entry"),
               summary = n("summary"),
-              date = new Date(item.created_at).toLocaleString(I18n.language);
+              date = Format.timestamp(item.created_at);
             summary.append(
               n("time", date),
               n("b", item.actor_name),
@@ -604,7 +614,7 @@
                 ["Отправление", data.from],
                 ["Назначение", data.to],
               ]) {
-                const name = window.MapData?.stars[id - 1]?.name || "#" + id;
+                const name = world.data?.stars[id - 1]?.name || "#" + id;
                 UI.row(
                   entry,
                   label,
@@ -670,7 +680,7 @@
       };
       await load();
     },
-  };
+  });
   window.addEventListener("moduleclose", (event) => {
     if (event.detail === "galaxies") request++;
     if (event.detail === "adminchanges") logRequest++;
@@ -679,4 +689,5 @@
     request++;
     logRequest++;
   });
-})();
+
+}

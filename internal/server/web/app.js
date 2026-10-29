@@ -1,31 +1,18 @@
-"use strict";
+import { Format } from "./core/format.js";
+import { Session, invalidateSession } from "./core/session.js";
+import { I18n } from "./core/i18n.js";
+import { api } from "./core/api.js";
+import { refresh, configureSnapshot } from "./core/snapshot-store.js";
+import { notify, configureFeedback } from "./ui/feedback.js";
+import { UI, Modules } from "./ui/runtime.js";
+import { world } from "./core/world-store.js";
+
+export function initApp() {
+
 const $ = (id) => document.getElementById(id),
   t = (s) => I18n.t(s);
-let signedIn = false,
-  starting = true,
-  pending = false,
-  mode = "login",
-  authEpoch = 0,
-  lastPoll = 0,
-  balanceOwner = null,
-  previousBalance = null,
-  balanceTimer;
-window.gameData = {};
-async function api(path, body, signal) {
-  const r = await fetch("/api/" + path, {
-    signal,
-    method: body === undefined ? "GET" : "POST",
-    headers: body === undefined ? {} : { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  const data = await r.json();
-  if (!r.ok) {
-    const e = new Error(t(data.error || "Ошибка сервера"));
-    e.status = r.status;
-    throw e;
-  }
-  return UI.personalizeStations?.(data) || data;
-}
+let starting = true, pending = false, mode = "login", balanceOwner = null, previousBalance = null, balanceTimer;
+
 function startupStatus(failed = false) {
   const title = failed ? "Не удалось подключиться" : "Подключение к серверу",
     message = failed
@@ -63,13 +50,12 @@ function showAuth() {
   previousBalance = null;
   clearTimeout(balanceTimer);
   $("balance-change")?.replaceChildren();
-  authEpoch++;
+  invalidateSession();
   pending = false;
-  signedIn = false;
   for (const menu of document.querySelectorAll(".dropdown")) menu.open = false;
   Modules.closeAll();
   Modules.clearPrivate();
-  gameData = {};
+
   window.dispatchEvent(new Event("signedout"));
   for (const id of [
     "game",
@@ -82,48 +68,8 @@ function showAuth() {
   $("auth").hidden = false;
   finishStartup();
 }
-let ongoingRefresh = null;
-function refresh(force = false) {
-  if (ongoingRefresh)
-    return force ? ongoingRefresh.then(() => refresh(false)) : ongoingRefresh;
-  const task = refreshData();
-  ongoingRefresh = task;
-  task.finally(() => {
-    if (ongoingRefresh === task) ongoingRefresh = null;
-  });
-  return task;
-}
-async function refreshData() {
-  if (pending) return;
-  const epoch = authEpoch;
-  const controller = starting ? new AbortController() : null,
-    timeout = controller ? setTimeout(() => controller.abort(), 15000) : null;
-  pending = true;
-  lastPoll = Date.now();
-  try {
-    const [state, profile, expedition, fleet, clock, workbench, notifications] =
-      await Promise.all([
-        api("state", undefined, controller?.signal),
-        api("profile", undefined, controller?.signal),
-        api("expedition", undefined, controller?.signal),
-        api("fleet", undefined, controller?.signal),
-        api("gameplay", undefined, controller?.signal),
-        api("workbench", undefined, controller?.signal),
-        api("notifications", undefined, controller?.signal),
-      ]);
-    if (epoch !== authEpoch) return;
-    signedIn = true;
-    gameData = {
-      state,
-      profile,
-      expedition,
-      fleet,
-      clock,
-      workbench,
-      notifications,
-      serverOffset: new Date(clock.server_time).getTime() - Date.now(),
-    };
-    UI.personalizeStations(gameData);
+function renderSnapshot() {
+const {state, profile, expedition} = Session.data;
     $("auth").hidden = true;
     for (const id of [
       "game",
@@ -181,7 +127,7 @@ async function refreshData() {
       text.className = "balance-delta " + (delta > 0 ? "income" : "expense");
       text.textContent =
         (delta > 0 ? "+" : "-") +
-        Math.abs(delta).toLocaleString(I18n.language) +
+        Format.quantity(Math.abs(delta)) +
         " CR";
       indicator.replaceChildren(text);
       balanceTimer = setTimeout(() => indicator.replaceChildren(), 3200);
@@ -191,7 +137,7 @@ async function refreshData() {
     }
     balanceOwner = state.user.id;
     previousBalance = balance;
-    $("credits").textContent = balance.toLocaleString(I18n.language);
+    $("credits").textContent = Format.number(balance);
     $("star-date").textContent = state.date.replace(
       "ЭД",
       I18n.language === "en" ? "ED" : "ЭД",
@@ -199,7 +145,7 @@ async function refreshData() {
     $("location").textContent = expedition.ship.destination
       ? expedition.system.name +
         " → " +
-        (window.MapData?.stars[expedition.ship.destination - 1]?.name ||
+        (world.data?.stars[expedition.ship.destination - 1]?.name ||
           String(expedition.ship.destination))
       : expedition.system.name;
     $("overview-region").textContent = t(expedition.region);
@@ -216,23 +162,16 @@ async function refreshData() {
       profile.level >= 1000000;
     $("overview-upgrade").dataset.help = `${profile.upgrade_cost} CR`;
     $("connection").textContent =
-      t("Данные обновлены: ") + new Date().toLocaleTimeString(I18n.language);
+      t("Данные обновлены: ") + Format.time(Date.now());
     $("server-status").textContent = t("● СЕРВЕР ОНЛАЙН");
     window.dispatchEvent(new Event("gamedata"));
     finishStartup();
-  } catch (e) {
-    if (epoch !== authEpoch) return;
-    if (e.status === 401) showAuth();
-    else {
-      $("server-status").textContent = t("Переподключение…");
-      if (starting) startupStatus(true);
-    }
-  } finally {
-    clearTimeout(timeout);
-    controller?.abort();
-    if (epoch === authEpoch) pending = false;
-  }
 }
+configureSnapshot((data) => UI.personalizeStations(data));
+configureFeedback((text, level) => Session.signedIn ? api("notifications", {action:"add",message:text,level}).then(() => window.dispatchEvent(new Event("notificationchange"))) : undefined);
+window.addEventListener("snapshotaccepted", renderSnapshot);
+window.addEventListener("connectionerror", ({detail:error}) => { if (error.status === 401) showAuth(); else { $("server-status").textContent=t("Переподключение…"); if (starting) startupStatus(true); } });
+window.addEventListener("sessionexpired", ({detail}) => { if (detail === Session.epoch) showAuth(); });
 $("startup-retry").onclick = () => {
   if (!starting || pending) return;
   startupStatus();
@@ -242,7 +181,7 @@ $("login-tab").onclick = () => authMode("login");
 $("register-tab").onclick = () => authMode("register");
 $("auth-form").onsubmit = async (e) => {
   e.preventDefault();
-  authEpoch++;
+  Session.epoch++;
   pending = false;
   $("submit").disabled = true;
   $("auth-error").textContent = "";
@@ -265,7 +204,7 @@ $("auth-form").onsubmit = async (e) => {
   }
 };
 $("logout").onclick = async () => {
-  authEpoch++;
+  Session.epoch++;
   pending = false;
   try {
     await api("logout", {});
@@ -298,7 +237,7 @@ $("overview-upgrade").onclick = async () => {
 };
 window.addEventListener("languagechange", () => {
   authMode(mode);
-  if (signedIn) refresh();
+  if (Session.signedIn) refresh();
 });
 I18n.ready.then(() => {
   I18n.apply();
@@ -307,12 +246,16 @@ I18n.ready.then(() => {
 });
 setInterval(() => {
   if (
-    signedIn &&
-    Date.now() - lastPoll >=
+    Session.signedIn &&
+    Date.now() - Session.lastPoll >=
       Math.min(
         5000,
-        Math.max(1000, (gameData.state?.tick_seconds || 10) * 1000),
+        Math.max(1000, (Session.data.state?.tick_seconds || 10) * 1000),
       )
   )
     refresh();
 }, 1000);
+
+return {showAuth};
+
+}

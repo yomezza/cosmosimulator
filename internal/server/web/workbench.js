@@ -1,18 +1,24 @@
-"use strict";
-(() => {
+import { registerTooltip } from "./ui/tooltip.js";
+import { notify } from "./ui/feedback.js";
+import { placeFloating, trackFloating, overlayHost } from "./ui/floating.js";
+import { Session } from "./core/session.js";
+import { I18n } from "./core/i18n.js";
+import { api } from "./core/api.js";
+import { UI, Modules } from "./ui/runtime.js";
+import { Game, Visuals } from "./features/runtime.js";
+import { world } from "./core/world-store.js";
+import { node as createNode } from "./ui/dom.js";
+
+export function initWorkbench() {
+
   const objects = new Map();
   const tr = (s) => I18n.t(s),
-    node = (tag, text, cls) => {
-      const e = document.createElement(tag);
-      if (text !== undefined) e.textContent = text;
-      if (cls) e.className = cls;
-      return e;
-    };
+    node = createNode;
   const context = node("div", undefined, "context-menu");
   context.hidden = true;
   context.setAttribute("role", "menu");
   document.body.append(context);
-  let anchor;
+  let anchor, confirmGeneration = 0;
   const menus = [context];
   function closeAfter(menu) {
     while (menus.length > menus.indexOf(menu) + 1) {
@@ -22,19 +28,14 @@
     }
   }
   function hideMenus() {
+    menuTracking?.dispose(); menuTracking=null;
     closeAfter(context);
     context.hidden = true;
   }
+  let menuTracking;
   function positionMenu(menu, x, y, parent) {
-    menu.style.maxHeight = Math.max(80, innerHeight - 16) + "px";
     menu.style.overflowY = "auto";
-    let left = parent ? parent.right : x;
-    if (parent && left + menu.offsetWidth > innerWidth - 8)
-      left = parent.left - menu.offsetWidth;
-    menu.style.left =
-      Math.max(8, Math.min(left, innerWidth - menu.offsetWidth - 8)) + "px";
-    menu.style.top =
-      Math.max(8, Math.min(y, innerHeight - menu.offsetHeight - 8)) + "px";
+    placeFloating(menu, {x,y,parent});
   }
   function populateMenu(menu, items) {
     menu.replaceChildren();
@@ -71,7 +72,7 @@
           sub.setAttribute("role", "menu");
           sub.onkeydown = menuKeys;
           populateMenu(sub, item.children);
-          document.body.append(sub);
+          overlayHost(anchor).append(sub);
           menus.push(sub);
           b.setAttribute("aria-expanded", "true");
           const r = b.getBoundingClientRect();
@@ -86,7 +87,7 @@
         b.onpointerenter = () => closeAfter(menu);
         b.onclick = () => {
           hideMenus();
-          item.action?.();
+          Promise.resolve().then(() => item.action?.()).catch((error) => { if (error.name!=="AbortError") notify(error.message,"error"); });
         };
       }
       menu.append(b);
@@ -121,53 +122,55 @@
       ]?.focus();
     }
   }
-  window.UI = {
+  Object.assign(UI, {
     node,
     menu(items, x, y) {
       hideMenus();
       anchor = document.activeElement;
       populateMenu(context, items);
+      overlayHost(anchor).append(context);
       context.hidden = false;
-      positionMenu(context, x, y);
+      const position = () => {
+        positionMenu(context,x,y);
+        for (const sub of menus.slice(1)) { const r=sub.opener.getBoundingClientRect(); positionMenu(sub,r.right,r.top,r); }
+      };
+      position();
+      menuTracking=trackFloating({element:context,owner:anchor,position,close:hideMenus});
       context.querySelector("button:not(:disabled)")?.focus();
     },
     resource(id) {
-      const r = gameData.expedition?.resources.find((r) => r.id === id);
+      const r = Session.data.expedition?.resources.find((r) => r.id === id);
       if (!r) return;
       const root = Modules.create(
         "resource-" + id,
         "Информация о ресурсе",
         500,
         500,
+        {transient:true},
       );
       root.replaceChildren(resourceCard(r));
       Modules.open("resource-" + id);
     },
     object(site, star) {
       const key = "object-" + star.id + "-" + site.id,
-        root = Modules.create(key, "Информация об объекте", 600, 650);
+        root = Modules.create(key, "Информация об объекте", 600, 650, {transient:true});
       objects.set(key, { root, site, star });
       renderObject(root, site, star);
       Modules.open(key);
     },
     confirm(title, text, run) {
-      const root = Modules.create("confirm", title, 470, 340);
+      const generation = ++confirmGeneration;
+      const epoch = Session.epoch;
+      const root = Modules.create("confirm", title, 470, 340, {transient:true});
       root.replaceChildren(node("p", text));
-      const yes = node("button", tr("Подтвердить")),
-        no = node("button", tr("Отмена"));
-      yes.onclick = async () => {
-        yes.disabled = true;
-        try {
-          if (await run()) Modules.close("confirm");
-        } finally {
-          yes.disabled = false;
-        }
-      };
-      no.onclick = () => Modules.close("confirm");
+      const yes = UI.button("Подтвердить", async () => {
+        const accepted = await run();
+        if (accepted && generation === confirmGeneration && epoch === Session.epoch && root.isConnected) Modules.close("confirm");
+      }), no = UI.button("Отмена", () => Modules.close("confirm"));
       root.append(yes, no);
       Modules.open("confirm");
     },
-  };
+  });
   function renderObject(container, site, star) {
     const scroll = container.scrollTop;
     let model = container.querySelector(":scope > .object-hologram"),
@@ -234,7 +237,7 @@
     );
     if (site.resources?.length)
       for (const id of site.resources) {
-        const r = gameData.expedition.resources.find((r) => r.id === id),
+        const r = Session.data.expedition.resources.find((r) => r.id === id),
           p = node("p", tr(r?.name || id));
         if (site.quotas?.[id])
           p.append(
@@ -268,7 +271,7 @@
       root.append(help);
     }
     if (site.kind === "Орбитальная станция") {
-      const port = gameData.workbench?.stations.find(
+      const port = Session.data.workbench?.stations.find(
         (p) => p.star === star.id && p.object_id === site.id,
       );
       if (port) {
@@ -318,7 +321,7 @@
               : "belt",
       );
     root.append(guide);
-    const saved = gameData.workbench?.notes.find(
+    const saved = Session.data.workbench?.notes.find(
       (item) => item.star === star.id && item.object_id === site.id,
     );
     const note = UI.field(
@@ -355,10 +358,10 @@
     container.scrollTop = scroll;
   }
   window.addEventListener("gamedata", async () => {
-    const epoch = authEpoch,
+    const epoch = Session.epoch,
       cache = new Map();
     for (const [key, entry] of objects) {
-      if (window.MapData?.stars[entry.star.id - 1]?.deleted) {
+      if (world.data?.stars[entry.star.id - 1]?.deleted) {
         Modules.close(key);
         objects.delete(key);
         continue;
@@ -373,7 +376,7 @@
         cache.set(entry.star.id, api("system?id=" + entry.star.id));
       try {
         const data = await cache.get(entry.star.id);
-        if (epoch !== authEpoch) return;
+        if (epoch !== Session.epoch) return;
         const site = data.sites.find((s) => s.id === entry.site.id);
         if (site) renderObject(entry.root, site, data.star);
       } catch {}
@@ -404,39 +407,17 @@
     box.append(tags);
     return box;
   }
-  const tooltip = document.getElementById("tooltip");
-  function rich(target, x, y) {
-    const r = gameData.expedition?.resources.find(
-      (r) => r.id === target.dataset.resource,
-    );
-    if (!r) return;
-    tooltip.replaceChildren(resourceCard(r));
-    tooltip.hidden = false;
-    tooltip.style.left = Math.max(8, Math.min(x + 12, innerWidth - 350)) + "px";
-    tooltip.style.top =
-      Math.max(8, Math.min(y + 12, innerHeight - tooltip.offsetHeight - 8)) +
-      "px";
-  }
-  document.addEventListener("pointerover", (e) => {
-    const target = e.target.closest("[data-resource]");
-    if (target) rich(target, e.clientX, e.clientY);
+  registerTooltip("[data-resource]", (target) => {
+    const resource=Session.data.expedition?.resources.find((item) => item.id===target.dataset.resource);
+    return resource ? resourceCard(resource) : undefined;
   });
-  document.addEventListener("pointerout", (e) => {
-    if (e.target.closest("[data-resource]")) tooltip.hidden = true;
-  });
-  document.addEventListener("focusin", (e) => {
-    const target = e.target.closest("[data-resource]");
-    if (target) {
-      const r = target.getBoundingClientRect();
-      rich(target, r.x, r.bottom);
-    }
-  });
+  window.addEventListener("moduledestroy", ({detail}) => objects.delete(detail));
   document.addEventListener("pointerdown", (e) => {
     if (!menus.some((menu) => menu.contains(e.target))) hideMenus();
   });
   context.onkeydown = menuKeys;
   window.addEventListener("signedout", hideMenus);
-  window.Visuals = {
+  Object.assign(Visuals, {
     object(ctx, x, y, r, site, scale = 1) {
       const kind = site.kind;
       if (kind === "Звезда" || kind === "Чёрная дыра") {
@@ -579,5 +560,6 @@
       ctx.stroke();
       ctx.restore();
     },
-  };
-})();
+  });
+
+}

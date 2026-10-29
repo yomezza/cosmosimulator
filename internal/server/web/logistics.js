@@ -1,5 +1,16 @@
-"use strict";
-(() => {
+import { Format } from "./core/format.js";
+import { loadWorld } from "./core/world-store.js";
+import { Session } from "./core/session.js";
+import { I18n } from "./core/i18n.js";
+import { api } from "./core/api.js";
+import { refresh } from "./core/snapshot-store.js";
+import { notify } from "./ui/feedback.js";
+import { UI, Modules } from "./ui/runtime.js";
+import { Logistics } from "./features/runtime.js";
+import { world } from "./core/world-store.js";
+
+export function initLogistics() {
+
   const n = UI.node,
     tr = (s) => I18n.t(s),
     b = UI.button;
@@ -19,16 +30,16 @@
     [...crypto.getRandomValues(new Uint32Array(4))]
       .map((v) => v.toString(16).padStart(8, "0"))
       .join("");
-  const resources = () => gameData.expedition?.resources || [],
+  const resources = () => Session.data.expedition?.resources || [],
     resource = (id) => resources().find((r) => r.id === id),
-    ports = () => gameData.workbench?.stations || [];
+    ports = () => Session.data.workbench?.stations || [];
   const key = (p) => p.star + "|" + (p.station || p.object_id),
     stock = (kind, p) =>
       ((kind === "company" ? data?.corporate : data?.personal) || []).find(
         (s) => key(s) === key(p),
       )?.cargo || {};
   const built = (p) => (data?.built || []).some((s) => key(s) === key(p));
-  const ship = () => gameData.expedition?.ship;
+  const ship = () => Session.data.expedition?.ship;
   const shipAt = (s, p) =>
     s &&
     !s.destination &&
@@ -45,12 +56,12 @@
         (a.kind !== "company" || a.company === b.company));
   function label(loc) {
     if (loc.kind === "ship") {
-      const s = gameData.fleet.ships.find((s) => s.id === loc.ship);
+      const s = Session.data.fleet.ships.find((s) => s.id === loc.ship);
       return tr("Трюм") + " · " + (s ? UI.shipName(s) : "");
     }
     const p = ports().find((p) => key(p) === loc.star + "|" + loc.station);
     return (
-      (p?.name || window.MapData?.stars[loc.star - 1]?.name || tr("Станция")) +
+      (p?.name || world.data?.stars[loc.star - 1]?.name || tr("Станция")) +
       " · " +
       tr(loc.kind === "company" ? "Корпоративный склад" : "Личный склад")
     );
@@ -60,7 +71,7 @@
   const selectedResources = new Set();
   function availableCargo(from) {
     if (from?.kind === "ship")
-      return gameData.fleet?.ships.find((s) => s.id === from.ship)?.cargo || {};
+      return Session.data.fleet?.ships.find((s) => s.id === from.ship)?.cargo || {};
     return from ? stock(from.kind, from) : {};
   }
   function selectionItems() {
@@ -144,14 +155,14 @@
   }
   const apiError = (e) => notify(e.message, "error");
   async function refresh() {
-    if (!signedIn || !Modules.isOpen("logistics")) return;
+    if (!Session.signedIn || !Modules.isOpen("logistics")) return;
     const id = ++request,
-      epoch = authEpoch;
+      epoch = Session.epoch;
     const result = await api("logistics");
     if (
       id !== request ||
-      epoch !== authEpoch ||
-      !signedIn ||
+      epoch !== Session.epoch ||
+      !Session.signedIn ||
       !Modules.isOpen("logistics")
     )
       return;
@@ -162,11 +173,11 @@
   function local(from, to) {
     const fromShip =
         from.kind === "ship"
-          ? gameData.fleet.ships.find((s) => s.id === from.ship)
+          ? Session.data.fleet.ships.find((s) => s.id === from.ship)
           : null,
       toShip =
         to.kind === "ship"
-          ? gameData.fleet.ships.find((s) => s.id === to.ship)
+          ? Session.data.fleet.ships.find((s) => s.id === to.ship)
           : null,
       carrier = fromShip || toShip || ship(),
       a = fromShip
@@ -187,9 +198,9 @@
     const items = Array.isArray(id) ? id : [{ resource: id, quantity: q }],
       carrier =
         from.kind === "ship"
-          ? gameData.fleet.ships.find((s) => s.id === from.ship)
+          ? Session.data.fleet.ships.find((s) => s.id === from.ship)
           : to.kind === "ship"
-            ? gameData.fleet.ships.find((s) => s.id === to.ship)
+            ? Session.data.fleet.ships.find((s) => s.id === to.ship)
             : ship();
     if (!carrier || !items.length) return;
     const mode = local(from, to) ? "direct" : "queue",
@@ -223,8 +234,8 @@
     );
     let free = Infinity;
     if (to.kind === "ship") {
-      const target = gameData.fleet.ships.find((s) => s.id === to.ship),
-        reserved = (gameData.workbench.mining || [])
+      const target = Session.data.fleet.ships.find((s) => s.id === to.ship),
+        reserved = (Session.data.workbench.mining || [])
           .filter((j) => j.ship_id === target.id)
           .reduce((a, j) => a + j.quantity, 0);
       free =
@@ -264,7 +275,7 @@
           }));
           if (payloadItems.reduce((a, v) => a + v.quantity, 0) > free) return;
           const serial = ++operation,
-            epoch = authEpoch;
+            epoch = Session.epoch;
           pending = true;
           cancel.disabled = true;
           fields.forEach((f) => (f.input.disabled = true));
@@ -282,7 +293,7 @@
                   }
                 : { items: payloadItems }),
             });
-            if (serial !== operation || epoch !== authEpoch || !signedIn)
+            if (serial !== operation || epoch !== Session.epoch || !Session.signedIn)
               return;
             clearSelection();
             Modules.close("cargo-transfer");
@@ -292,7 +303,7 @@
             await window.refresh(true);
             await refresh();
           } catch (e) {
-            if (serial === operation && epoch === authEpoch && signedIn)
+            if (serial === operation && epoch === Session.epoch && Session.signedIn)
               apiError(e);
           } finally {
             if (serial === operation) {
@@ -444,7 +455,7 @@
     tile.append(
       n("small", tr(r?.kind || "Ресурс")),
       n("b", r?.code || id),
-      n("span", Number(q).toLocaleString(I18n.language)),
+      n("span", Format.quantity(q)),
     );
     draggable(tile, from, id, q, canMove);
     return tile;
@@ -466,13 +477,13 @@
   }
   async function chooseDestination(from, id, q) {
     if (!from) return;
-    const epoch = authEpoch;
+    const epoch = Session.epoch;
     try {
       const info = await api("logistics");
-      if (epoch !== authEpoch || !signedIn) return;
+      if (epoch !== Session.epoch || !Session.signedIn) return;
       data = info;
     } catch (e) {
-      if (epoch === authEpoch && signedIn) apiError(e);
+      if (epoch === Session.epoch && Session.signedIn) apiError(e);
       return;
     }
     const holder = Modules.create(
@@ -585,13 +596,13 @@
         n("h3", UI.shipName(s)),
         n(
           "p",
-          (window.MapData?.stars[s.star - 1]?.name || "") +
+          (world.data?.stars[s.star - 1]?.name || "") +
             " · " +
             tr(s.position_mode),
           "muted",
         ),
       );
-      const reserved = (gameData.workbench.mining || [])
+      const reserved = (Session.data.workbench.mining || [])
         .filter((j) => j.ship_id === s.id)
         .reduce((a, j) => a + j.quantity, 0);
       hold.append(
@@ -622,7 +633,7 @@
           (!q ||
             [
               p.name,
-              window.MapData?.stars[p.star - 1]?.name,
+              world.data?.stars[p.star - 1]?.name,
               p.owner_name,
               ...inventories.flatMap((c) =>
                 Object.keys(c)
@@ -658,7 +669,7 @@
       details.open = open.has(key(p));
       name.append(
         UI.stationLabel(p.star, p.object_id, p.name, "b"),
-        n("small", window.MapData?.stars[p.star - 1]?.name || ""),
+        n("small", world.data?.stars[p.star - 1]?.name || ""),
       );
       summary.append(
         n("span", "◉", "station-symbol"),
@@ -668,7 +679,7 @@
           tr(shipAt(s, p) ? "На станции" : "Удалённый склад"),
           "storage-location",
         ),
-        n("b", Number(count).toLocaleString(I18n.language), "storage-total"),
+        n("b", Format.quantity(count), "storage-total"),
       );
       details.append(summary);
       const contents = n("div", undefined, "storage-contents");
@@ -691,7 +702,7 @@
               "h4",
               tr(kind === "personal" ? "Личный склад" : "Корпоративный склад") +
                 (kind === "company"
-                  ? " [" + (gameData.profile.company_tag || "") + "]"
+                  ? " [" + (Session.data.profile.company_tag || "") + "]"
                   : ""),
             ),
           );
@@ -778,7 +789,7 @@
       if (caret !== null) search.setSelectionRange(caret, caret);
     }
   }
-  window.Logistics = {
+  Object.assign(Logistics, {
     get dragging() {
       return !!drag;
     },
@@ -787,13 +798,13 @@
     dropzone,
     chooseDestination,
     refresh,
-  };
+  });
   window.addEventListener("moduleopen", (e) => {
     if (e.detail === "logistics") {
-      if (!window.MapData)
+      if (!world.data)
         api("galaxy")
           .then((g) => {
-            window.MapData = g;
+            world.data = g;
             return refresh();
           })
           .catch(apiError);
@@ -829,4 +840,5 @@
     for (const id of ["logistics", "cargo-transfer", "cargo-destination"])
       Modules.close(id);
   });
-})();
+
+}

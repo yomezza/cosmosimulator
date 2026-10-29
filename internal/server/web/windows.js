@@ -1,41 +1,36 @@
-"use strict";
-(() => {
+import { Lifetime } from "./core/lifetime.js";
+import { Preferences } from "./core/preferences.js";
+import { I18n } from "./core/i18n.js";
+import { Modules } from "./ui/runtime.js";
+import { node as createNode } from "./ui/dom.js";
+
+export function initWindows() {
+
   const windows = new Map(),
     links = new Map();
   let z = 40,
     resetting = false;
   const tr = (s) => I18n.t(s),
-    read = (k, f) => {
-      try {
-        return JSON.parse(localStorage.getItem(k)) ?? f;
-      } catch {
-        return f;
-      }
-    };
+    read = (key, fallback) => Preferences.read(key, fallback);
   const maps = document.getElementById("maps-navigation");
   maps.open = read("maps-navigation-open", false) === true;
   maps.addEventListener("toggle", () => {
     try {
-      localStorage.setItem("maps-navigation-open", JSON.stringify(maps.open));
+      Preferences.write("maps-navigation-open", maps.open);
     } catch {}
   });
   maps.querySelector("summary").onclick = (event) => {
     event.preventDefault();
     maps.open = !maps.open;
     try {
-      localStorage.setItem("maps-navigation-open", JSON.stringify(maps.open));
+      Preferences.write("maps-navigation-open", maps.open);
     } catch {}
   };
   document.getElementById("current-system-map").onclick = () => {
     Modules.open("galaxy");
     window.dispatchEvent(new Event("showcurrentsystem"));
   };
-  const node = (tag, text, cls) => {
-    const e = document.createElement(tag);
-    if (text !== undefined) e.textContent = text;
-    if (cls) e.className = cls;
-    return e;
-  };
+  const node = createNode;
   function active(w) {
     for (const entry of windows.values())
       entry.dialog.classList.toggle("window-active", entry === w);
@@ -64,15 +59,15 @@
     if (resetting || !w.dialog.open || w.maximized) return;
     const r = w.dialog.getBoundingClientRect();
     try {
-      localStorage.setItem(
+      Preferences.write(
         "module:" + id,
-        JSON.stringify({
+        {
           x: r.x,
           y: r.y,
           w: r.width,
           h: r.height,
           pinned: w.pinned,
-        }),
+        },
       );
     } catch {}
   }
@@ -99,9 +94,18 @@
     }
     return result;
   }
-  window.Modules = {
-    create(id, title, width = 820, height = 600) {
-      if (windows.has(id)) return windows.get(id).content;
+  Object.assign(Modules, {
+    create(id, title, width = 820, height = 600, options = {}) {
+      if (windows.has(id)) {
+        const existing = windows.get(id);
+        existing.h.dataset.i18n = title; existing.h.textContent = tr(title); existing.title = tr(title);
+        switcher();
+        if (options.resizeOnReuse && !existing.pinned && !existing.maximized) {
+          existing.dialog.style.width=Math.min(width,innerWidth-12)+"px";
+          existing.dialog.style.height=Math.min(height,innerHeight-106)+"px"; clamp(existing);
+        }
+        return existing.content;
+      }
       const d = node("dialog", undefined, "module-window"),
         bar = node("div", undefined, "module-titlebar"),
         h = node("h2", tr(title)),
@@ -136,6 +140,7 @@
       d.append(bar, content, small);
       document.body.append(d);
       const w = {
+        life: new Lifetime(), transient: !!options.transient,
         dialog: d,
         content,
         bar,
@@ -161,7 +166,7 @@
               if (l.w && l.w < 700 && !l.pinned)
                 l.w = Math.min(width, innerWidth - 220);
               try {
-                localStorage.setItem("layout:ship-inline-v1", "true");
+                Preferences.write("layout:ship-inline-v1", true);
               } catch {}
             }
             d.style.width = Math.min(l.w || width, innerWidth - 12) + "px";
@@ -185,6 +190,7 @@
         window.dispatchEvent(new CustomEvent("moduleopen", { detail: id }));
       };
       const hide = () => {
+        if (!d.open) return;
         save(id, w);
         d.close();
         document
@@ -192,6 +198,7 @@
           .forEach((b) => b.classList.remove("module-open"));
         switcher();
         window.dispatchEvent(new CustomEvent("moduleclose", { detail: id }));
+        if (w.transient && !w.pinned && !w.content.querySelector('[data-dirty="true"]')) Modules.destroy(id);
       };
       w.show = show;
       w.hide = hide;
@@ -334,21 +341,31 @@
         }
       });
       let timer;
-      new ResizeObserver(() => {
+      const observer = new ResizeObserver(() => {
         if (!d.open) return;
         const r = d.getBoundingClientRect();
         d.classList.toggle("too-small", r.width < 350 || r.height < 220);
         clearTimeout(timer);
         timer = setTimeout(() => save(id, w), 200);
         window.dispatchEvent(new CustomEvent("moduleresize", { detail: id }));
-      }).observe(d);
-      window.addEventListener("resize", () => {
+      });
+      observer.observe(d);
+      w.life.own(() => { observer.disconnect(); clearTimeout(timer); });
+      w.life.listen(window, "resize", () => {
         if (!d.open) return;
         d.style.width = Math.min(d.offsetWidth, innerWidth - 12) + "px";
         d.style.height = Math.min(d.offsetHeight, innerHeight - 106) + "px";
         clamp(w);
       });
       return content;
+    },
+    destroy(id) {
+      const w = windows.get(id); if (!w) return;
+      if (w.dialog.open) w.dialog.close();
+      w.life.dispose();
+      for (const peer of [...(links.get(id) || [])]) Modules.link(id,peer,false);
+      windows.delete(id); w.dialog.remove(); switcher();
+      window.dispatchEvent(new CustomEvent("moduledestroy", {detail:id}));
     },
     open: (id) => windows.get(id)?.show(),
     focus: (id) => {
@@ -361,11 +378,12 @@
     close: (id) => windows.get(id)?.hide(),
     isOpen: (id) => !!windows.get(id)?.dialog.open,
     closeAll() {
-      for (const w of windows.values()) w.hide();
+      for (const w of [...windows.values()]) w.hide();
     },
     clearPrivate() {
-      for (const [id, w] of windows)
-        if (id !== "galaxy" && id !== "settings") w.content.replaceChildren();
+      for (const [id, w] of [...windows])
+        if (w.transient) Modules.destroy(id);
+        else if (id !== "galaxy" && id !== "settings") w.content.replaceChildren();
     },
     title(id, text) {
       const w = windows.get(id);
@@ -475,7 +493,7 @@
         x += widths[i] + gap;
       });
     },
-  };
+  });
   for (const [id, title, w, h] of [
     ["galaxy", "Галактическая карта", 1180, 700],
     ["ship", "Корабль", 860, 660],
@@ -526,10 +544,10 @@
     o.value = v;
     density.append(o);
   }
-  density.value = localStorage.getItem("density") || "normal";
+  density.value = Preferences.read("density", "normal", (v) => ["normal","compact"].includes(v));
   document.body.classList.toggle("compact-ui", density.value === "compact");
   density.onchange = () => {
-    localStorage.setItem("density", density.value);
+    Preferences.write("density", density.value);
     document.body.classList.toggle("compact-ui", density.value === "compact");
   };
   settings.append(
@@ -585,57 +603,11 @@
   };
   sidebarToggle.onclick = () => {
     sidebar.classList.toggle("collapsed");
-    localStorage.setItem(
-      "sidebar-collapsed",
-      JSON.stringify(sidebar.classList.contains("collapsed")),
-    );
+    Preferences.write("sidebar-collapsed", sidebar.classList.contains("collapsed"));
     updateSidebar();
   };
   window.addEventListener("languagechange", updateSidebar);
   updateSidebar();
   I18n.ready.then(updateSidebar);
-  window.notify = (text, level = "success", persist = false) => {
-    const toast = document.getElementById("toast");
-    toast.replaceChildren(
-      node(
-        "span",
-        level === "error" ? "×" : level === "warning" ? "!" : "✓",
-        "toast-icon",
-      ),
-      node("span", tr(text)),
-      node("i", undefined, "toast-countdown"),
-    );
-    toast.dataset.level = level;
-    toast.hidden = false;
-    clearTimeout(window.toastTimer);
-    window.toastTimer = setTimeout(() => (toast.hidden = true), 6000);
-    if (persist && typeof signedIn !== "undefined" && signedIn)
-      api("notifications", { action: "add", message: text, level })
-        .then(() => window.dispatchEvent(new Event("notificationchange")))
-        .catch(() => {});
-  };
-  const tip = document.getElementById("tooltip");
-  function showHelp(target, x, y) {
-    if (!target) return;
-    tip.textContent = target.dataset.helpRaw || tr(target.dataset.help);
-    tip.hidden = false;
-    tip.style.left =
-      Math.max(8, Math.min(x + 12, innerWidth - tip.offsetWidth - 8)) + "px";
-    tip.style.top =
-      Math.max(8, Math.min(y + 14, innerHeight - tip.offsetHeight - 10)) + "px";
-  }
-  document.addEventListener("pointerover", (e) =>
-    showHelp(e.target.closest("[data-help]"), e.clientX, e.clientY),
-  );
-  document.addEventListener("pointerout", (e) => {
-    if (e.target.closest("[data-help]")) tip.hidden = true;
-  });
-  document.addEventListener("focusin", (e) => {
-    const target = e.target.closest("[data-help]");
-    if (target) {
-      const r = target.getBoundingClientRect();
-      showHelp(target, r.x, r.bottom);
-    }
-  });
-  document.addEventListener("focusout", () => (tip.hidden = true));
-})();
+
+}

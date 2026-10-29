@@ -10,7 +10,7 @@ const mime = { html: "text/html", js: "text/javascript", css: "text/css", json: 
 // Each test owns its server, browser context, fixtures and request journal.
 // There is intentionally no configurable target URL, database or remote service.
 export async function game(t, { signedIn = false, role = "player", storage = {}, faults = [] } = {}) {
-  const allowed = new Set(await readdir(web));
+  const allowed = new Set(await readdir(web, { recursive: true }));
   const unexpected = [], errors = [], requests = [], assets = [], handlers = new Map();
   const data = fixture();
   data.state.user.role = role;
@@ -47,6 +47,16 @@ export async function game(t, { signedIn = false, role = "player", storage = {},
     for (const [key, value] of Object.entries(values)) localStorage.setItem(key, value);
     sessionStorage.setItem("test-seeded", "true");
   }, storage);
+  await context.addInitScript(() => {
+    window.addEventListener("DOMContentLoaded", async () => {
+      const { application: app } = await import("/bootstrap.js");
+      Object.assign(window, { I18n: app.I18n, UI: app.UI, Modules: app.Modules,
+        Game: app.Game, api: app.api, refresh: app.refresh, showAuth: app.showAuth, notify: app.notify });
+      for (const [name, key] of [["signedIn", "signedIn"], ["authEpoch", "epoch"], ["gameData", "data"], ["lastPoll", "lastPoll"]])
+        Object.defineProperty(window, name, { configurable: true, get: () => app.session[key], set: (value) => { app.session[key] = value; } });
+      window.__testReady = true;
+    }, { once: true });
+  });
   await context.route("**/*", async (route) => {
     const req = route.request(), url = new URL(req.url());
     if (url.origin !== base) {
@@ -80,8 +90,11 @@ export async function game(t, { signedIn = false, role = "player", storage = {},
   page.setDefaultTimeout(10000);
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(base);
+  // Test-only inspection bridge. Production imports ES modules and does not
+  // publish the old script globals on window.
+  await page.waitForFunction(() => window.__testReady);
   await page.evaluate(() => I18n.ready);
-  const ready = () => page.waitForFunction(() => document.getElementById("startup-screen").hidden);
+  const ready = () => page.waitForFunction(() => window.__testReady && document.getElementById("startup-screen").hidden);
   const login = async () => {
     await page.locator('#auth-form input[name="username"]').fill("test_pilot");
     await page.locator('#auth-form input[name="password"]').fill("a");

@@ -1,24 +1,26 @@
-"use strict";
-(() => {
+import { Format } from "./core/format.js";
+import { Preferences } from "./core/preferences.js";
+import { placeFloating, trackFloating, overlayHost } from "./ui/floating.js";
+import { Session } from "./core/session.js";
+import { I18n } from "./core/i18n.js";
+import { api } from "./core/api.js";
+import { notify } from "./ui/feedback.js";
+import { UI } from "./ui/runtime.js";
+import { Game } from "./features/runtime.js";
+import { world } from "./core/world-store.js";
+
+export function initControls() {
+
   const tr = (s) => I18n.t(s),
     n = UI.node;
-  UI.formatNumber = (value, options = {}) =>
-    typeof value === "number" && Number.isFinite(value)
-      ? value.toLocaleString(I18n.language, {
-          maximumFractionDigits: 1,
-          ...options,
-        })
-      : "—";
-  UI.percent = (value) =>
-    typeof value === "number" && Number.isFinite(value)
-      ? UI.formatNumber(Math.max(0, Math.min(100, value))) + "%"
-      : "—";
+  UI.formatNumber = Format.number;
+  UI.percent = Format.percent;
   const folds = new Map();
   const saveFold = (d) => {
     folds.set(d.dataset.fold, d.open);
     if (d.dataset.foldStorage) {
       try {
-        localStorage.setItem(d.dataset.foldStorage, JSON.stringify(d.open));
+        Preferences.write(d.dataset.foldStorage, d.open);
       } catch {}
     }
   };
@@ -28,12 +30,10 @@
     const details = n("details", undefined, className);
     details.dataset.fold = key;
     if (persistent) {
-      details.dataset.foldStorage = `fold:${gameData.state.user.id}:${key}`;
+      details.dataset.foldStorage = `fold:${Session.data.state.user.id}:${key}`;
       if (!folds.has(key)) {
         try {
-          const saved = JSON.parse(
-            localStorage.getItem(details.dataset.foldStorage),
-          );
+          const saved = Preferences.read(details.dataset.foldStorage, undefined, (v) => typeof v === "boolean");
           if (typeof saved === "boolean") folds.set(key, saved);
         } catch {}
       }
@@ -120,7 +120,7 @@
   UI.shipName = (s) => {
     const name =
       s.spec?.name ||
-      gameData.workbench?.ship_classes?.find((c) => c.id === s.class)?.name;
+      Session.data.workbench?.ship_classes?.find((c) => c.id === s.class)?.name;
     return s.name === name ? tr(s.name) : s.name;
   };
   UI.paintFlag = (badge, company) => {
@@ -138,19 +138,21 @@
     b.type = "button";
     if (typeof label === "string" && label.length > 1)
       b.classList.add("terminal-action");
-    b.disabled = !!disabled;
+    let wanted = !!disabled, pending = false;
+    const native = Object.getOwnPropertyDescriptor(HTMLButtonElement.prototype, "disabled");
+    const apply = () => native.set.call(b, wanted || pending);
+    Object.defineProperty(b, "disabled", { configurable: true,
+      get: () => native.get.call(b), set: (value) => { wanted = !!value; apply(); } });
+    apply();
     if (reason) b.dataset.help = reason;
     b.onclick = async (e) => {
-      b.disabled = true;
-      b.classList.add("is-busy");
-      try {
-        await run?.(e);
-      } catch (error) {
-        notify(error.message, "error");
-      } finally {
-        b.classList.remove("is-busy");
-        b.disabled = !!disabled;
-      }
+      if (pending || wanted) return;
+      const epoch = Session.epoch;
+      pending = true; apply();
+      b.classList.add("is-busy"); b.setAttribute("aria-busy", "true");
+      try { await run?.(e); }
+      catch (error) { if (epoch === Session.epoch && error.name !== "AbortError") notify(error.message, "error"); }
+      finally { pending = false; apply(); b.classList.remove("is-busy"); b.removeAttribute("aria-busy"); }
     };
     return b;
   };
@@ -187,7 +189,7 @@
     bar.setAttribute("aria-label", tr(label));
     wrap.append(
       n("span", tr(label)),
-      n("b", `${Number(value.toFixed?.(1) ?? value)} / ${max}`),
+      n("b", `${Format.number(value)} / ${Format.number(max)}`),
       bar,
     );
     return wrap;
@@ -230,7 +232,7 @@
     return wrap;
   };
   UI.empty = (root, text) => root.append(n("p", tr(text), "empty-state"));
-  let current;
+  let current, pickerSerial = 0;
   const pickerRegistry = new WeakMap();
   window.addEventListener("languagechange", () => {
     for (const button of document.querySelectorAll(".picker-button")) {
@@ -262,7 +264,7 @@
     const update = () => {
       for (const option of opts)
         if (option.station) {
-          const port = window.gameData?.workbench?.stations?.find(
+          const port = Session.data?.workbench?.stations?.find(
               (p) =>
                 p.star === option.station.star &&
                 p.object_id === option.station.id,
@@ -296,9 +298,11 @@
     };
     update();
     pickerRegistry.set(button, { opts, update });
-    button.setValue = (value) => {
-      button.value = String(value);
-      update();
+    button.setValue = (value, {emit = false} = {}) => {
+      const next=String(value);
+      if (!opts.some((option) => option.id === next)) return;
+      button.value = next; update();
+      if (emit) Promise.resolve(change?.(next)).catch((error) => notify(error.message, "error"));
     };
     button.onclick = () => {
       if (current?.button === button) {
@@ -333,10 +337,13 @@
         columns.append(all, favorites);
         pop.append(search, columns, footer);
       } else pop.append(search, list, footer);
-      document.body.append(pop);
+      overlayHost(button).append(pop);
+      let tracking;
       button.setAttribute("aria-expanded", "true");
       const close = () => {
+        tracking?.dispose();
         pop.remove();
+        button.removeAttribute("aria-controls");
         button.setAttribute("aria-expanded", "false");
         document.removeEventListener("pointerdown", outside);
         current = null;
@@ -360,13 +367,13 @@
         list.setAttribute("role", "listbox");
         footer.replaceChildren();
         const optionRow = (o, host) => {
-          const b = UI.button("", () => {
+          const b = UI.button("", async () => {
             button.value = o.id;
             update();
             close();
             button.focus();
-            change?.(button.value);
-            button.onchange?.({ target: button });
+            await change?.(button.value);
+            await button.onchange?.({ target: button });
           });
           b.classList.add("picker-option");
           b.classList.toggle("picker-has-code", !!o.code);
@@ -428,24 +435,11 @@
             page === pages,
           ),
         );
-        const r = button.getBoundingClientRect();
-        pop.style.width =
-          Math.min(
-            Math.max(
-              r.width,
-              config.favorites ? 620 : config.system ? 350 : 260,
-            ),
-            innerWidth - 16,
-          ) + "px";
-        pop.style.left =
-          Math.max(8, Math.min(r.left, innerWidth - pop.offsetWidth - 8)) +
-          "px";
-        pop.style.top =
-          Math.max(
-            65,
-            Math.min(r.bottom + 5, innerHeight - pop.offsetHeight - 40),
-          ) + "px";
+        position();
       };
+      const position = () => placeFloating(pop, { anchor: button, minTop: 65, maxBottom: 40,
+        minWidth: config.favorites ? 620 : config.system ? 350 : 260 });
+      tracking = trackFloating({element:pop,owner:button,position,close});
       search.oninput = () => {
         page = 1;
         focusIndex = -1;
@@ -475,6 +469,9 @@
         }
       };
       render();
+      list.id = "picker-list-" + (++pickerSerial);
+      button.setAttribute("aria-controls", list.id);
+      search.setAttribute("aria-controls", list.id);
       search.focus();
     };
     return button;
@@ -498,7 +495,7 @@
         : { star: Number(id), object: "" };
     const get = (id) => {
       const t = target(id);
-      return gameData.workbench?.notes?.find(
+      return Session.data.workbench?.notes?.find(
         (n) => n.star === t.star && n.object_id === t.object,
       );
     };
@@ -540,17 +537,17 @@
   };
   UI.systems = (value, change) =>
     UI.picker(
-      (window.MapData?.stars || [])
+      (world.data?.stars || [])
         .filter((s) => !s.deleted)
         .map((s) => ({
           id: s.id,
           code: String(s.id),
           label: s.name,
           extra:
-            (gameData.workbench?.known.some((v) => v.star === s.id)
+            (Session.data.workbench?.known.some((v) => v.star === s.id)
               ? "✓ "
               : "") +
-            (gameData.fleet?.ships.some((ship) => ship.star === s.id)
+            (Session.data.fleet?.ships.some((ship) => ship.star === s.id)
               ? "◇"
               : ""),
         })),
@@ -601,8 +598,7 @@
     };
     return dirty;
   };
-})();
-(() => {
+
   const paths = {
     galaxy: "M12 3v18M3 12h18M5 5l14 14M5 19L19 5",
     ship: "M3 17L21 3l-6 18-4-8-8 4z",
@@ -661,4 +657,5 @@
       select.after(picker);
     }
   });
-})();
+
+}

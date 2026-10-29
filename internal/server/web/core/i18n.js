@@ -1,8 +1,6 @@
-"use strict";
-window.I18n = {
-  language: ["ru", "en"].includes(localStorage.getItem("language"))
-    ? localStorage.getItem("language")
-    : "ru",
+import { Preferences } from "./preferences.js";
+export const I18n = {
+  language: Preferences.language(),
   catalogs: {},
   t(text) {
     const catalog = this.catalogs[this.language] || {};
@@ -37,11 +35,12 @@ window.I18n = {
   set(language) {
     if (!["ru", "en"].includes(language)) return;
     this.language = language;
-    localStorage.setItem("language", language);
+    Preferences.setLanguage(language);
     this.apply();
     window.dispatchEvent(new Event("languagechange"));
   },
 };
+export function initI18n() {
 I18n.ready = Promise.all(
   ["ru", "en"].map(async (language) => {
     const r = await fetch(language + ".json");
@@ -53,3 +52,6 @@ I18n.ready = Promise.all(
   .catch((e) => {
     console.error(e);
   });
+
+return I18n.ready;
+}
