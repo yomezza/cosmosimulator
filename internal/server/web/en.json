@@ -1530,5 +1530,8 @@
   "Планета": "Planet",
   "Биом суши": "Land biome",
   "Суша отсутствует": "No land",
-  "Управление поверхностью": "Surface management"
+  "Управление поверхностью": "Surface management",
+  "Загружаем текстуры поверхности…": "Loading surface textures…",
+  "Повторить загрузку текстур": "Retry loading textures",
+  "Часть текстур недоступна. Используется доступное оформление.": "Some textures are unavailable. Available surface styling is being used."
 }

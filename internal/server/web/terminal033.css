@@ -3455,3 +3455,9 @@ button.picker-button.system-picker .picker-chevron {
   z-index: 12001;
   animation: none;
 }
+
+.planet-texture-status {
+  max-width: 280px;
+  color: var(--muted);
+  font-size: 10px;
+}
