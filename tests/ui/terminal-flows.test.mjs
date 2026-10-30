@@ -281,8 +281,32 @@ test("galactic navigation restores galaxy mode after visiting and closing the sy
       .querySelector("#map-breadcrumb")
       ?.textContent.includes("Test Region"),
   );
+  assert.equal(
+    await g.page
+      .locator("#current-system-map")
+      .evaluate((e) => e.classList.contains("module-open")),
+    true,
+  );
+  assert.equal(
+    await g.page
+      .locator('#sidebar [data-open="galaxy"]')
+      .evaluate((e) => e.classList.contains("module-open")),
+    false,
+  );
   await g.page.locator('#sidebar [data-open="galaxy"]').click();
   await g.page.waitForSelector("#route-to");
+  assert.equal(
+    await g.page
+      .locator('#sidebar [data-open="galaxy"]')
+      .evaluate((e) => e.classList.contains("module-open")),
+    true,
+  );
+  assert.equal(
+    await g.page
+      .locator("#current-system-map")
+      .evaluate((e) => e.classList.contains("module-open")),
+    false,
+  );
   assert.ok(
     !(await g.page.locator("#map-breadcrumb").textContent()).includes(
       "Test Region",
@@ -295,8 +319,21 @@ test("galactic navigation restores galaxy mode after visiting and closing the sy
       ?.textContent.includes("Test Region"),
   );
   await g.page.evaluate(() => window.__testApp.Modules.close("galaxy"));
+  assert.equal(await g.page.locator("#sidebar .module-open").count(), 0);
   await g.page.locator('#sidebar [data-open="galaxy"]').click();
   await g.page.waitForSelector("#route-to");
+  assert.equal(
+    await g.page
+      .locator('#sidebar [data-open="galaxy"]')
+      .evaluate((e) => e.classList.contains("module-open")),
+    true,
+  );
+  assert.equal(
+    await g.page
+      .locator("#current-system-map")
+      .evaluate((e) => e.classList.contains("module-open")),
+    false,
+  );
   assert.ok(
     !(await g.page.locator("#map-breadcrumb").textContent()).includes(
       "Test Region",

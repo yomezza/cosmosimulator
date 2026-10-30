@@ -440,6 +440,21 @@ export function initGalaxy() {
     hoveredSite = null,
     panelTab = "route",
     routeStops = [];
+  function syncMapNavigation() {
+    const open = Modules.isOpen("galaxy");
+    document
+      .querySelectorAll('#sidebar [data-open="galaxy"]')
+      .forEach((button) =>
+        button.classList.toggle("module-open", open && mode === "galaxy"),
+      );
+    document
+      .getElementById("current-system-map")
+      .classList.toggle("module-open", open && mode === "system");
+  }
+  function setMode(value) {
+    mode = value;
+    syncMapNavigation();
+  }
   const starGalaxy = (id) => galaxy?.stars[id - 1]?.galaxy || "edem";
   const definition = () => galaxy?.galaxies?.find((g) => g.id === viewedGalaxy);
   const galaxyTitle = () =>
@@ -462,7 +477,7 @@ export function initGalaxy() {
             ?.star ||
           galaxy.stars.find((s) => s.galaxy === viewedGalaxy)?.id ||
           1;
-        mode = "galaxy";
+        setMode("galaxy");
         local = null;
         back.hidden = true;
         route = [];
@@ -492,7 +507,7 @@ export function initGalaxy() {
       viewedGalaxy = starGalaxy(selected);
       updateGalaxyPicker();
       const star = galaxy.stars[selected - 1];
-      mode = "galaxy";
+      setMode("galaxy");
       back.hidden = true;
       camera.galaxy = { zoom: 3, x: 0, y: 0 };
       const p = galaxyPoint(star);
@@ -1489,7 +1504,7 @@ export function initGalaxy() {
       local = d;
       viewedGalaxy = starGalaxy(id);
       updateGalaxyPicker();
-      mode = "system";
+      setMode("system");
       panelTab = "system";
       selected = id;
       updateSystemPicker();
@@ -1563,7 +1578,7 @@ export function initGalaxy() {
     pendingFind = null;
     selected = id;
     viewedGalaxy = starGalaxy(id);
-    mode = "galaxy";
+    setMode("galaxy");
     panelTab = "route";
     back.hidden = true;
     camera.galaxy = { zoom: 3, x: 0, y: 0 };
@@ -1605,7 +1620,7 @@ export function initGalaxy() {
     viewedGalaxy = starGalaxy(ship.star);
     updateSystemPicker();
     updateGalaxyPicker();
-    mode = "galaxy";
+    setMode("galaxy");
     back.hidden = true;
     camera.galaxy.zoom = 2;
     camera.galaxy.x = 0;
@@ -1640,7 +1655,7 @@ export function initGalaxy() {
     pendingFind = null;
     scenes.planet?.dismiss(false);
     request++;
-    mode = "galaxy";
+    setMode("galaxy");
     back.hidden = true;
     if (galaxy) {
       label.textContent = galaxyTitle();
@@ -1854,7 +1869,7 @@ export function initGalaxy() {
     updateGalaxyPicker();
     label.textContent = galaxyTitle();
     back.hidden = true;
-    mode = "galaxy";
+    setMode("galaxy");
     local = null;
     route = [];
     camera.galaxy = { zoom: 1, x: 0, y: 0 };
@@ -1874,10 +1889,16 @@ export function initGalaxy() {
     if (Modules.isOpen("galaxy")) findShip(event.detail);
   });
   window.addEventListener("moduleopen", (event) => {
-    if (event.detail === "galaxy") load();
+    if (event.detail === "galaxy") {
+      syncMapNavigation();
+      load();
+    }
   });
   window.addEventListener("moduleclose", (event) => {
-    if (event.detail === "galaxy") hideSummary();
+    if (event.detail === "galaxy") {
+      hideSummary();
+      syncMapNavigation();
+    }
   });
   window.addEventListener("moduleresize", (event) => {
     if (event.detail === "galaxy") draw();
@@ -1962,7 +1983,7 @@ export function initGalaxy() {
     request++;
     pendingStar = null;
     local = null;
-    mode = "galaxy";
+    setMode("galaxy");
     route = [];
     activeRoute = [];
     routeStops = [];
