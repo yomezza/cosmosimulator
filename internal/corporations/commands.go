@@ -118,7 +118,7 @@ func (a *Service) CorporationCommand(ctx context.Context, tx pgx.Tx, u account.U
 			return true, errors.New("Некорректное название роли")
 		}
 		for _, p := range in.Permissions {
-			if p != "finance" && p != "manage" && p != "projects" && p != "warehouse" && p != "colonize" {
+			if p != "finance" && p != "manage" && p != "projects" && p != "warehouse" && p != "colonize" && p != "planetary.enter" {
 				return true, errors.New("Неизвестное полномочие")
 			}
 		}

@@ -31,7 +31,7 @@ func TestPackageBoundaries(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		pure := owner == "universe" || owner == "geography" || owner == "resources"
+		pure := owner == "universe" || owner == "geography" || owner == "resources" || owner == "planet/terrain" || owner == "planet/territory"
 		for _, spec := range f.Imports {
 			target, err := strconv.Unquote(spec.Path.Value)
 			if err != nil {
@@ -46,7 +46,7 @@ func TestPackageBoundaries(t *testing.T) {
 				}
 				if strings.HasPrefix(target, prefix) {
 					dep := strings.TrimPrefix(target, prefix)
-					allowed := owner == "universe" && dep == "resources" || owner == "geography" && dep == "universe"
+					allowed := owner == "universe" && dep == "resources" || owner == "geography" && dep == "universe" || owner == "planet/terrain" && dep == "geography"
 					if !allowed {
 						t.Errorf("pure package %s imports feature %s", owner, dep)
 					}

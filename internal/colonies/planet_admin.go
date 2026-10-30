@@ -118,14 +118,17 @@ func eraseSurface(ctx context.Context, tx pgx.Tx, id int64) error {
 	// Keep financial_ledger and operation receipts. Retire create/land receipts
 	// that otherwise return now-invalid project/surface links on retry.
 	queries := []string{
+		`UPDATE planet_runtime_controls SET state='retiring' WHERE surface=$1`,
+		`DELETE FROM planet_landing_sites WHERE surface=$1`,
 		`UPDATE planet_requests SET result=result||'{"surface_reset":true}'::jsonb WHERE result->>'surface'=$1::bigint::text OR result->>'project' IN (SELECT id::text FROM planet_projects WHERE surface=$1)`,
-		`DELETE FROM notifications WHERE kind='colony' AND data->>'surface'=$1::bigint::text`,
+		`DELETE FROM notifications WHERE kind IN('colony','landing_ready') AND data->>'surface'=$1::bigint::text`,
 		`DELETE FROM planet_colonies WHERE surface=$1`,
 		`DELETE FROM planet_events WHERE project IN (SELECT id FROM planet_projects WHERE surface=$1)`,
 		`DELETE FROM planet_refunds WHERE contribution IN (SELECT c.id FROM planet_contributions c JOIN planet_projects p ON p.id=c.project WHERE p.surface=$1)`,
 		`DELETE FROM planet_contributions WHERE project IN (SELECT id FROM planet_projects WHERE surface=$1)`,
 		`DELETE FROM planet_projects WHERE surface=$1`,
 		`DELETE FROM planet_sectors WHERE surface=$1`,
+		`DELETE FROM planet_runtime_controls WHERE surface=$1`,
 		`DELETE FROM planet_surfaces WHERE id=$1`,
 	}
 	for _, sql := range queries {

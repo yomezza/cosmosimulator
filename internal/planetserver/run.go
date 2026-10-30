@@ -97,7 +97,7 @@ func (a *App) Serve(ctx context.Context, listener net.Listener, onListening func
 	server := &http.Server{Handler: a.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 	result := make(chan error, 1)
 	go func() { result <- server.Serve(listener) }()
-	a.logger.Info("planetary HTTP listener started", "address", listener.Addr().String(), "stage", "P2-1", "version", Version)
+	a.logger.Info("planetary HTTP listener started", "address", listener.Addr().String(), "stage", Stage, "version", Version)
 	if onListening != nil && ctx.Err() == nil {
 		onListening()
 	}

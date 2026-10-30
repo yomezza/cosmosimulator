@@ -1,0 +1,1 @@
+200 canonical sectors: masks + shared-side connectivity 1.86s; 226 passable edges

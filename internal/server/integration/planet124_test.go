@@ -197,6 +197,9 @@ func TestPlanetResetVisits124(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.exec(`UPDATE ships SET star=1,object_id=$2,position_mode='orbit',destination=NULL,local_target=NULL WHERE user_id=$1 AND active`, uid, fmt.Sprintf("planet-%d", planet))
+	// P2-2 separates visiting from colonization/admin role.
+	f.exec(`INSERT INTO company_roles(company_id,name,permissions) VALUES($1,'Planet reset visitor','["planetary.enter"]')`, company)
+	f.exec(`UPDATE users SET company_role=(SELECT id FROM company_roles WHERE company_id=$2 AND name='Planet reset visitor') WHERE id=$1`, uid, company)
 	f.req(c, "POST", "/api/planet/action", map[string]any{"action": "land", "id": pid, "request": "visit-land-124"}, 200)
 	info := preview124(f, c, planet)
 	if info.Visits != 1 || info.Colonies != 1 || info.Corporate != 1 || info.Blocked == "" {

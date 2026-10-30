@@ -1,0 +1,6 @@
+PASS: both executables accept schema version 2; foundation ready, gameplay still disabled
+PASS: running cosmic background worker places one module for two adjacent completed colonies
+PASS: remote colony gets a separate persistent landing module
+PASS: bridging territory keeps both original modules; placement continues with planet offline and no charge
+PASS: restart preserves IDs/coordinates and does not duplicate readiness notifications; embedded PNG matches artpack
+Disposable test DB removed.

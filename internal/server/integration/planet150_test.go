@@ -155,7 +155,7 @@ func TestPlanetSchema150(t *testing.T) {
 	f.exec(`UPDATE planet_schema_state SET version=99 WHERE id=1`)
 	address, stop = startPlanet150(t, f.db)
 	planetStatus150(t, address, "/planet/api/v1/health/ready", 503, "schema_incompatible")
-	f.exec(`UPDATE planet_schema_state SET version=1 WHERE id=1`)
+	f.exec(`UPDATE planet_schema_state SET version=$1 WHERE id=1`, planetruntime.SchemaVersion)
 	waitPlanetReady150(t, address)
 	f.exec(`DELETE FROM planet_schema_state`)
 	planetStatus150(t, address, "/planet/api/v1/health/ready", 503, "schema_missing")

@@ -364,6 +364,7 @@ export function createCorporations({ roots, act, command }) {
         ["projects", "Создание проектов"],
         ["warehouse", "Выдача со склада"],
         ["colonize", "Планетарная колонизация"],
+        ["planetary.enter", "Посещение планетарных территорий"],
       ];
       side.append(
         UI.table(

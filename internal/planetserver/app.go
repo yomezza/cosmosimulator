@@ -12,7 +12,8 @@ import (
 	"github.com/yomezza/cosmosimulator/internal/platform/httpkit"
 )
 
-const Version = "0.15.0"
+const Version = "0.16.0"
+const Stage = "P2-2"
 
 // App wires only planetary components. New does not start goroutines or migrate.
 type App struct {
@@ -86,5 +87,5 @@ func (a *App) Handler() http.Handler {
 }
 
 func (a *App) health(w http.ResponseWriter, status int, reason string) {
-	httpkit.Reply(w, status, map[string]any{"service": "cosmosimulator-planet", "version": Version, "stage": "P2-1", "status": reason, "gameplay_ready": false})
+	httpkit.Reply(w, status, map[string]any{"service": "cosmosimulator-planet", "version": Version, "stage": Stage, "status": reason, "gameplay_ready": false})
 }

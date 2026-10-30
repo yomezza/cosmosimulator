@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/yomezza/cosmosimulator/internal/initialization"
@@ -38,9 +39,14 @@ func Run(ctx context.Context) error {
 		addr = "127.0.0.1:8080"
 	}
 	srv := &http.Server{Addr: addr, Handler: a.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
-	go a.Simulation.Simulate(ctx)
+	run, cancelRun := context.WithCancel(ctx)
+	var workers sync.WaitGroup
+	workers.Add(2)
+	go func() { defer workers.Done(); a.Simulation.Simulate(run) }()
+	go func() { defer workers.Done(); a.Colonies.RunLandingWorker(run) }()
+	defer func() { cancelRun(); workers.Wait() }()
 	go func() {
-		<-ctx.Done()
+		<-run.Done()
 		c, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(c)

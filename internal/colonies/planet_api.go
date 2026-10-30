@@ -299,7 +299,12 @@ func (a *Service) ColonyAction(w http.ResponseWriter, r *http.Request) {
 						err = planetReceived(ctx, tx, &p)
 					}
 				case "land":
-					if !member || p.Status != "complete" {
+					var visitAllowed bool
+					visitAllowed, err = projectVisitAccess(ctx, tx, u.ID, p)
+					if err != nil {
+						break
+					}
+					if !visitAllowed || p.Status != "complete" {
 						err = errors.New("Нет доступа к завершённой колонии")
 						break
 					}
@@ -442,7 +447,12 @@ func (a *Service) ColonyView(w http.ResponseWriter, r *http.Request) {
 		httpkit.Internal(w, e)
 		return
 	}
-	if !member || p.Status != "complete" {
+	visitAllowed, accessErr := projectVisitAccess(ctx, tx, u.ID, p)
+	if accessErr != nil {
+		httpkit.Internal(w, accessErr)
+		return
+	}
+	if !visitAllowed || p.Status != "complete" {
 		landReason = "Нет доступа к завершённой колонии"
 	} else if s.Star != star || !fleet.NearObject(s, "planet-"+strconv.Itoa(planet)) {
 		landReason = "Для высадки необходимо выполнить манёвр к планете"

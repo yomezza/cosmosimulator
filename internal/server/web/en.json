@@ -1542,5 +1542,21 @@
   "Статус идеи": "Idea status",
   "Сохранить статус": "Save status",
   "Некорректный статус идеи": "Invalid idea status",
-  "Идея не найдена": "Idea not found"
+  "Идея не найдена": "Idea not found",
+  "Посещение планетарных территорий": "Visit planetary territories",
+  "Посадочная площадка готова": "Landing site ready",
+  "Посадочная инфраструктура": "Landing infrastructure",
+  "Посадочная площадка": "Landing site",
+  "Посадочная площадка подготовлена": "Landing site prepared",
+  "Подготавливаем посадочную инфраструктуру": "Preparing landing infrastructure",
+  "Сектор обслуживается площадкой связанной территории": "This sector is served by a landing site in its connected territory",
+  "В этом секторе нет посадочной площадки": "There is no landing site in this sector",
+  "Секторов в территории": "Sectors in territory",
+  "Нет права посещения этой территории": "You do not have permission to visit this territory",
+  "Посадочная площадка требует проверки географии": "The landing site requires a geography check",
+  "Нет безопасного места для посадочной площадки": "No safe location for a landing site",
+  "Доступная посадочная площадка": "Accessible landing site",
+  "Недоступная посадочная площадка": "Unavailable landing site",
+  "Открыть поверхность": "Open surface",
+  "Высадка в 2D-режим появится после подключения персонажей.": "Landing in 2D mode will become available once characters are implemented."
 }

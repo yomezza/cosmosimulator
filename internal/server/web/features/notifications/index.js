@@ -24,6 +24,7 @@ export function createNotifications({ roots, act, command }) {
   let noticeCursor = null;
   let eventNames = {
     arrival: "Корабль прибыл",
+    landing_ready: "Посадочная площадка готова",
     mining_complete: "Добыча завершена",
     research_complete: "Исследование завершено",
     delivery_complete: "Доставка завершена",
@@ -33,6 +34,16 @@ export function createNotifications({ roots, act, command }) {
   };
   function eventText(item) {
     const data = item.data || {};
+    if (item.kind === "landing_ready")
+      return (
+        tr("Посадочная площадка готова") +
+        " · " +
+        data.planet +
+        " · " +
+        tr("Сектор") +
+        " " +
+        data.sector
+      );
     if (item.kind === "colony")
       return (
         tr("Колонизация завершена") +
@@ -159,6 +170,18 @@ export function createNotifications({ roots, act, command }) {
           n("summary", eventText(item)),
           n("p", fmtTime(item.created_at), "muted"),
         );
+        if (
+          item.kind === "landing_ready" &&
+          item.data?.star &&
+          item.data?.planet_index
+        )
+          detail.append(
+            b("Открыть поверхность", () =>
+              loadPlanet().then((p) =>
+                p.open(item.data.star, item.data.planet_index),
+              ),
+            ),
+          );
         if (item.kind === "colony")
           detail.append(
             b("Открыть проект", () =>

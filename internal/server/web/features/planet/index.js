@@ -153,6 +153,9 @@ export function initPlanet() {
     }
     ctx.restore();
     const claims = new Map(c.state.claims.map((cl) => [cl.sector, cl]));
+    const landings = new Map(
+      (c.state.landing?.sites || []).map((site) => [site.sector, site]),
+    );
     for (const s of g.sectors) {
       const points = hex(s),
         claim = claims.get(s.number);
@@ -177,6 +180,13 @@ export function initPlanet() {
         ctx.font = `${10 / c.scale}px monospace`;
         ctx.textAlign = "center";
         ctx.fillText(s.number, s.center.x, s.center.y);
+      }
+      const landing = landings.get(s.number);
+      if (landing) {
+        ctx.fillStyle = landing.accessible ? "#72d4b1" : "#a4aebb";
+        ctx.font = `bold ${Math.max(12 / c.scale, 0.23)}px system-ui`;
+        ctx.textAlign = "center";
+        ctx.fillText("⇣", s.center.x, s.center.y + 0.45);
       }
     }
   }
@@ -448,6 +458,69 @@ export function initPlanet() {
       "Статус",
       tr(claim ? statusName(claim.status) : "Свободная территория"),
     );
+    if (claim?.status === "complete") {
+      const panel = block(container, "Посадочная инфраструктура"),
+        landing = c.state.landing,
+        site = landing?.sites.find((site) => site.sector === s.number),
+        territory = landing?.territories.find((t) =>
+          t.sectors.includes(s.number),
+        );
+      if (site) {
+        const image = n("img");
+        image.src = "planet-landing-core.png";
+        image.alt = tr("Посадочная площадка");
+        image.className = "landing-site-preview";
+        panel.append(image);
+        UI.row(panel, "Владелец", site.owner);
+        panel.append(
+          n(
+            "p",
+            tr(site.reason || "Посадочная площадка подготовлена"),
+            site.accessible ? "signal" : "muted",
+          ),
+        );
+        panel.append(
+          n(
+            "small",
+            tr("Высадка в 2D-режим появится после подключения персонажей."),
+            "muted",
+          ),
+        );
+      } else if (landing?.preparing) {
+        panel.append(
+          n("p", tr("Подготавливаем посадочную инфраструктуру"), "muted"),
+        );
+      } else if (territory?.sites.length) {
+        panel.append(
+          n("p", tr("Сектор обслуживается площадкой связанной территории")),
+        );
+        for (const id of territory.sites) {
+          const target = landing.sites.find((site) => site.id === id);
+          if (target)
+            panel.append(
+              btn(tr("Сектор") + " " + target.sector, () => {
+                selected = target.sector;
+                card();
+                draw();
+              }),
+            );
+        }
+      } else {
+        panel.append(
+          n(
+            "p",
+            tr(territory?.reason || "В этом секторе нет посадочной площадки"),
+            "muted",
+          ),
+        );
+      }
+      if (territory)
+        UI.row(
+          panel,
+          "Секторов в территории",
+          Format.quantity(territory.sectors.length),
+        );
+    }
     if (claim) {
       root.append(btn("Проект колонизации", () => project(claim.id)));
       return;
@@ -645,6 +718,10 @@ export function initPlanet() {
       item.style.borderLeft = "3px solid " + color;
       legend.append(item);
     }
+    legend.append(
+      n("span", "⇣ " + tr("Доступная посадочная площадка"), "signal"),
+      n("span", "⇣ " + tr("Недоступная посадочная площадка"), "muted"),
+    );
     wrap.append(canvas);
     layout.append(wrap, side);
     host.append(tools, layout, legend);

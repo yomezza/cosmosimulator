@@ -4777,3 +4777,5 @@ button.picker-button.system-picker .picker-chevron {
 .idea-status[data-status="approved"] { border-color: #69bd88; }
 .idea-status[data-status="rejected"] { border-color: #d76d73; }
 .idea-review { margin-top: 16px; }
+
+.landing-site-preview {display:block;width:112px;height:112px;object-fit:contain;margin:4px auto;background:transparent;}

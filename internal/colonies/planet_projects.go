@@ -170,8 +170,14 @@ func (a *Service) PlanetState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
+	tx, err := a.DB.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		httpkit.Internal(w, err)
+		return
+	}
+	defer tx.Rollback(context.Background())
 	id, _ := strconv.ParseInt(r.URL.Query().Get("surface"), 10, 64)
-	p, _, err := a.checkSurface(ctx, a.DB, u.ID, id)
+	p, _, err := a.checkSurface(ctx, tx, u.ID, id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		httpkit.Fail(w, 404, "Генерация поверхности изменилась")
 		return
@@ -180,28 +186,37 @@ func (a *Service) PlanetState(w http.ResponseWriter, r *http.Request) {
 		httpkit.Fail(w, 403, err.Error())
 		return
 	}
-	c, err := ReadConfig(ctx, a.DB)
+	c, err := ReadConfig(ctx, tx)
 	if err != nil {
 		httpkit.Internal(w, err)
 		return
 	}
 	var level, count int
 	var cid *int64
-	if err = a.DB.QueryRow(ctx, `SELECT level,company_id,(SELECT count(*) FROM planet_projects WHERE owner_user=u.id AND status IN('funding','building','complete')) FROM users u WHERE id=$1`, u.ID).Scan(&level, &cid, &count); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT level,company_id,(SELECT count(*) FROM planet_projects WHERE owner_user=u.id AND status IN('funding','building','complete')) FROM users u WHERE id=$1`, u.ID).Scan(&level, &cid, &count); err != nil {
 		httpkit.Internal(w, err)
 		return
 	}
-	claims, err := postgres.QueryMaps(ctx, a.DB, `SELECT p.id,p.sector,p.status,p.owner_user,p.owner_company,COALESCE(u.username,c.name) AS owner FROM planet_projects p LEFT JOIN users u ON u.id=p.owner_user LEFT JOIN companies c ON c.id=p.owner_company WHERE p.surface=$1 AND p.status IN('funding','building','complete')`, id)
+	claims, err := postgres.QueryMaps(ctx, tx, `SELECT p.id,p.sector,p.status,p.owner_user,p.owner_company,COALESCE(u.username,c.name) AS owner FROM planet_projects p LEFT JOIN users u ON u.id=p.owner_user LEFT JOIN companies c ON c.id=p.owner_company WHERE p.surface=$1 AND p.status IN('funding','building','complete')`, id)
 	if err != nil {
 		httpkit.Internal(w, err)
 		return
 	}
-	_, corpAllowed, err := corporations.CompanyAccess(ctx, a.DB, u.ID, "colonize")
+	_, corpAllowed, err := corporations.CompanyAccess(ctx, tx, u.ID, "colonize")
 	if err != nil {
 		httpkit.Internal(w, err)
 		return
 	}
-	httpkit.Reply(w, 200, map[string]any{"claims": claims, "settings": c, "level": level, "personal_count": count, "company": cid, "can_corporate": corpAllowed, "habitable": p.Kind == "Садовый мир", "server_time": time.Now()})
+	landing, err := a.landingState(ctx, tx, u.ID, id)
+	if err != nil {
+		httpkit.Internal(w, err)
+		return
+	}
+	if err = tx.Commit(ctx); err != nil {
+		httpkit.Internal(w, err)
+		return
+	}
+	httpkit.Reply(w, 200, map[string]any{"landing": landing, "claims": claims, "settings": c, "level": level, "personal_count": count, "company": cid, "can_corporate": corpAllowed, "habitable": p.Kind == "Садовый мир", "server_time": time.Now()})
 }
 
 type ColonyProject struct {
@@ -240,6 +255,14 @@ func projectAccess(ctx context.Context, q postgres.Querier, uid int64, p ColonyP
 	}
 	cid, allowed, err := corporations.CompanyAccess(ctx, q, uid, "colonize")
 	return p.Company != nil && cid == *p.Company, p.Company != nil && cid == *p.Company && allowed, err
+}
+
+func projectVisitAccess(ctx context.Context, q postgres.Querier, uid int64, p ColonyProject) (bool, error) {
+	if p.User != nil {
+		return *p.User == uid, nil
+	}
+	cid, allowed, err := corporations.CompanyAccess(ctx, q, uid, "planetary.enter")
+	return p.Company != nil && cid == *p.Company && allowed, err
 }
 
 func planetEvent(ctx context.Context, tx pgx.Tx, pid, actor int64, kind string, data any) error {
