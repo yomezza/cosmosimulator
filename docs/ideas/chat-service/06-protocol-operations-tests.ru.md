@@ -1,5 +1,7 @@
 # Chat Service — HTTP/WS v1, служебные контракты, удаление и тесты
 
+**ВНИМАНИЕ для Codex:** HTTP POST mutation routes ниже перечислены как описание операций; для v1 **не разрешать браузерским POST обходить единственную активную WS lease**. Рекомендованы WS-only mutations; исправленные правила в [09](./09-postgresql-final-schema.ru.md), [10](./10-state-machines-and-transactions.ru.md), [12](./12-codex-execution-brief-v1.1.ru.md). Для тестов применять [11](./11-verification-matrix.ru.md).
+
 Версия проектного API 1.0, 2026-10-30. Основание: [01](./01-idea-v1.ru.md), [02](./02-approved-decisions.ru.md), [03](./03-architecture-integration.ru.md), [04](./04-postgresql-design.ru.md), [05](./05-domain-logic.ru.md).
 Все маршруты и payload ниже — **контракт для Codex**, а не утверждение, что endpoint уже существует.
 
