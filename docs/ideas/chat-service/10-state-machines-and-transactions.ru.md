@@ -122,7 +122,7 @@ Cosmic помечает surface retiring и создаёт operation_id, Planet 
 ### T05. Read receipt
 
 1. Client сообщает только фактически видимые message IDs; не «все до последнего» без подтверждения. Никакой автоматический read на доставку WS.
-2. Lease/idempotency + private membership/active check (только свои receipts); lock conversation/member; read IDs только из этого conversation/channel, существующих non-expired messages с seq>join_floor_seq.
+2. Lease/idempotency + private membership/active check (только свои receipts); lock conversation/member; read IDs только из этого conversation/channel, существующих non-expired messages. Сообщения до join_floor_seq тоже можно отмечать прочитанными для «синей точки», но они никогда не входят в unread_count после повторного вступления.
 3. INSERT receipts ON CONFLICT DO NOTHING RETURNING newly; уменьшить unread_count на число **именно вновь прочитанных** пользовательских сообщений автора != actor. Старые сообщения до join_floor_seq могут получать read receipt, но unread_count не уменьшают.
 4. COMMIT; author blue status derived EXISTS receipt(other user), не кешировать blue в messages.
 5. После удаления original его receipt удаляется; пересчёт unread производится в рамках cleanup/job и reconciliation.
@@ -136,7 +136,7 @@ Cosmic помечает surface retiring и создаёт operation_id, Planet 
 
 ### T07. Delete Private conversation
 
-1. lease/idempotency; lock conversation; определить owner/leave reason; изменить state=deleting и закрыть membership/access, создать durable chat_cleanup_jobs(scope,operation_id), отменить invites. COMMIT.
+1. lease/idempotency; если type=dm, захватить **canonical chat_dm_pair_locks до conversation** (не наоборот); затем lock conversation; определить owner/leave reason; изменить state=deleting и закрыть membership/access, создать durable chat_cleanup_jobs(scope,operation_id), отменить invites. COMMIT.
 2. Если сообщений мало, разрешён путь удаления внутри той же TX с полностью подтверждённым физическим удалением. Иначе worker ходит bounded batches; финальный receipt/status Completed только при нуле сообщений/locators/receipts в scope; избранное не трогает.
 3. Нельзя отправить client ACK «удалено навсегда» раньше физического завершения. Первое подтверждение: deleting, отдельный progress endpoint. Пока deleting, всем клиентам channel недоступен.
 4. Restart worker: присваивать lease job с условным UPDATE, продолжить from durable cursor либо сканировать remaining locator, гарантировать идемпотентный DELETE и невоздействие на другие scope.
