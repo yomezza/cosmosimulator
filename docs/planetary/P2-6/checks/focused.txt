@@ -1,0 +1,10 @@
+=== RUN   TestPlanetRestrictedRole180
+--- PASS: TestPlanetRestrictedRole180 (3.78s)
+=== RUN   TestPlanetFoundation150
+--- PASS: TestPlanetFoundation150 (3.36s)
+=== RUN   TestPlanetSchema150
+--- PASS: TestPlanetSchema150 (3.39s)
+=== RUN   TestPlanetPresence200
+--- PASS: TestPlanetPresence200 (4.74s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/server/integration	15.270s

@@ -17,8 +17,9 @@ var ErrDenied = errors.New("access_denied")
 var ErrAuth = errors.New("auth_required")
 
 type Identity struct {
-	User    int64
-	Session string
+	Nickname string
+	User     int64
+	Session  string
 }
 
 func Authenticate(ctx context.Context, q postgres.Querier, r *http.Request) (Identity, error) {
@@ -31,7 +32,7 @@ func Authenticate(ctx context.Context, q postgres.Querier, r *http.Request) (Ide
 func Session(ctx context.Context, q postgres.Querier, hash string) (Identity, error) {
 	var id Identity
 	id.Session = hash
-	err := q.QueryRow(ctx, `SELECT s.user_id FROM planet_session_lookup s WHERE s.token_hash=$1 AND s.expires_at>clock_timestamp() AND NOT s.is_bot`, hash).Scan(&id.User)
+	err := q.QueryRow(ctx, `SELECT s.user_id,s.nickname FROM planet_session_lookup s WHERE s.token_hash=$1 AND s.expires_at>clock_timestamp() AND NOT s.is_bot`, hash).Scan(&id.User, &id.Nickname)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Identity{}, ErrAuth
 	}

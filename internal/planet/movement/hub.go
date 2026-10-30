@@ -17,6 +17,7 @@ var ErrStale = errors.New("session_replaced")
 var ErrSuspended = errors.New("movement_suspended")
 
 type Stamp struct {
+	Actor, Nickname                  string
 	User, Epoch, Generation, Version int64
 	Visit                            string
 }
@@ -45,9 +46,10 @@ type Hub struct {
 	wg      sync.WaitGroup
 }
 type actor struct {
-	scene   *scene.Scene
-	cancel  context.CancelFunc
-	members map[int64]*Member
+	sequence int64
+	scene    *scene.Scene
+	cancel   context.CancelFunc
+	members  map[int64]*Member
 }
 type Member struct {
 	hub             *Hub
@@ -63,6 +65,7 @@ type Member struct {
 	cancelPath      context.CancelFunc
 	tokens          float64
 	refill          time.Time
+	presence        chan Sector
 	updates         chan State
 	done            chan struct{}
 }
@@ -106,7 +109,7 @@ func (h *Hub) Join(stamp Stamp, s *scene.Scene, x, y int) (*Member, error) {
 		h.wg.Add(1)
 		go h.run(ctx, a)
 	}
-	m := &Member{hub: h, actor: a, stamp: stamp, pos: p, saved: p, tokens: 20, refill: time.Now(), updates: make(chan State, 1), done: make(chan struct{})}
+	m := &Member{hub: h, actor: a, stamp: stamp, pos: p, saved: p, tokens: 20, refill: time.Now(), presence: make(chan Sector, 1), updates: make(chan State, 1), done: make(chan struct{})}
 	a.members[stamp.User] = m
 	h.members[stamp.User] = m
 	return m, nil
@@ -270,6 +273,9 @@ func (h *Hub) run(ctx context.Context, a *actor) {
 				if emit%2 == 0 {
 					h.publish(m, now)
 				}
+			}
+			if emit%2 == 0 {
+				h.broadcast(a, now)
 			}
 			h.mu.Unlock()
 		}

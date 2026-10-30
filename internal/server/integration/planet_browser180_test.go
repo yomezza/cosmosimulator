@@ -22,7 +22,8 @@ func TestPlanetBrowser180(t *testing.T) {
 	if os.Getenv("RUN_PLANET_BROWSER") != "1" {
 		t.Skip("set RUN_PLANET_BROWSER=1 with Node/Playwright")
 	}
-	f, c, _, _, site, _ := prepare180(t)
+	f, c, uid, surface, site, _ := prepare180(t)
+	peer, _, _ := peer200(t, f, uid, surface)
 	web := httptest.NewUnstartedServer(http.NotFoundHandler())
 	defer web.Close()
 	base := "http://" + web.Listener.Addr().String()
@@ -62,7 +63,7 @@ func TestPlanetBrowser180(t *testing.T) {
 	ctx, stop := context.WithTimeout(f.ctx, 90*time.Second)
 	defer stop()
 	cmd := exec.CommandContext(ctx, "node", script)
-	input, _ := json.Marshal(map[string]any{"cookie": c.Value, "site": fmt.Sprint(site)})
+	input, _ := json.Marshal(map[string]any{"cookie": c.Value, "peer_cookie": peer.Value, "site": fmt.Sprint(site)})
 	cmd.Stdin = bytes.NewReader(input)
 	cmd.Env = append(os.Environ(), "TERMINAL_TEST_URL="+web.URL, "TERMINAL_TEST_NONCE="+nonce)
 	out, err := cmd.CombinedOutput()

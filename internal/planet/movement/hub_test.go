@@ -112,3 +112,44 @@ func TestLatestGoalAndPermit(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestSectorPresenceCoalesces(t *testing.T) {
+	s, x, y := scenery(t)
+	h := New(context.Background(), 4, 24000)
+	defer h.Close()
+	a, _ := h.Join(Stamp{User: 1, Epoch: 1, Actor: "public-a", Nickname: "Alice"}, s, x, y)
+	b, _ := h.Join(Stamp{User: 2, Epoch: 1, Actor: "public-b", Nickname: "Bob"}, s, x, y)
+	a.Permit(time.Now().Add(time.Second))
+	b.Permit(time.Now().Add(time.Second))
+	// A subscriber that does not read has exactly one replaceable frame.
+	time.Sleep(230 * time.Millisecond)
+	if len(a.presence) != 1 {
+		t.Fatal("unbounded/missing mailbox")
+	}
+	b.Close()
+	time.Sleep(130 * time.Millisecond)
+	v := <-a.Presence()
+	if len(v.Actors) != 1 || v.Actors[0].ID != "public-a" {
+		t.Fatal("coalescing retained a ghost", v)
+	}
+	newer, _ := h.Join(Stamp{User: 1, Epoch: 2, Actor: "public-a", Nickname: "Alice"}, s, x, y)
+	a.Close()
+	if len(newer.Sector().Actors) != 1 {
+		t.Fatal("replacement duplicated actor")
+	}
+	// An unrelated immutable sector cannot leak into this membership.
+	_, x2, y2 := scenery(t)
+	// Generate a distinct scene key using the existing canonical fixture.
+	g := &geography.PlanetSurface{Width: 4, Height: 4, GridW: 2, GridH: 2, SeaLevel: 460, Heights: []int{700, 700, 700, 700}, Water: make([]int, 4), Sectors: []geography.PlanetSector{{Number: 1, Center: geography.SurfacePoint{X: 2, Y: 2}}}}
+	other, err := scene.Generate(context.Background(), scene.Key{Surface: 2, Sector: 1}, g, strings.Repeat("a", 64))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stranger, err := h.Join(Stamp{User: 3, Epoch: 1, Actor: "public-c"}, other, x2, y2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(newer.Sector().Actors) != 1 || len(stranger.Sector().Actors) != 1 {
+		t.Fatal("sector isolation failed")
+	}
+}

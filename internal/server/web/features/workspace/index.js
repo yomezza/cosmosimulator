@@ -3,6 +3,7 @@ import { createMining } from "../mining/index.js";
 import { createMarkets } from "../markets/index.js";
 import { createCorporations } from "../corporations/index.js";
 import { createProfile } from "../profile/index.js";
+import { createAdministrationServices } from "../administration/services/index.js";
 import { createAdministrationUsers } from "../administration/users/index.js";
 import { createAdministrationGameplay } from "../administration/gameplay/index.js";
 import { createAdministrationBenchmark } from "../administration/benchmark/index.js";
@@ -42,6 +43,7 @@ export function initExpedition() {
       "tasks",
       "finance",
       "benchmark",
+      "services",
       "portal",
     ],
     roots = Object.fromEntries(
@@ -111,6 +113,9 @@ export function initExpedition() {
     roots: { gameplay: roots.gameplay },
     act,
     command,
+  });
+  const servicesFeature = createAdministrationServices({
+    root: roots.services,
   });
   const benchmarkFeature = createAdministrationBenchmark({
     roots: { benchmark: roots.benchmark },
@@ -260,6 +265,7 @@ export function initExpedition() {
     guide: renderGuide,
     tasks: renderTasks,
     finance: renderFinance,
+    services: () => servicesFeature.render(),
     benchmark: renderBenchmark,
     portal: renderPortal,
   };
@@ -270,6 +276,7 @@ export function initExpedition() {
     "adminchanges",
     "guide",
     "corporations",
+    "services",
   ]);
   function renderVisible(force = false) {
     if (!Session.signedIn || !d()) return;
@@ -309,9 +316,14 @@ export function initExpedition() {
   window.addEventListener("moduleopen", async (e) => {
     if (!Session.signedIn) return;
     if (
-      ["users", "gameplay", "benchmark", "galaxies", "adminchanges"].includes(
-        e.detail,
-      ) &&
+      [
+        "users",
+        "gameplay",
+        "benchmark",
+        "galaxies",
+        "adminchanges",
+        "services",
+      ].includes(e.detail) &&
       Session.data.state?.user.role !== "admin"
     ) {
       Modules.close(e.detail);
@@ -394,6 +406,7 @@ export function initExpedition() {
       users: usersFeature,
       gameplay: gameplayFeature,
       benchmark: benchmarkFeature,
+      services: servicesFeature,
       corporations: corporationsFeature,
     })[e.detail]?.close?.();
   });
@@ -407,6 +420,7 @@ export function initExpedition() {
     usersFeature.clear();
     gameplayFeature.clear();
     benchmarkFeature.clear();
+    servicesFeature.clear();
     notificationsFeature.clear();
     guideFeature.clear();
     automationFeature.clear();

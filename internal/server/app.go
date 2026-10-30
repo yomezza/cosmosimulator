@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/netip"
 	"os"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -26,6 +27,8 @@ import (
 	"github.com/yomezza/cosmosimulator/internal/terminal"
 	"github.com/yomezza/cosmosimulator/internal/worldstore"
 )
+
+const Version = "0.20.0"
 
 type Config struct {
 	Secure         bool
@@ -52,11 +55,12 @@ type App struct {
 	Notifications  *notifications.Service
 	Ideas          *ideas.Service
 	Benchmark      *benchmark.Service
+	startedAt      time.Time
 	origin         string
 }
 
 func New(db *pgxpool.Pool, config Config) *App {
-	a := &App{DB: db, origin: config.Origin}
+	a := &App{DB: db, origin: config.Origin, startedAt: time.Now()}
 	a.Transfer = &transfer.Service{DB: db, Enabled: os.Getenv("PLANET_ENABLED") == "true"}
 	a.Auth = &account.Service{DB: db, Secure: config.Secure, TrustedProxies: config.TrustedProxies}
 	a.World = &worldstore.Service{DB: db, Auth: a.Auth}

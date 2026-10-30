@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"github.com/yomezza/cosmosimulator/internal/platform/httpkit"
 	"net/http"
 	"net/http/httputil"
@@ -12,13 +13,20 @@ import (
 
 // Same-origin gateway keeps cookies/WS on the terminal origin; upstream is a
 // deployment setting, never user input. Disabled installations keep cosmic alive.
-func (a *App) planetProxy() http.Handler {
+func planetEndpoint() (*url.URL, error) {
 	raw := os.Getenv("PLANET_INTERNAL_URL")
 	if raw == "" {
 		raw = "http://127.0.0.1:8081"
 	}
 	u, err := url.Parse(raw)
-	if err != nil || u.User != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.RawQuery != "" || strings.Trim(u.Path, "/") != "" {
+	if err != nil || u.User != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.RawQuery != "" || u.Fragment != "" || strings.Trim(u.Path, "/") != "" || u.Opaque != "" {
+		return nil, errors.New("planetary_configuration_error")
+	}
+	return u, nil
+}
+func (a *App) planetProxy() http.Handler {
+	u, err := planetEndpoint()
+	if err != nil {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { httpkit.Fail(w, 503, "planetary_configuration_error") })
 	}
 	proxy := httputil.NewSingleHostReverseProxy(u)

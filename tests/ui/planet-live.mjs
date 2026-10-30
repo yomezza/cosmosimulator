@@ -26,6 +26,11 @@ try {
   await context.addCookies([
     { name: "session", value: input.cookie, url: base.href },
   ]);
+  let liveRoute, liveServer;
+  await context.routeWebSocket("**/planet/ws/v1", (route) => {
+    liveRoute = route;
+    liveServer = route.connectToServer();
+  });
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
   const errors = [],
@@ -85,6 +90,30 @@ try {
       ),
     255,
   );
+  const peerContext = await browser.newContext({
+    viewport: { width: 1440, height: 1000 },
+  });
+  await peerContext.addCookies([
+    { name: "session", value: input.peer_cookie, url: base.href },
+  ]);
+  const peerPage = await peerContext.newPage();
+  peerPage.on("pageerror", (e) => errors.push(e.message));
+  await peerPage.goto(base.href);
+  await peerPage.locator("#game").waitFor({ state: "visible" });
+  await peerPage.locator("#startup-screen").waitFor({ state: "hidden" });
+  await peerPage.evaluate(async (site) => {
+    const { openVisit } = await import("/features/planet/visit.js");
+    await openVisit(site);
+  }, input.site);
+  await peerPage
+    .locator('.visit-canvas[data-ready="true"]')
+    .waitFor({ state: "visible" });
+  await page.waitForFunction(
+    () => document.querySelector(".visit-canvas")?.dataset.actors === "2",
+  );
+  await peerPage.waitForFunction(
+    () => document.querySelector(".visit-canvas")?.dataset.actors === "2",
+  );
   const canvas = view.locator("canvas");
   const start = await canvas.evaluate((c) => ({
     x: Number(c.dataset.xq),
@@ -115,6 +144,60 @@ try {
   assert.ok(
     Math.abs((await canvas.evaluate((c) => Number(c.dataset.xq))) - goalX) < 3,
     "zoom changed the character position",
+  );
+  await peerPage.waitForFunction(
+    (x) =>
+      JSON.parse(
+        document.querySelector(".visit-canvas")?.dataset.peers || "[]",
+      ).some((p) => p.x_q > x + 1024),
+    start.x,
+  );
+  const beforeReconnect = await page.evaluate(async () => {
+    const { api } = await import("/core/api.js");
+    return api("planet/visit");
+  });
+  // Cut a real proxied WS, then let the production reconnect code recover it.
+  await liveRoute.close({ code: 1012, reason: "disposable test reconnect" });
+  await liveServer.close();
+  await page.waitForFunction(
+    () => document.querySelector(".visit-canvas")?.dataset.ready === "false",
+  );
+  await view.locator('canvas[data-ready="true"]').waitFor({ state: "visible" });
+  const recovered = await page.evaluate(async () => {
+    const { api } = await import("/core/api.js");
+    return api("planet/visit");
+  });
+  assert.equal(recovered.visit, beforeReconnect.visit);
+  await page.waitForFunction(
+    () => document.querySelector(".visit-canvas")?.dataset.actors === "2",
+  );
+  // Another tab takes over the same account. The old page must stop, rather
+  // than automatically fighting the new controller through reconnect loops.
+  const replacementPage = await context.newPage();
+  await replacementPage.goto(base.href);
+  await replacementPage.locator("#game").waitFor({ state: "visible" });
+  await replacementPage.locator("#startup-screen").waitFor({ state: "hidden" });
+  await replacementPage.evaluate(async () => {
+    const { openVisit } = await import("/features/planet/visit.js");
+    await openVisit();
+  });
+  await replacementPage
+    .locator('.visit-canvas[data-ready="true"]')
+    .waitFor({ state: "visible" });
+  await view
+    .getByRole("button", { name: "Продолжить высадку", exact: true })
+    .waitFor({ state: "visible" });
+  await view
+    .getByRole("button", { name: "Продолжить высадку", exact: true })
+    .click();
+  await view.locator('canvas[data-ready="true"]').waitFor({ state: "visible" });
+  await replacementPage
+    .locator("#window-planet-visit")
+    .getByRole("button", { name: "Продолжить высадку", exact: true })
+    .waitFor({ state: "visible" });
+  await replacementPage.close();
+  await page.waitForFunction(
+    () => document.querySelector(".visit-canvas")?.dataset.actors === "2",
   );
   if (process.env.PLANET_TEST_SCREENSHOT)
     await view.screenshot({ path: process.env.PLANET_TEST_SCREENSHOT });
@@ -148,9 +231,13 @@ try {
     .getByRole("button", { name: "Вернуться в космос", exact: true })
     .click();
   await view.getByText("Возвращение завершено", { exact: true }).waitFor();
+  await peerPage.waitForFunction(
+    () => document.querySelector(".visit-canvas")?.dataset.actors === "1",
+  );
+  await peerContext.close();
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: browser -> cosmic proxy -> planetary WS; click movement, zoom and sprites render; reload resumes same visit/position, return completes; no page errors",
+    "PASS: two real browser accounts see each other and movement; forced WS disconnect automatically resumes the same visit; replaced tabs stop and require explicit takeover; click/zoom/reload/return work; peer leave removes avatar; lazy art; no page errors",
   );
   await context.close();
 } finally {

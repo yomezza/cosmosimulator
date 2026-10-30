@@ -12,6 +12,30 @@ const specs = {
 // This controller only interpolates server positions. Camera scale never changes
 // physical speed, and pointer input sends a selected cell, never a new position.
 export async function createController(canvas, scene, w, { current, target }) {
+  const peers = new Map();
+  const interpolate = (previous, latest, now) => {
+    const expected = latest.time + Math.max(0, now - latest.received) - 100;
+    const span = latest.time - previous.time;
+    const t =
+      span > 0
+        ? Math.max(0, Math.min(1, (expected - previous.time) / span))
+        : 1;
+    return {
+      x: previous.x + (latest.x - previous.x) * t,
+      y: previous.y + (latest.y - previous.y) * t,
+    };
+  };
+  const pose = (a) => ({
+    x: a.x_q / 1024,
+    y: a.y_q / 1024,
+    time: a.server_time,
+    received: performance.now(),
+  });
+  const colour = (id) => {
+    let hash = 0;
+    for (const c of id) hash = (hash * 31 + c.charCodeAt(0)) >>> 0;
+    return `hsl(${hash % 360} 65% 75%)`;
+  };
   const images = new Map();
   await Promise.all(
     [
@@ -61,7 +85,7 @@ export async function createController(canvas, scene, w, { current, target }) {
   let latest = {
       x: w.x_q / 1024,
       y: w.y_q / 1024,
-      time: Date.now(),
+      time: w.server_time || Date.now(),
       received: performance.now(),
     },
     previous = latest,
@@ -137,16 +161,11 @@ export async function createController(canvas, scene, w, { current, target }) {
   );
   function draw(now) {
     if (stopped || !current()) return;
-    const expected = latest.time + Math.max(0, now - latest.received) - 100;
-    const span = latest.time - previous.time;
-    const t =
-      span > 0
-        ? Math.max(0, Math.min(1, (expected - previous.time) / span))
-        : 1;
-    const player = {
-      x: previous.x + (latest.x - previous.x) * t,
-      y: previous.y + (latest.y - previous.y) * t,
-    };
+    if (document.hidden) {
+      raf = requestAnimationFrame(draw);
+      return;
+    }
+    const player = interpolate(previous, latest, now);
     if (follow && !drag) {
       cam.x += (player.x + offset.x - cam.x) * 0.2;
       cam.y += (player.y + offset.y - cam.y) * 0.2;
@@ -171,6 +190,19 @@ export async function createController(canvas, scene, w, { current, target }) {
         Math.abs(o.x - cam.x) < width / zoom / 2 + 20 &&
         Math.abs(o.y - cam.y) < height / zoom / 2 + 20,
     );
+    for (const [id, p] of peers) {
+      const location = interpolate(p.previous, p.latest, now);
+      if (
+        Math.abs(location.x - cam.x) < width / zoom / 2 + 10 &&
+        Math.abs(location.y - cam.y) < height / zoom / 2 + 10
+      )
+        visible.push({
+          name: "colonist",
+          ...location,
+          nickname: p.nickname,
+          colour: colour(id),
+        });
+    }
     visible.push({ name: "colonist", ...player });
     visible.sort((a, b) => a.y - b.y);
     for (const o of visible) {
@@ -179,6 +211,17 @@ export async function createController(canvas, scene, w, { current, target }) {
       if (!img || !s) continue;
       const size = s[0] / 16;
       ctx.drawImage(img, o.x - size * s[1], o.y - size * s[2], size, size);
+      if (o.nickname) {
+        ctx.strokeStyle = o.colour;
+        ctx.lineWidth = 1.3 / zoom;
+        ctx.beginPath();
+        ctx.arc(o.x, o.y, 0.8, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = o.colour;
+        ctx.font = `${11 / zoom}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.fillText(o.nickname, o.x, o.y - size * 0.67, 140 / zoom);
+      }
     }
     if (scene.landing) {
       ctx.strokeStyle = "#80f4d6";
@@ -214,7 +257,36 @@ export async function createController(canvas, scene, w, { current, target }) {
     raf = requestAnimationFrame(draw);
   }
   raf = requestAnimationFrame(draw);
+  function syncPeers() {
+    canvas.dataset.actors = String(peers.size + 1);
+    canvas.dataset.peers = JSON.stringify(
+      [...peers].map(([id, p]) => ({
+        actor: id,
+        x_q: Math.round(p.latest.x * 1024),
+        y_q: Math.round(p.latest.y * 1024),
+      })),
+    );
+  }
   return {
+    actors(list, replace = false) {
+      if (replace) peers.clear();
+      for (const a of list) {
+        if (a.actor === w.actor) continue;
+        const latest = pose(a),
+          old = peers.get(a.actor);
+        if (old && latest.time < old.latest.time) continue;
+        peers.set(a.actor, {
+          nickname: a.nickname,
+          previous: old?.latest || latest,
+          latest,
+        });
+      }
+      syncPeers();
+    },
+    remove(id) {
+      peers.delete(id);
+      syncPeers();
+    },
     update(state) {
       canvas.dataset.moving = String(state.moving);
       if (
@@ -260,6 +332,7 @@ export async function createController(canvas, scene, w, { current, target }) {
       canvas.removeEventListener("pointerup", up);
       canvas.removeEventListener("pointercancel", up);
       canvas.removeEventListener("contextmenu", context);
+      peers.clear();
       images.clear();
       terrain.width = terrain.height = 0;
     },

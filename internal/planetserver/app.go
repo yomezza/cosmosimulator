@@ -16,8 +16,8 @@ import (
 	"github.com/yomezza/cosmosimulator/internal/platform/httpkit"
 )
 
-const Version = "0.19.0"
-const Stage = "P2-5"
+const Version = "0.20.0"
+const Stage = "P2-6"
 
 // App wires only planetary components. New does not start goroutines or migrate.
 type App struct {
@@ -79,7 +79,7 @@ func (a *App) Handler() http.Handler {
 		}
 		a.health(w, 200, "ready")
 	})
-	// No ticket is accepted until the actual session/handoff implementation exists.
+	// Authorization and handoff are enforced before activating a controller.
 	mux.HandleFunc("GET /planet/ws/v1", a.websocket)
 	mux.HandleFunc("GET /planet/api/v1/scene", a.sceneView)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -103,5 +103,6 @@ func (a *App) Handler() http.Handler {
 }
 
 func (a *App) health(w http.ResponseWriter, status int, reason string) {
-	httpkit.Reply(w, status, map[string]any{"service": "cosmosimulator-planet", "version": Version, "stage": Stage, "status": reason, "gameplay_ready": status == 200 && reason == "ready", "multiplayer_ready": false, "landing_ready": status == 200 && reason == "ready"})
+	lease, _ := a.coordinator.Current()
+	httpkit.Reply(w, status, map[string]any{"schema_version": planetruntime.SchemaVersion, "runtime_instance": lease.Owner, "runtime_fence": lease.Fence, "service": "cosmosimulator-planet", "version": Version, "stage": Stage, "status": reason, "gameplay_ready": status == 200 && reason == "ready", "multiplayer_ready": status == 200 && reason == "ready", "landing_ready": status == 200 && reason == "ready"})
 }

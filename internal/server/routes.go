@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yomezza/cosmosimulator/internal/administration"
+	planetruntime "github.com/yomezza/cosmosimulator/internal/planet/runtime"
 	"github.com/yomezza/cosmosimulator/internal/platform/httpkit"
 )
 
@@ -16,6 +18,8 @@ var Assets embed.FS
 
 func (a *App) Handler() http.Handler {
 	m := http.NewServeMux()
+	target, _ := planetEndpoint()
+	m.HandleFunc("GET /api/admin/services", a.Administration.Services(administration.ServicesOptions{Version: Version, Started: a.startedAt, PlanetURL: target, PlanetEnabled: func() bool { return a.Transfer.Enabled }, ExpectedSchema: planetruntime.SchemaVersion}))
 	m.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		c, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()

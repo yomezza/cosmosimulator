@@ -1,0 +1,4 @@
+=== RUN   TestAdminServices200
+--- PASS: TestAdminServices200 (2.44s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/server/integration	2.449s

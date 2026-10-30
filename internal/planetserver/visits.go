@@ -11,6 +11,7 @@ import (
 	"github.com/yomezza/cosmosimulator/internal/planet/access"
 	"github.com/yomezza/cosmosimulator/internal/planet/movement"
 	"github.com/yomezza/cosmosimulator/internal/planet/scene"
+	"github.com/yomezza/cosmosimulator/internal/planet/scenestore"
 	"github.com/yomezza/cosmosimulator/internal/planet/visits"
 	"github.com/yomezza/cosmosimulator/internal/platform/httpkit"
 	"net/http"
@@ -133,6 +134,7 @@ func (a *App) websocket(w http.ResponseWriter, r *http.Request) {
 	var welcome visits.Welcome
 	var pilot *movement.Member
 	var localScene *scene.Scene
+	var activeFence scenestore.Fence
 	if err == nil {
 		pin, e := a.scenes.Acquire(prepare, in.Key)
 		err = e
@@ -141,6 +143,7 @@ func (a *App) websocket(w http.ResponseWriter, r *http.Request) {
 			f, e := a.sceneFence()
 			err = e
 			if err == nil {
+				activeFence = f
 				localScene = pin.Scene()
 				err = func() error {
 					if err := takeGate(prepare, gate); err != nil {
@@ -165,7 +168,7 @@ func (a *App) websocket(w http.ResponseWriter, r *http.Request) {
 						return e
 					}
 					welcome.Speed = a.config.MoveSpeed
-					pilot, e = a.motion.Join(movement.Stamp{User: id.User, Visit: welcome.Visit, Epoch: welcome.Epoch, Generation: welcome.Generation, Version: welcome.PositionVersion}, localScene, welcome.X, welcome.Y)
+					pilot, e = a.motion.Join(movement.Stamp{Actor: welcome.Actor, Nickname: welcome.Nickname, User: id.User, Visit: welcome.Visit, Epoch: welcome.Epoch, Generation: welcome.Generation, Version: welcome.PositionVersion}, localScene, welcome.X, welcome.Y)
 					if e == nil {
 						pilot.Permit(time.Now().Add(2 * time.Second))
 					}
@@ -178,28 +181,21 @@ func (a *App) websocket(w http.ResponseWriter, r *http.Request) {
 	if pinRelease != nil {
 		defer pinRelease()
 	}
-	send := func(kind string, payload any) error {
-		write, done := context.WithTimeout(r.Context(), 3*time.Second)
-		defer done()
-		body := message(kind, payload)
-		if pilot != nil {
-			body["visit"] = welcome.Visit
-			body["connection_epoch"] = welcome.Epoch
-		}
-		return wsjson.Write(write, c, body)
+	out := &stream{c: c, ctx: r.Context()}
+	if pilot != nil {
+		out.visit = welcome.Visit
+		out.epoch = welcome.Epoch
 	}
+	send := out.send
 	if err != nil {
 		_ = send("error", map[string]string{"code": publicError(err)})
 		c.CloseNow()
 		return
 	}
-	f, err := a.sceneFence()
-	if err != nil {
-		return
-	}
+	f := activeFence
 	ended := false
 	defer a.disconnectMotion(id, welcome, f, pilot, gate, &ended)
-	if send("welcome", welcome) != nil {
+	if send("welcome", welcome) != nil || out.snapshot(pilot) != nil {
 		return
 	}
 	run, stop := context.WithCancel(r.Context())
@@ -226,8 +222,11 @@ func (a *App) websocket(w http.ResponseWriter, r *http.Request) {
 
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
-	checkpoint := time.NewTicker(5 * time.Second)
+	checkpoint := time.NewTicker(5*time.Second + time.Duration(id.User%500)*time.Millisecond)
 	defer checkpoint.Stop()
+	ping := time.NewTicker(15 * time.Second)
+	defer ping.Stop()
+	var lastResync time.Time
 	var seq int64 = 1
 	var accepted, reported int64 = -1, -1
 	tokens, lastRefill := 20.0, time.Now()
@@ -253,8 +252,15 @@ func (a *App) websocket(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 			}
-			state.Path = nil
-			if send("state.delta", state) != nil {
+		case world := <-pilot.Presence():
+			if out.delta(pilot, world) != nil {
+				return
+			}
+		case <-ping.C:
+			ctx, done := context.WithTimeout(run, 5*time.Second)
+			err := c.Ping(ctx)
+			done()
+			if err != nil {
 				return
 			}
 		case msg := <-received:
@@ -300,9 +306,22 @@ func (a *App) websocket(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 			case "resync":
-				state := pilot.Snapshot()
-				welcome.X, welcome.Y = state.X, state.Y
-				if send("welcome", welcome) != nil {
+				var input struct {
+					Last int64 `json:"last_server_seq"`
+				}
+				decoder := json.NewDecoder(bytes.NewReader(msg.Payload))
+				decoder.DisallowUnknownFields()
+				if decoder.Decode(&input) != nil || input.Last < 0 {
+					if send("error", map[string]string{"code": "invalid_resync"}) != nil {
+						return
+					}
+					continue
+				}
+				if time.Since(lastResync) < time.Second {
+					continue
+				}
+				lastResync = time.Now()
+				if out.snapshot(pilot) != nil {
 					return
 				}
 			case "leave":

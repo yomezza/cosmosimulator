@@ -55,8 +55,11 @@ DROP TRIGGER IF EXISTS planet_reserved_ship ON ships;
 CREATE TRIGGER planet_reserved_ship BEFORE UPDATE ON ships FOR EACH ROW EXECUTE FUNCTION planet_reserved_ship();
 UPDATE planet_schema_state SET version=4 WHERE id=1 AND version=3;
 -- Narrow account-session lookup: no password hash or wallet fields for planet.
-CREATE OR REPLACE VIEW planet_session_lookup AS
- SELECT s.token_hash,s.user_id,s.expires_at,u.is_bot FROM sessions s JOIN users u ON u.id=s.user_id;
+DO $$BEGIN
+ IF to_regclass('planet_session_lookup') IS NULL THEN
+  EXECUTE 'CREATE VIEW planet_session_lookup AS SELECT s.token_hash,s.user_id,s.expires_at,u.is_bot FROM sessions s JOIN users u ON u.id=s.user_id';
+ END IF;
+END $$;
 ALTER TABLE planet_transfer_controls ADD COLUMN IF NOT EXISTS checked_at timestamptz NOT NULL DEFAULT '-infinity';
 ALTER TABLE planet_visits ADD COLUMN IF NOT EXISTS checked_at timestamptz NOT NULL DEFAULT '-infinity';
 CREATE INDEX IF NOT EXISTS planet_transfer_check ON planet_transfer_controls(checked_at,user_id) WHERE reserved_ship IS NOT NULL OR revoke_requested_at IS NOT NULL;

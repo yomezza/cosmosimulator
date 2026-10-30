@@ -1,0 +1,10 @@
+✔ ES module graph has no missing dependencies, implicit globals or reversed UI dependencies (436.330752ms)
+✔ admin service cards show connectivity, centered names and outlined status tags (1417.684353ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1818.893012

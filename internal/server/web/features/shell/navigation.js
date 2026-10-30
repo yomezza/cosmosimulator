@@ -42,6 +42,7 @@ export function initNavigation() {
     ["tasks", "Планировщик задач", 900, 670],
     ["finance", "История финансов", 820, 580],
     ["benchmark", "Бенчмарк", 960, 660],
+    ["services", "Статус служб", 820, 600],
     ["portal", "Портал Эдема", 700, 560],
   ])
     Modules.create(id, title, w, h, {
@@ -52,6 +53,7 @@ export function initNavigation() {
         "galaxies",
         "adminchanges",
         "benchmark",
+        "services",
       ].includes(id)
         ? "admin"
         : undefined,

@@ -1,0 +1,13 @@
+✔ ES module graph has no missing dependencies, implicit globals or reversed UI dependencies (727.605012ms)
+✔ planet scenes load public art lazily, reuse six textures and keep geography intact (2810.025987ms)
+✔ texture failure falls back and retries without replacing geography (1724.110844ms)
+✔ late images cannot resurrect a scene after logout (1346.880715ms)
+✔ surface cards locate shared landing infrastructure and reflect current access (2156.584166ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8523.670477

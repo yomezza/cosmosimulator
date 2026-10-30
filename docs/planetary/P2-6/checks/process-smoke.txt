@@ -1,0 +1,6 @@
+PASS: two independent Linux executables, shared PostgreSQL/schema; no planet bootstrap or cosmic tick mutation; gameplay_ready=true
+PASS: SIGTERM stops planet cleanly, releases lease; cosmic HTTP remains available
+PASS: after SIGKILL replacement waits for lease expiry and receives a higher fence
+PASS: independent shutdown; cosmic restart keeps schema marker 6 and extended session view
+PASS: process logs do not contain DATABASE_URL or inherited ADMIN_PASSWORD
+Disposable test DB removed.

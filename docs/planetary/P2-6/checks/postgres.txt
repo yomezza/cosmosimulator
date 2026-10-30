@@ -1,0 +1,92 @@
+?   	github.com/yomezza/cosmosimulator/cmd/cosmosimulator	[no test files]
+?   	github.com/yomezza/cosmosimulator/cmd/cosmosimulator-planet	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/account	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/administration	[no test files]
+=== RUN   TestPackageBoundaries
+--- PASS: TestPackageBoundaries (0.01s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/architecture	0.012s
+?   	github.com/yomezza/cosmosimulator/internal/benchmark	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/colonies	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/commands	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/commerce	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/commerce/catalog	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/corporations	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/events	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/fleet	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/gameplay	[no test files]
+testing: warning: no tests to run
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/geography	0.004s [no tests to run]
+?   	github.com/yomezza/cosmosimulator/internal/ideas	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/initialization	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/inventory	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/logistics	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/mining	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/navigation	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/notifications	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/planet/access	[no test files]
+=== RUN   TestMovementDistanceAndLifecycle
+--- PASS: TestMovementDistanceAndLifecycle (0.18s)
+=== RUN   TestLatestGoalAndPermit
+--- PASS: TestLatestGoalAndPermit (0.17s)
+=== RUN   TestSectorPresenceCoalesces
+--- PASS: TestSectorPresenceCoalesces (0.54s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/movement	0.895s
+=== RUN   TestBoundedPathsAndCorners
+--- PASS: TestBoundedPathsAndCorners (0.00s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/pathing	0.010s
+testing: warning: no tests to run
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/runtime	0.004s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/scene	0.002s [no tests to run]
+?   	github.com/yomezza/cosmosimulator/internal/planet/scenestore	[no test files]
+testing: warning: no tests to run
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/terrain	0.002s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/territory	0.003s [no tests to run]
+?   	github.com/yomezza/cosmosimulator/internal/planet/transfer	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/planet/visits	[no test files]
+=== RUN   TestSlowStreamDeadline
+--- PASS: TestSlowStreamDeadline (3.01s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planetserver	3.010s
+?   	github.com/yomezza/cosmosimulator/internal/planner	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/platform/httpkit	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/platform/idempotency	[no test files]
+testing: warning: no tests to run
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/platform/postgres	0.011s [no tests to run]
+?   	github.com/yomezza/cosmosimulator/internal/platform/text	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/research	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/resources	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/server	[no test files]
+=== RUN   TestPlanetHandoff180
+--- PASS: TestPlanetHandoff180 (5.05s)
+=== RUN   TestPlanetTicketRecovery180
+--- PASS: TestPlanetTicketRecovery180 (3.83s)
+=== RUN   TestPlanetRestrictedRole180
+--- PASS: TestPlanetRestrictedRole180 (3.75s)
+=== RUN   TestPlanetMovement190
+--- PASS: TestPlanetMovement190 (3.24s)
+=== RUN   TestPlanetCheckpoints190
+--- PASS: TestPlanetCheckpoints190 (7.82s)
+=== RUN   TestPlanetPresence200
+--- PASS: TestPlanetPresence200 (3.79s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/server/integration	27.488s
+?   	github.com/yomezza/cosmosimulator/internal/simulation	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/terminal	[no test files]
+testing: warning: no tests to run
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/universe	0.002s [no tests to run]
+?   	github.com/yomezza/cosmosimulator/internal/wallet	[no test files]
+testing: warning: no tests to run
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/worldstore	0.004s [no tests to run]

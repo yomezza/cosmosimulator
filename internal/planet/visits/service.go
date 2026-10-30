@@ -9,6 +9,7 @@ import (
 	"github.com/yomezza/cosmosimulator/internal/planet/access"
 	"github.com/yomezza/cosmosimulator/internal/planet/scene"
 	"github.com/yomezza/cosmosimulator/internal/planet/scenestore"
+	"time"
 )
 
 var ErrVisit = errors.New("visit_unavailable")
@@ -24,6 +25,9 @@ type Intent struct {
 	Key                    scene.Key
 }
 type Welcome struct {
+	Actor           string  `json:"actor"`
+	Nickname        string  `json:"nickname"`
+	Time            int64   `json:"server_time"`
 	Generation      int64   `json:"-"`
 	PositionVersion int64   `json:"-"`
 	Speed           float64 `json:"speed"`
@@ -82,7 +86,7 @@ func (a *Service) locked(ctx context.Context, uid int64, f scenestore.Fence) (pg
 	}
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared(784218)`); err == nil {
 		var n int64
-		err = tx.QueryRow(ctx, `SELECT fence FROM planet_runtime_leases WHERE id=1 AND owner_id=$1 AND fence=$2 AND expires_at>clock_timestamp() AND EXISTS(SELECT 1 FROM planet_schema_state WHERE id=1 AND version=5) FOR SHARE`, f.Owner, f.Number).Scan(&n)
+		err = tx.QueryRow(ctx, `SELECT fence FROM planet_runtime_leases WHERE id=1 AND owner_id=$1 AND fence=$2 AND expires_at>clock_timestamp() AND EXISTS(SELECT 1 FROM planet_schema_state WHERE id=1 AND version=6) FOR SHARE`, f.Owner, f.Number).Scan(&n)
 		if errors.Is(err, pgx.ErrNoRows) {
 			err = scenestore.ErrFence
 		}
@@ -103,7 +107,7 @@ func (a *Service) Activate(ctx context.Context, id access.Identity, in Intent, s
 		return w, err
 	}
 	defer tx.Rollback(context.Background())
-	if _, err = access.Session(ctx, tx, id.Session); err != nil {
+	if id, err = access.Session(ctx, tx, id.Session); err != nil {
 		return w, err
 	}
 	site, err := access.Landing(ctx, tx, id.User, in.Site, in.Ship)
@@ -170,12 +174,14 @@ func (a *Service) Activate(ctx context.Context, id access.Identity, in Intent, s
 		return w, err
 	}
 	w.Generation = in.Generation
-	if err = tx.QueryRow(ctx, `SELECT position_version FROM planet_characters WHERE user_id=$1`, id.User).Scan(&w.PositionVersion); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT position_version,public_id::text FROM planet_characters WHERE user_id=$1`, id.User).Scan(&w.PositionVersion, &w.Actor); err != nil {
 		return w, err
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return w, err
 	}
+	w.Nickname = id.Nickname
+	w.Time = time.Now().UnixMilli()
 	w.Planet = site.Name
 	w.Surface = fmtInt(in.Key.Surface)
 	w.Sector = in.Key.Sector
