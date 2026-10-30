@@ -69,8 +69,8 @@
 
 ### Planet ↔ Chat
 
-- Нужен новый внутренний endpoint (пока **не реализован**): GET /planet/internal/chat/v1/presence?user_id=..., mTLS или restricted internal service auth + no public exposure. Ответ: {user_id,visit_id,state,connection_epoch,runtime_fence,surface_id,sector_number,revision,valid_until,capability_generation}. Валидный state=active + совпадение authenticated user.
-- Контракт определяет fence при переходе секторной границы/leave/revoke, чтобы авторизация отправки не продолжалась по старому сектору после transition. Служба Chat не пишет в planet_visits и не выдумывает location.
+- **Предпочтительный контракт без дополнительного HTTP на каждое сообщение:** расширенная Planet-owned current visit row (в общем DB_SCHEMA) с полями user_id,visit_id,state,connection_epoch,current_surface,current_sector,runtime_fence,last_presence_at; только Planet выполняет UPDATE и транзакционно меняет current_sector при переходе. Chat имеет только SELECT. Для spatial send Chat внутри своей короткой DB TX делает SELECT ... FOR SHARE по user_id, подтверждает state=active, свежесть last_presence_at <=2s и нужный sector/surface. Конкурирующий UPDATE Planet при переходе/leave сериализуется. Проверять runtime lease и health Planet. Схема не существует в текущем P2-3, до P2-4+ недоступна.
+- Контракт использует row-lock fence на той же Planet-owned строке для send: без двойных обращений HTTP и без второго хранения географии. Если Planet в будущем изменит model visit, сохранить этот инвариант посредством эквивалентной одной authoritative строки/версии. Chat не пишет в planet_visits и не выдумывает location.
 - Если Planet недоступен/active presence отсутствует → недоступны только Planet/Sector. Остальные разделы не ограничиваются (при доступном Cosmic/Chat).
 - Пока P2-4/5 не умеют достоверный визит, feature flag spatial_chat=false. Никакого чтения legacy planet_visits для допусков.
 
