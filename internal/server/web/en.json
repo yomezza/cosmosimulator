@@ -1535,5 +1535,12 @@
   "Повторить загрузку текстур": "Retry loading textures",
   "Часть текстур недоступна. Используется доступное оформление.": "Some textures are unavailable. Available surface styling is being used.",
   "Галактическая карта Эдема": "Edem galactic map",
-  "Скрыть пароль": "Hide password"
+  "Скрыть пароль": "Hide password",
+  "На рассмотрении": "Under review",
+  "Одобрено": "Approved",
+  "Не одобрено": "Not approved",
+  "Статус идеи": "Idea status",
+  "Сохранить статус": "Save status",
+  "Некорректный статус идеи": "Invalid idea status",
+  "Идея не найдена": "Idea not found"
 }

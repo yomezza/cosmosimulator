@@ -23,7 +23,7 @@ CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium npm test
 
 `CHROMIUM_NO_SANDBOX=1` нужен только в изолированной среде разработки, где Chromium иначе не запускается. По умолчанию sandbox включён. В тестах нет абсолютных путей среды Codex.
 
-## Набор 0.14.2
+## Набор 0.14.4
 
 | Файл | Число | Проверяемое поведение |
 |---|---:|---|
@@ -36,8 +36,9 @@ CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium npm test
 | `architecture.test.mjs` | 1 | Импорты, browser globals, направления core/UI/features, один module entry |
 | `logistics.test.mjs` | 3 | Склад → трюм без legacy globals, drag при polling, пакетный перенос ресурсов |
 | `terminal-flows.test.mjs` | 11 | Отмена форм, станция доставки, обновление флота/picker, потеря прав и поздние ответы, отсчёт квот |
+| `ideas.test.mjs` | 1 | Статусы идей: цвет только рамки, сохранение администратором и отображение игроку |
 
-Итого **59 тестов**, без TODO и скрытых ожидаемых ошибок. Пять диагностических требований M0 стали обычными регрессиями; прежнего `knownDefect` wrapper нет. `npm run test:baseline` и `npm run test:regressions` запускают соответствующие поднаборы.
+Итого **60 тестов**, без TODO и скрытых ожидаемых ошибок. Пять диагностических требований M0 стали обычными регрессиями; прежнего `knownDefect` wrapper нет. `npm run test:baseline` и `npm run test:regressions` запускают соответствующие поднаборы.
 
 Fixtures синтетические. Они повторяют необходимые DTO, но не реализуют игровую экономику и серверную авторизацию. Mock 403 не доказывает защиту Go API. Реальные anonymous guards, CSP/MIME и доставку всех embedded assets проверяет `internal/server/integration/ui_contracts_test.go`. Полномочия вошедшего игрока и транзакционные инварианты проверяются в DB integration.
 

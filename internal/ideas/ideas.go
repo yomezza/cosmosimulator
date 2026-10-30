@@ -52,7 +52,7 @@ func (a *Service) Ideas(w http.ResponseWriter, r *http.Request) {
 		}
 		pages := max(1, (total+9)/10)
 		page = min(page, pages)
-		items, err := postgres.QueryMaps(ctx, a.DB, `SELECT i.id,i.title,i.description,i.category,i.created_at,COALESCE(u.username,i.author_name) AS author FROM player_ideas i LEFT JOIN users u ON u.id=i.user_id WHERE ($1::bigint=0 OR i.user_id=$1) ORDER BY i.id DESC LIMIT 10 OFFSET $2`, owner, (page-1)*10)
+		items, err := postgres.QueryMaps(ctx, a.DB, `SELECT i.id,i.title,i.description,i.category,i.status,i.created_at,COALESCE(u.username,i.author_name) AS author FROM player_ideas i LEFT JOIN users u ON u.id=i.user_id WHERE ($1::bigint=0 OR i.user_id=$1) ORDER BY i.id DESC LIMIT 10 OFFSET $2`, owner, (page-1)*10)
 		if err != nil {
 			httpkit.Internal(w, err)
 			return
@@ -133,4 +133,37 @@ func (a *Service) Ideas(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpkit.Reply(w, 201, map[string]any{"id": id, "saved": true})
+}
+
+// Review changes only moderation state; submissions cannot set their own status.
+func (a *Service) Review(w http.ResponseWriter, r *http.Request) {
+	u, ok := a.Auth.User(w, r)
+	if !ok {
+		return
+	}
+	if u.Role != "admin" {
+		httpkit.Fail(w, 403, "Требуется роль администратора")
+		return
+	}
+	var in struct {
+		ID     int64  `json:"id"`
+		Status string `json:"status"`
+	}
+	if !httpkit.Decode(w, r, &in) {
+		return
+	}
+	if in.ID <= 0 || (in.Status != "pending" && in.Status != "approved" && in.Status != "rejected") {
+		httpkit.Fail(w, 400, "Некорректный статус идеи")
+		return
+	}
+	tag, err := a.DB.Exec(r.Context(), `UPDATE player_ideas SET status=$2 WHERE id=$1`, in.ID, in.Status)
+	if err != nil {
+		httpkit.Internal(w, err)
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		httpkit.Fail(w, 404, "Идея не найдена")
+		return
+	}
+	httpkit.Reply(w, 200, map[string]any{"id": in.ID, "status": in.Status})
 }

@@ -1,8 +1,8 @@
-# Cosmosimulator · 0.14.3
+# Cosmosimulator · 0.14.4
 
 Лёгкая браузерная космическая экономическая песочница: Go + PostgreSQL, встроенные HTML/CSS/JavaScript и SVG. Один Windows x64 `.exe` подключается к существующей базе и обслуживает игру по HTTP. npm для запуска и сборки не нужен.
 
-[Изменения 0.14.3](release-notes/v0.14.3.md) · [Реестр игровых идей](docs/roadmap/README.md) · [72 улучшения интерфейса](docs/roadmap/ui-0.3.3.md) · [Отложенное](docs/roadmap/deferred.md) · [Отклонённое](docs/roadmap/rejected.md).
+[Изменения 0.14.4](release-notes/v0.14.4.md) · [Реестр игровых идей](docs/roadmap/README.md) · [72 улучшения интерфейса](docs/roadmap/ui-0.3.3.md) · [Отложенное](docs/roadmap/deferred.md) · [Отклонённое](docs/roadmap/rejected.md).
 
 [Разделение Go-сервера 0.14.0](docs/refactoring/server/README.ru.md) · [Рефакторинг интерфейса 0.13.0: архитектура и проверки](docs/refactoring/ui/IMPLEMENTATION-0.13.0.ru.md) · [Границы космической и будущей планетарной служб](docs/refactoring/service-boundaries.ru.md). Node/Playwright используются только для разработки; Windows-службе они не нужны.
 
@@ -25,7 +25,7 @@ $env:HTTP_ADDR = '127.0.0.1:8080'
 # Только для первоначального создания администратора:
 $env:ADMIN_USERNAME = 'operator'
 $env:ADMIN_PASSWORD = 'YOUR_PASSWORD'
-.\downloads\cosmosimulator-v0.14.3-windows-amd64.exe
+.\downloads\cosmosimulator-v0.14.4-windows-amd64.exe
 ```
 
 Откройте `http://localhost:8080`. Остановка — Ctrl+C. После создания администратора удалите `ADMIN_USERNAME` и `ADMIN_PASSWORD`; bootstrap не меняет существующие пароли и не повышает игрока до администратора. `.env.example` — справочник, `.env` автоматически не читается.
@@ -311,7 +311,7 @@ TEST_DATABASE_URL='postgres://cosmos:password@127.0.0.1:5432/cosmosimulator_test
 Без `TEST_DATABASE_URL` интеграционные тесты пропускаются. Для них нужна одноразовая база с суффиксом `_test` и создание схем. Проверяются миграция из 0.3.2, изоляция схем, авторизация/права, флот, асинхронная разведка, квоты, конкурентная торговля, склады/доставки, корпорации, портал и отсутствие повторных начислений.
 
 ```sh
-CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags='-s -w' -o downloads/cosmosimulator-v0.14.3-windows-amd64.exe ./cmd/cosmosimulator
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags='-s -w' -o downloads/cosmosimulator-v0.14.4-windows-amd64.exe ./cmd/cosmosimulator
 sha256sum downloads/*.exe > downloads/SHA256SUMS
 ```
 

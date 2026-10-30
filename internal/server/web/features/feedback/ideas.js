@@ -22,6 +22,20 @@ export function initIdeas() {
     economy: "Экономика",
     other: "Другое",
   };
+  const statuses = {
+    pending: "На рассмотрении",
+    approved: "Одобрено",
+    rejected: "Не одобрено",
+  };
+  function statusTag(status = "pending") {
+    const tag = n(
+      "span",
+      tr(statuses[status] || statuses.pending),
+      "idea-status",
+    );
+    tag.dataset.status = status;
+    return tag;
+  }
   const uuid = () =>
     [...crypto.getRandomValues(new Uint32Array(4))]
       .map((v) => v.toString(16).padStart(8, "0"))
@@ -235,10 +249,35 @@ export function initIdeas() {
     }
     root.append(
       tag(item.category),
+      statusTag(item.status),
       n("h2", item.title),
       n("p", item.author + " · " + date(item.created_at), "idea-meta"),
       n("p", item.description, "idea-description"),
     );
+    if (admin()) {
+      const controls = n("div", undefined, "inline-controls idea-review");
+      let status = item.status || "pending";
+      UI.choice(
+        controls,
+        "Статус идеи",
+        Object.entries(statuses),
+        status,
+        (value) => {
+          status = value;
+        },
+      );
+      controls.append(
+        b("Сохранить статус", async () => {
+          const epoch = Session.epoch;
+          if (!admin()) return;
+          await api("admin/ideas", { id: item.id, status });
+          if (epoch !== Session.epoch || !admin()) return;
+          await load("adminideas");
+          if (Modules.isOpen("ideas")) await load("ideas");
+        }),
+      );
+      root.append(controls);
+    }
     root.scrollTop = scroll;
   }
   function renderHistory(id) {
@@ -271,6 +310,7 @@ export function initIdeas() {
         card.classList.toggle("selected", state.selected === item.id);
         card.append(
           tag(item.category),
+          statusTag(item.status),
           n("b", item.title),
           n("small", item.author + " · " + date(item.created_at)),
         );
@@ -283,6 +323,7 @@ export function initIdeas() {
         summary.append(
           n("b", item.title),
           tag(item.category),
+          statusTag(item.status),
           n("small", date(item.created_at)),
         );
         details.append(summary, n("p", item.description, "idea-description"));

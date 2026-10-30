@@ -4761,3 +4761,19 @@ button.picker-button.system-picker .picker-chevron {
   color: var(--muted);
   font-size: 10px;
 }
+
+.idea-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 2px 8px;
+  margin-left: 6px;
+  border: 1px solid #e6a454;
+  background: transparent;
+  color: var(--text);
+  font: 11px/1.4 system-ui;
+}
+.idea-status[data-status="approved"] { border-color: #69bd88; }
+.idea-status[data-status="rejected"] { border-color: #d76d73; }
+.idea-review { margin-top: 16px; }

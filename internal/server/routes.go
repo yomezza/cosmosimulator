@@ -67,6 +67,7 @@ func (a *App) Handler() http.Handler {
 	m.HandleFunc("POST /api/logistics", a.Logistics.Logistics)
 	m.HandleFunc("GET /api/ideas", a.Ideas.Ideas)
 	m.HandleFunc("POST /api/ideas", a.Ideas.Ideas)
+	m.HandleFunc("POST /api/admin/ideas", a.Ideas.Review)
 	m.HandleFunc("GET /api/planner", a.Planner.Planner)
 	m.HandleFunc("POST /api/planner", a.Planner.Planner)
 	m.HandleFunc("POST /api/admin/user", a.Administration.EditUser)
