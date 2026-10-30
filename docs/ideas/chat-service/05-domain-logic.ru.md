@@ -67,7 +67,7 @@
 6. Private: для каждого active участника кроме автора увеличить unread_count на 1. Записать outbox с IDs без текста + operation result. COMMIT.
 7. Только после COMMIT отправить ACK. Фан-аут WS не является подтверждением сохранения.
 
-Для spatial **нужен commit fence**: подтверждение Planet при конце подготовки должно оставаться валидным на момент SQL COMMIT. Не держать длинную PostgreSQL транзакцию на HTTP-запрос к Planet. Реализация P2-4+ должна предоставить проверяемый epoch/revision либо короткий consistent snapshot в общем хранилище, которым владеет Planet; если этого пока нет — пространственная отправка fail closed, не использовать legacy planet_visits.
+Для spatial commit-fence — короткая SQL tx с SELECT ... FOR SHARE по **Planet-owned current-visit row** (только после реализации P2-4+). Проверить state=active, user_id, connection_epoch/current_surface/current_sector, last_presence_at и актуальный runtime lease. Все переходы секторной границы, выход, разрыв и отзыв в Planet обязаны UPDATE ту же строку; конкурентное изменение будет сериализовано этим row lock. Никогда не держать DB tx на HTTP запрос и не использовать нынешнюю legacy planet_visits без этих полей. Пока контракт отсутствует — spatial fail closed.
 
 ## 5. Прочтение, упоминания, уведомления
 
