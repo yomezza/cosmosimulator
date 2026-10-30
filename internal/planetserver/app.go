@@ -9,14 +9,15 @@ import (
 	"sync/atomic"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/yomezza/cosmosimulator/internal/planet/movement"
 	planetruntime "github.com/yomezza/cosmosimulator/internal/planet/runtime"
 	"github.com/yomezza/cosmosimulator/internal/planet/scenestore"
 	"github.com/yomezza/cosmosimulator/internal/planet/visits"
 	"github.com/yomezza/cosmosimulator/internal/platform/httpkit"
 )
 
-const Version = "0.18.0"
-const Stage = "P2-4"
+const Version = "0.19.0"
+const Stage = "P2-5"
 
 // App wires only planetary components. New does not start goroutines or migrate.
 type App struct {
@@ -28,6 +29,8 @@ type App struct {
 	store       *scenestore.Store
 	scenes      *planetruntime.Registry
 	controllers map[int64]int
+	entryGates  map[int64]chan struct{}
+	motion      *movement.Hub
 	connections int
 	wsMu        sync.Mutex
 	wsWG        sync.WaitGroup
@@ -50,7 +53,7 @@ func New(db *pgxpool.Pool, config Config, logger *slog.Logger) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &App{db: db, controllers: map[int64]int{}, visits: &visits.Service{DB: db}, config: config, logger: logger, coordinator: c, store: scenestore.New(db)}, nil
+	return &App{db: db, controllers: map[int64]int{}, entryGates: map[int64]chan struct{}{}, visits: &visits.Service{DB: db}, config: config, logger: logger, coordinator: c, store: scenestore.New(db)}, nil
 }
 
 func (a *App) Handler() http.Handler {
@@ -100,5 +103,5 @@ func (a *App) Handler() http.Handler {
 }
 
 func (a *App) health(w http.ResponseWriter, status int, reason string) {
-	httpkit.Reply(w, status, map[string]any{"service": "cosmosimulator-planet", "version": Version, "stage": Stage, "status": reason, "gameplay_ready": false, "landing_ready": status == 200 && reason == "ready"})
+	httpkit.Reply(w, status, map[string]any{"service": "cosmosimulator-planet", "version": Version, "stage": Stage, "status": reason, "gameplay_ready": status == 200 && reason == "ready", "multiplayer_ready": false, "landing_ready": status == 200 && reason == "ready"})
 }

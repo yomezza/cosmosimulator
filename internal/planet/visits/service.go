@@ -24,13 +24,16 @@ type Intent struct {
 	Key                    scene.Key
 }
 type Welcome struct {
-	Planet  string `json:"planet"`
-	Visit   string `json:"visit"`
-	Epoch   int64  `json:"connection_epoch"`
-	Surface string `json:"surface"`
-	Sector  int    `json:"sector"`
-	X       int    `json:"x_q"`
-	Y       int    `json:"y_q"`
+	Generation      int64   `json:"-"`
+	PositionVersion int64   `json:"-"`
+	Speed           float64 `json:"speed"`
+	Planet          string  `json:"planet"`
+	Visit           string  `json:"visit"`
+	Epoch           int64   `json:"connection_epoch"`
+	Surface         string  `json:"surface"`
+	Sector          int     `json:"sector"`
+	X               int     `json:"x_q"`
+	Y               int     `json:"y_q"`
 }
 
 func (a *Service) Resolve(ctx context.Context, id access.Identity, hash, resume string) (Intent, error) {
@@ -79,7 +82,7 @@ func (a *Service) locked(ctx context.Context, uid int64, f scenestore.Fence) (pg
 	}
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared(784218)`); err == nil {
 		var n int64
-		err = tx.QueryRow(ctx, `SELECT fence FROM planet_runtime_leases WHERE id=1 AND owner_id=$1 AND fence=$2 AND expires_at>clock_timestamp() AND EXISTS(SELECT 1 FROM planet_schema_state WHERE id=1 AND version=4) FOR SHARE`, f.Owner, f.Number).Scan(&n)
+		err = tx.QueryRow(ctx, `SELECT fence FROM planet_runtime_leases WHERE id=1 AND owner_id=$1 AND fence=$2 AND expires_at>clock_timestamp() AND EXISTS(SELECT 1 FROM planet_schema_state WHERE id=1 AND version=5) FOR SHARE`, f.Owner, f.Number).Scan(&n)
 		if errors.Is(err, pgx.ErrNoRows) {
 			err = scenestore.ErrFence
 		}
@@ -164,6 +167,10 @@ func (a *Service) Activate(ctx context.Context, id access.Identity, in Intent, s
 		err = tx.QueryRow(ctx, `UPDATE planet_visits SET connection_epoch=connection_epoch+1,runtime_fence=$3,state='active',session_hash=$4 WHERE user_id=$1 AND visit_id=$2 AND generation=$5 AND state IN('active','disconnected') RETURNING connection_epoch`, id.User, in.Visit, f.Number, id.Session, in.Generation).Scan(&w.Epoch)
 	}
 	if err != nil {
+		return w, err
+	}
+	w.Generation = in.Generation
+	if err = tx.QueryRow(ctx, `SELECT position_version FROM planet_characters WHERE user_id=$1`, id.User).Scan(&w.PositionVersion); err != nil {
 		return w, err
 	}
 	if err = tx.Commit(ctx); err != nil {

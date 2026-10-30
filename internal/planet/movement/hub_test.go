@@ -1,0 +1,114 @@
+package movement
+
+import (
+	"context"
+	"errors"
+	"github.com/yomezza/cosmosimulator/internal/geography"
+	"github.com/yomezza/cosmosimulator/internal/planet/pathing"
+	"github.com/yomezza/cosmosimulator/internal/planet/scene"
+	"math"
+	"strings"
+	"testing"
+	"time"
+)
+
+func scenery(t *testing.T) (*scene.Scene, int, int) {
+	t.Helper()
+	g := &geography.PlanetSurface{Width: 4, Height: 4, GridW: 2, GridH: 2, SeaLevel: 460, Heights: []int{700, 700, 700, 700}, Water: make([]int, 4), Sectors: []geography.PlanetSector{{Number: 1, Center: geography.SurfacePoint{X: 2, Y: 2}}}}
+	s, err := scene.Generate(context.Background(), scene.Key{Surface: 1, Sector: 1}, g, strings.Repeat("a", 64))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := s.Metadata().Landing
+	return s, p.SpawnX, p.SpawnY
+}
+func TestMovementDistanceAndLifecycle(t *testing.T) {
+	s, x, y := scenery(t)
+	p := pathing.FromQ(x, y)
+	raw := &Member{actor: &actor{scene: s}, pos: p, path: []pathing.Point{{X: p.X + 2, Y: p.Y}}}
+	raw.advance(.2)
+	if math.Abs(math.Hypot(raw.pos.X-p.X, raw.pos.Y-p.Y)-.2) > 1e-8 {
+		t.Fatal("distance not server step")
+	}
+	h := New(context.Background(), 4, 24000)
+	defer h.Close()
+	m, err := h.Join(Stamp{User: 1, Epoch: 1}, s, x, y)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.Permit(time.Now().Add(time.Second))
+	if err = m.Move(2, x+2*1024, y); err != nil {
+		t.Fatal(err)
+	}
+	if err = m.Move(3, -1, y); !errors.Is(err, pathing.ErrBlocked) {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(time.Second)
+	for m.Snapshot().Generation < 1 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	frozen := m.Freeze()
+	time.Sleep(110 * time.Millisecond)
+	now := m.Snapshot()
+	if frozen.X != now.X || frozen.Y != now.Y || now.Moving {
+		t.Fatal("late path result moved frozen character")
+	}
+	newer, err := h.Join(Stamp{User: 1, Epoch: 2}, s, x, y)
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-m.Done():
+	default:
+		t.Fatal("old controller still live")
+	}
+	if err = m.Move(5, x, y); !errors.Is(err, ErrStale) {
+		t.Fatal(err)
+	}
+	if h.Count() != 1 {
+		t.Fatal("more than one sector actor")
+	}
+	m.Close()
+	if h.Count() != 1 {
+		t.Fatal("old close removed successor")
+	}
+	newer.Close()
+	if h.Count() != 0 {
+		t.Fatal("empty scene kept ticking")
+	}
+}
+func TestLatestGoalAndPermit(t *testing.T) {
+	s, x, y := scenery(t)
+	h := New(context.Background(), 4, 24000)
+	defer h.Close()
+	m, _ := h.Join(Stamp{User: 1, Epoch: 1}, s, x, y)
+	m.Permit(time.Now().Add(time.Second))
+	if err := m.Move(2, x-1024, y); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Move(3, x+1024, y); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(time.Second)
+	var state State
+	for time.Now().Before(deadline) {
+		state = m.Snapshot()
+		if len(state.Path) > 0 && state.Seq == 3 {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if len(state.Path) == 0 || state.Path[len(state.Path)-1].X != float64(x/1024+1)+.5 {
+		t.Fatal("superseded path won", state)
+	}
+	m.Permit(time.Now().Add(-time.Second))
+	stopped := m.Snapshot()
+	time.Sleep(110 * time.Millisecond)
+	after := m.Snapshot()
+	if after.X != stopped.X || after.Y != stopped.Y || !after.Suspended {
+		t.Fatal("expired access permit kept moving")
+	}
+	if err := m.Move(4, x, y); !errors.Is(err, ErrSuspended) {
+		t.Fatal(err)
+	}
+}

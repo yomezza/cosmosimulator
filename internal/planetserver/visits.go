@@ -1,6 +1,7 @@
 package planetserver
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -8,6 +9,8 @@ import (
 	"github.com/coder/websocket/wsjson"
 	"github.com/yomezza/cosmosimulator/internal/account"
 	"github.com/yomezza/cosmosimulator/internal/planet/access"
+	"github.com/yomezza/cosmosimulator/internal/planet/movement"
+	"github.com/yomezza/cosmosimulator/internal/planet/scene"
 	"github.com/yomezza/cosmosimulator/internal/planet/visits"
 	"github.com/yomezza/cosmosimulator/internal/platform/httpkit"
 	"net/http"
@@ -77,6 +80,10 @@ func (a *App) websocket(w http.ResponseWriter, r *http.Request) {
 	}
 	a.connections++
 	a.controllers[id.User]++
+	if a.entryGates[id.User] == nil {
+		a.entryGates[id.User] = make(chan struct{}, 1)
+	}
+	gate := a.entryGates[id.User]
 	a.wsMu.Unlock()
 	defer func() {
 		a.wsMu.Lock()
@@ -84,6 +91,7 @@ func (a *App) websocket(w http.ResponseWriter, r *http.Request) {
 		a.controllers[id.User]--
 		if a.controllers[id.User] == 0 {
 			delete(a.controllers, id.User)
+			delete(a.entryGates, id.User)
 		}
 		a.wsMu.Unlock()
 	}()
@@ -123,6 +131,8 @@ func (a *App) websocket(w http.ResponseWriter, r *http.Request) {
 	in, err := a.visits.Resolve(prepare, id, hash, input.Resume)
 	var pinRelease func()
 	var welcome visits.Welcome
+	var pilot *movement.Member
+	var localScene *scene.Scene
 	if err == nil {
 		pin, e := a.scenes.Acquire(prepare, in.Key)
 		err = e
@@ -131,7 +141,36 @@ func (a *App) websocket(w http.ResponseWriter, r *http.Request) {
 			f, e := a.sceneFence()
 			err = e
 			if err == nil {
-				welcome, err = a.visits.Activate(prepare, id, in, pin.Scene(), f)
+				localScene = pin.Scene()
+				err = func() error {
+					if err := takeGate(prepare, gate); err != nil {
+						return err
+					}
+					defer func() { <-gate }()
+					commit, cancel := context.WithTimeout(prepare, a.config.DBTimeout)
+					defer cancel()
+					old := a.motion.Current(id.User)
+					if err := a.flushPrevious(commit, id, f); err != nil {
+						if old != nil {
+							old.Thaw()
+						}
+						return err
+					}
+					var e error
+					welcome, e = a.visits.Activate(commit, id, in, localScene, f)
+					if e != nil {
+						if old != nil {
+							old.Thaw()
+						}
+						return e
+					}
+					welcome.Speed = a.config.MoveSpeed
+					pilot, e = a.motion.Join(movement.Stamp{User: id.User, Visit: welcome.Visit, Epoch: welcome.Epoch, Generation: welcome.Generation, Version: welcome.PositionVersion}, localScene, welcome.X, welcome.Y)
+					if e == nil {
+						pilot.Permit(time.Now().Add(2 * time.Second))
+					}
+					return e
+				}()
 			}
 		}
 	}
@@ -142,7 +181,12 @@ func (a *App) websocket(w http.ResponseWriter, r *http.Request) {
 	send := func(kind string, payload any) error {
 		write, done := context.WithTimeout(r.Context(), 3*time.Second)
 		defer done()
-		return wsjson.Write(write, c, message(kind, payload))
+		body := message(kind, payload)
+		if pilot != nil {
+			body["visit"] = welcome.Visit
+			body["connection_epoch"] = welcome.Epoch
+		}
+		return wsjson.Write(write, c, body)
 	}
 	if err != nil {
 		_ = send("error", map[string]string{"code": publicError(err)})
@@ -153,11 +197,8 @@ func (a *App) websocket(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	defer func() {
-		save, done := context.WithTimeout(context.Background(), a.config.DBTimeout)
-		defer done()
-		_ = a.visits.Disconnect(save, id, welcome, f)
-	}()
+	ended := false
+	defer a.disconnectMotion(id, welcome, f, pilot, gate, &ended)
 	if send("welcome", welcome) != nil {
 		return
 	}
@@ -182,43 +223,112 @@ func (a *App) websocket(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}()
-	tick := time.NewTicker(2 * time.Second)
+
+	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
+	checkpoint := time.NewTicker(5 * time.Second)
+	defer checkpoint.Stop()
 	var seq int64 = 1
-	lastCommand := time.Now().Add(-time.Second)
+	var accepted, reported int64 = -1, -1
+	tokens, lastRefill := 20.0, time.Now()
 	for {
 		select {
 		case <-run.Done():
 			return
 		case <-readErrors:
 			return
+		case <-pilot.Done():
+			_ = send("error", map[string]string{"code": "session_replaced"})
+			return
+		case state := <-pilot.Updates():
+			if state.Error != "" && reported != state.Generation {
+				reported = state.Generation
+				if send("error", map[string]any{"code": state.Error, "seq": state.Seq}) != nil {
+					return
+				}
+			}
+			if len(state.Path) > 0 && accepted != state.Generation {
+				accepted = state.Generation
+				if send("path.accepted", state) != nil {
+					return
+				}
+			}
+			state.Path = nil
+			if send("state.delta", state) != nil {
+				return
+			}
 		case msg := <-received:
-			if time.Since(lastCommand) < time.Second {
+			now := time.Now()
+			tokens = min(20, tokens+now.Sub(lastRefill).Seconds()*10)
+			lastRefill = now
+			if tokens < 1 {
+				_ = send("error", map[string]string{"code": "move_rate_limited"})
+				return
+			}
+			tokens--
+			if msg.V != 1 || msg.Visit != welcome.Visit || msg.Epoch != welcome.Epoch {
 				c.CloseNow()
 				return
 			}
-			lastCommand = time.Now()
-			if msg.V != 1 || msg.Seq <= seq || msg.Visit != welcome.Visit || msg.Epoch != welcome.Epoch {
-				c.CloseNow()
-				return
+			if msg.Seq <= seq {
+				continue
 			}
 			seq = msg.Seq
-			if msg.Type != "resync" {
-				_ = send("error", map[string]string{"code": "movement_not_available"})
-				c.CloseNow()
-				return
-			}
-			if seq > 120 {
-				c.CloseNow()
-				return
-			}
 			check, done := context.WithTimeout(run, a.config.DBTimeout)
 			err = a.visits.Check(check, id, welcome, f)
 			done()
 			if err != nil {
+				_ = send("error", map[string]string{"code": publicError(err)})
 				return
 			}
-			if send("welcome", welcome) != nil {
+			pilot.Permit(time.Now().Add(2 * time.Second))
+			switch msg.Type {
+			case "move":
+				var goal struct {
+					X int `json:"x_q"`
+					Y int `json:"y_q"`
+				}
+				d := json.NewDecoder(bytes.NewReader(msg.Payload))
+				d.DisallowUnknownFields()
+				if d.Decode(&goal) != nil {
+					_ = send("error", map[string]string{"code": "invalid_target"})
+					continue
+				}
+				if err = pilot.Move(seq, goal.X, goal.Y); err != nil {
+					if send("error", map[string]any{"code": err.Error(), "seq": seq}) != nil {
+						return
+					}
+				}
+			case "resync":
+				state := pilot.Snapshot()
+				welcome.X, welcome.Y = state.X, state.Y
+				if send("welcome", welcome) != nil {
+					return
+				}
+			case "leave":
+				var input struct {
+					Operation string `json:"operation"`
+				}
+				if json.Unmarshal(msg.Payload, &input) != nil || !access.ValidUUID(input.Operation) {
+					_ = send("error", map[string]string{"code": "invalid_return"})
+					continue
+				}
+				save, done := context.WithTimeout(run, a.config.DBTimeout)
+				if err = takeGate(save, gate); err == nil {
+					pilot.Freeze()
+					err = a.saveMotion(save, id, pilot, f, true)
+					<-gate
+				}
+				done()
+				if err != nil {
+					_ = send("error", map[string]string{"code": "save_failed"})
+					return
+				}
+				ended = true
+				_ = send("visit.ended", map[string]any{"operation": input.Operation, "reason": "return"})
+				return
+			default:
+				_ = send("error", map[string]string{"code": "unsupported_command"})
 				return
 			}
 		case <-tick.C:
@@ -227,12 +337,24 @@ func (a *App) websocket(w http.ResponseWriter, r *http.Request) {
 			done()
 			if err != nil {
 				_ = send("error", map[string]string{"code": publicError(err)})
-				c.CloseNow()
+				return
+			}
+			pilot.Permit(time.Now().Add(2 * time.Second))
+		case <-checkpoint.C:
+			save, done := context.WithTimeout(run, a.config.DBTimeout)
+			if err = takeGate(save, gate); err == nil {
+				err = a.saveMotion(save, id, pilot, f, false)
+				<-gate
+			}
+			done()
+			if err != nil {
+				_ = send("error", map[string]string{"code": "save_failed"})
 				return
 			}
 		}
 	}
 }
+
 func (a *App) sceneView(w http.ResponseWriter, r *http.Request) {
 	if a.scenes == nil || a.stopping.Load() {
 		httpkit.Fail(w, 503, "runtime_unavailable")

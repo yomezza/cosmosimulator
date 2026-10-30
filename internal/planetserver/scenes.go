@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/yomezza/cosmosimulator/internal/planet/movement"
 	planetruntime "github.com/yomezza/cosmosimulator/internal/planet/runtime"
 	"github.com/yomezza/cosmosimulator/internal/planet/scene"
 	"github.com/yomezza/cosmosimulator/internal/planet/scenestore"
@@ -18,6 +19,7 @@ func (a *App) sceneFence() (scenestore.Fence, error) {
 }
 func (a *App) newScenes(ctx context.Context) error {
 	a.runContext = ctx
+	a.motion = movement.New(ctx, a.config.MoveSpeed, a.config.PathBudget)
 	r, err := planetruntime.NewRegistry(ctx, a.config.SceneCapacity, a.config.SceneIdleTTL, a.config.SceneLoadTimeout,
 		func(ctx context.Context, key scene.Key) (*scene.Scene, error) {
 			f, err := a.sceneFence()

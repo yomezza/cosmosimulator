@@ -31,7 +31,7 @@ func TestPackageBoundaries(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		pure := owner == "universe" || owner == "geography" || owner == "resources" || owner == "planet/terrain" || owner == "planet/territory" || owner == "planet/scene"
+		pure := owner == "universe" || owner == "geography" || owner == "resources" || owner == "planet/terrain" || owner == "planet/territory" || owner == "planet/scene" || owner == "planet/pathing"
 		for _, spec := range f.Imports {
 			target, err := strconv.Unquote(spec.Path.Value)
 			if err != nil {

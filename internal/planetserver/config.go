@@ -4,6 +4,7 @@ package planetserver
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"net/url"
 	"strconv"
@@ -12,6 +13,8 @@ import (
 )
 
 type Config struct {
+	MoveSpeed        float64
+	PathBudget       int
 	DatabaseURL      string
 	Schema           string
 	Addr             string
@@ -27,7 +30,7 @@ type Config struct {
 }
 
 func DefaultConfig() Config {
-	return Config{Addr: "127.0.0.1:8081", DBTimeout: 2 * time.Second, LeaseTTL: 15 * time.Second, LeaseRenew: 5 * time.Second, ShutdownTimeout: 10 * time.Second, AllowedOrigins: []string{"http://127.0.0.1:8080", "http://localhost:8080"}, SceneCapacity: 32, SceneIdleTTL: 2 * time.Minute, SceneLoadTimeout: 20 * time.Second}
+	return Config{MoveSpeed: 4, PathBudget: 24000, Addr: "127.0.0.1:8081", DBTimeout: 2 * time.Second, LeaseTTL: 15 * time.Second, LeaseRenew: 5 * time.Second, ShutdownTimeout: 10 * time.Second, AllowedOrigins: []string{"http://127.0.0.1:8080", "http://localhost:8080"}, SceneCapacity: 32, SceneIdleTTL: 2 * time.Minute, SceneLoadTimeout: 20 * time.Second}
 }
 
 func LoadConfig(getenv func(string) string) (Config, error) {
@@ -35,6 +38,20 @@ func LoadConfig(getenv func(string) string) (Config, error) {
 	c.DatabaseURL = getenv("DATABASE_URL")
 	c.Schema = getenv("DB_SCHEMA")
 	c.LogFile = getenv("PLANET_LOG_FILE")
+	if v := getenv("PLANET_MOVE_SPEED"); v != "" {
+		n, e := strconv.ParseFloat(v, 64)
+		if e != nil {
+			return c, errors.New("invalid PLANET_MOVE_SPEED")
+		}
+		c.MoveSpeed = n
+	}
+	if v := getenv("PLANET_PATH_BUDGET"); v != "" {
+		n, e := strconv.Atoi(v)
+		if e != nil {
+			return c, errors.New("invalid PLANET_PATH_BUDGET")
+		}
+		c.PathBudget = n
+	}
 	if c.DatabaseURL == "" {
 		return c, errors.New("set DATABASE_URL for the planetary service")
 	}
@@ -77,6 +94,9 @@ func LoadConfig(getenv func(string) string) (Config, error) {
 }
 
 func (c Config) Validate() error {
+	if math.IsNaN(c.MoveSpeed) || math.IsInf(c.MoveSpeed, 0) || c.MoveSpeed < 1 || c.MoveSpeed > 12 || c.PathBudget < 1000 || c.PathBudget > 65536 {
+		return errors.New("movement speed must be 1-12 and path budget 1000-65536")
+	}
 	_, port, err := net.SplitHostPort(c.Addr)
 	n, e := strconv.Atoi(port)
 	if err != nil || e != nil || n < 1 || n > 65535 {

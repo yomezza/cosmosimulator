@@ -1,3 +1,4 @@
+import { createController } from "./controller.js";
 import { api } from "../../core/api.js";
 import { Session, RequestScope } from "../../core/session.js";
 import { I18n } from "../../core/i18n.js";
@@ -6,10 +7,13 @@ import { notify } from "../../ui/feedback.js";
 const key = "planet-visit",
   scope = new RequestScope();
 let socket,
+  renderer,
   polling,
   busy = false;
 const tr = (s) => I18n.t(s);
 function stop() {
+  renderer?.stop();
+  renderer = null;
   scope.invalidate();
   socket?.close();
   socket = null;
@@ -38,13 +42,49 @@ export async function openVisit(site) {
     canvas = UI.node("canvas");
   canvas.width = 1024;
   canvas.height = 1024;
-  canvas.className = "visit-preview";
+  canvas.className = "visit-canvas";
+  const viewport = UI.node("div", undefined, "visit-viewport");
+  viewport.append(canvas);
+  root.classList.add("visit-content");
+  let seq = 1,
+    lastState,
+    lastPath,
+    finishLeave;
+  const send = (type, payload) => {
+    if (socket?.readyState !== WebSocket.OPEN || !welcome) return false;
+    socket.send(
+      JSON.stringify({
+        v: 1,
+        type,
+        seq: ++seq,
+        visit: welcome.visit,
+        connection_epoch: welcome.connection_epoch,
+        payload,
+      }),
+    );
+    return true;
+  };
   canvas.hidden = true;
   const resume = UI.button("Продолжить высадку", () => openVisit()),
     leave = UI.button("Вернуться в космос", async () => {
       leave.disabled = true;
       returning = true;
+      renderer?.stop();
+      renderer = null;
       try {
+        if (socket?.readyState === WebSocket.OPEN && welcome) {
+          await new Promise((resolve) => {
+            const timer = setTimeout(resolve, 4000);
+            finishLeave = () => {
+              clearTimeout(timer);
+              resolve();
+            };
+            if (!send("leave", { operation: crypto.randomUUID() })) {
+              clearTimeout(timer);
+              resolve();
+            }
+          });
+        }
         const state = await api(
           "planet/return",
           { operation: crypto.randomUUID(), visit: welcome?.visit || "" },
@@ -79,16 +119,19 @@ export async function openVisit(site) {
       }
     });
   leave.disabled = true;
-  tools.append(resume, leave);
+  tools.append(
+    resume,
+    leave,
+    UI.button("−", () => renderer?.zoom(1 / 1.2)),
+    UI.button("+", () => renderer?.zoom(1.2)),
+    UI.button("К персонажу", () => renderer?.centre()),
+    UI.button("Весь сектор", () => renderer?.fit()),
+  );
   root.replaceChildren(
     status,
     tools,
-    UI.node(
-      "p",
-      tr("Обзор локации. Управление персонажем появится на следующем этапе."),
-      "muted",
-    ),
-    canvas,
+    UI.node("p", tr("ЛКМ — идти · Колесо — масштаб · ПКМ — обзор"), "muted"),
+    viewport,
   );
   Modules.open(key);
   let welcome,
@@ -142,9 +185,29 @@ export async function openVisit(site) {
       hello = null;
     };
     currentSocket.onmessage = async (event) => {
-      if (!task.current() || returning) return;
+      if (!task.current()) return;
       try {
         const message = JSON.parse(event.data);
+        if (message.type === "visit.ended") {
+          finishLeave?.();
+          return;
+        }
+        if (returning) return;
+        if (message.type === "path.accepted") {
+          lastPath = message.payload;
+          renderer?.accepted(lastPath);
+          return;
+        }
+        if (message.type === "state.delta") {
+          const wasSuspended = lastState?.suspended;
+          lastState = message.payload;
+          renderer?.update(lastState);
+          if (lastState.suspended)
+            status.textContent = tr(
+              "Движение приостановлено: проверяем связь с сервером",
+            );
+          return;
+        }
         if (message.type === "error") {
           status.textContent = tr(message.payload.code);
           return;
@@ -156,13 +219,37 @@ export async function openVisit(site) {
           welcome.planet + " · " + tr("Сектор") + " " + welcome.sector;
         const scene = await requestScene(welcome, task.signal);
         if (!task.current() || returning) return;
-        await draw(canvas, scene, welcome, task);
+        renderer?.stop();
+        canvas.hidden = false;
+        const controller = await createController(canvas, scene, welcome, {
+          current: () =>
+            task.current() &&
+            !returning &&
+            currentSocket.readyState === WebSocket.OPEN,
+          target: (x, y) => send("move", { x_q: x, y_q: y }),
+        });
+        if (
+          !task.current() ||
+          returning ||
+          currentSocket.readyState !== WebSocket.OPEN
+        ) {
+          controller?.stop();
+          return;
+        }
+        renderer = controller;
+        if (lastState) renderer?.update(lastState);
+        if (lastPath) renderer?.accepted(lastPath);
         if (task.current() && !returning) canvas.hidden = false;
       } catch (e) {
         if (task.current()) status.textContent = e.message;
       }
     };
     currentSocket.onclose = () => {
+      if (task.current()) {
+        renderer?.stop();
+        renderer = null;
+      }
+      finishLeave?.();
       if (task.current() && !returning) {
         resume.hidden = false;
         status.textContent = tr(
@@ -182,83 +269,6 @@ export async function openVisit(site) {
     if (task.current()) leave.disabled = !canReturn;
     busy = false;
   }
-}
-const specs = {
-  tree_old: [225, 0.5, 0.82],
-  tree_young: [160, 0.5, 0.82],
-  bush_sparse: [88, 0.5, 0.8],
-  grass_tuft: [57, 0.5, 0.87],
-  rock_flat: [98, 0.5, 0.7],
-  rock_large_cracked: [168, 0.5, 0.78],
-  grass_dry: [63, 0.5, 0.78],
-  colonist: [104, 0.5, 0.86],
-};
-async function draw(canvas, scene, w, task) {
-  const images = new Map();
-  await Promise.all(
-    [
-      ...new Set(
-        scene.objects.map((o) => o.asset.split("/").pop().replace(".png", "")),
-      ),
-      "colonist",
-    ].map(async (name) => {
-      if (!specs[name]) return;
-      const image = new Image();
-      image.src = "/planet-art/" + name + ".png";
-      try {
-        await image.decode();
-        images.set(name, image);
-      } catch {}
-    }),
-  );
-  if (!task.current()) return;
-  const ctx = canvas.getContext("2d"),
-    cells = Uint8Array.from(atob(scene.cells), (c) => c.charCodeAt(0));
-  ctx.clearRect(0, 0, 1024, 1024);
-  ctx.setTransform(4, 0, 0, 4, 0, 0);
-  for (let y = 0; y < 256; y++)
-    for (let x = 0; x < 256; x++) {
-      const cell = cells[y * 256 + x];
-      if (!(cell & 1)) continue;
-      ctx.fillStyle = cell & 2 ? "#24586c" : "#3b5041";
-      ctx.fillRect(x, y, 1, 1);
-    }
-  const objects = scene.objects.map((o) => ({
-    name: o.asset.split("/").pop().replace(".png", ""),
-    x: o.position.X / 1024,
-    y: o.position.Y / 1024,
-  }));
-  objects.push({ name: "colonist", x: w.x_q / 1024, y: w.y_q / 1024 });
-  objects.sort((a, b) => a.y - b.y);
-  for (const obj of objects) {
-    const img = images.get(obj.name),
-      spec = specs[obj.name];
-    if (!img || !spec) continue;
-    const size = spec[0] / 16;
-    ctx.drawImage(
-      img,
-      obj.x - size * spec[1],
-      obj.y - size * spec[2],
-      size,
-      size,
-    );
-  }
-  if (scene.landing) {
-    ctx.strokeStyle = "#80f4d6";
-    ctx.lineWidth = 0.5;
-    ctx.beginPath();
-    ctx.ellipse(
-      scene.landing.X / 1024,
-      scene.landing.Y / 1024,
-      117 / 16,
-      66 / 16,
-      0,
-      0,
-      Math.PI * 2,
-    );
-    ctx.stroke();
-  }
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
 }
 window.addEventListener("signedout", stop);
 window.addEventListener("moduleclose", (event) => {

@@ -24,6 +24,7 @@ func TestConfig(t *testing.T) {
 		t.Fatal("origin fallback", err)
 	}
 	for _, bad := range []map[string]string{
+		{"PLANET_MOVE_SPEED": "NaN"}, {"PLANET_MOVE_SPEED": "100"}, {"PLANET_PATH_BUDGET": "0"},
 		{"DATABASE_URL": ""}, {"PLANET_HTTP_ADDR": "127.0.0.1:0"}, {"PLANET_HTTP_ADDR": ":70000"},
 		{"PLANET_DB_TIMEOUT": "nonsense"}, {"PLANET_LEASE_TTL": "1s"}, {"PLANET_LEASE_RENEW": "20s"},
 		{"PLANET_ALLOWED_ORIGINS": "*"}, {"PLANET_ALLOWED_ORIGINS": "https://a.example/private"},

@@ -1585,5 +1585,19 @@
   "landing_site_required": "Select a landing site on the planet surface",
   "Корабль закреплён за планетарным визитом": "This ship is reserved for a planetary visit",
   "Выбрать площадку": "Select landing site",
-  "connection_limit": "Too many planetary connections"
+  "connection_limit": "Too many planetary connections",
+  "ЛКМ — идти · Колесо — масштаб · ПКМ — обзор": "Left click: move · Wheel: zoom · Right drag: pan",
+  "Поверхность сектора: ЛКМ — идти, колесо — масштаб, ПКМ — обзор": "Sector surface: left click to move, wheel to zoom, right drag to pan",
+  "К персонажу": "Follow character",
+  "Весь сектор": "Entire sector",
+  "Движение приостановлено: проверяем связь с сервером": "Movement paused: checking the server connection",
+  "target_blocked": "The target is in water, outside the sector or blocked",
+  "target_unreachable": "The selected destination cannot be reached",
+  "path_budget_exceeded": "The route is too complex. Select a closer intermediate destination",
+  "path_queue_full": "Path calculation is busy. Select the destination again",
+  "move_rate_limited": "Movement commands are too frequent",
+  "movement_suspended": "Movement is paused. Check the connection",
+  "invalid_target": "Invalid movement target",
+  "save_failed": "Could not save the position. Reconnect to your visit",
+  "unsupported_command": "This command is not supported by this version"
 }

@@ -4809,3 +4809,8 @@ button.picker-button.system-picker .picker-chevron {
 .visit-preview[hidden] {
   display: none;
 }
+
+.visit-content{display:flex;flex-direction:column;overflow:hidden}
+.visit-viewport{position:relative;flex:1;min-height:240px;overflow:hidden;border:1px solid var(--line)}
+.visit-canvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
+.visit-canvas[hidden]{display:none}

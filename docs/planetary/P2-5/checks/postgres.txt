@@ -1,0 +1,45 @@
+PostgreSQL 17; fresh disposable _test database and fixture-owned schemas.
+go test ./... -count=1 -timeout=5m -run '^(TestPlanetMovement190|TestPlanetHandoff180|TestPlanetTicketRecovery180|TestPlanetRestrictedRole180|TestMovementDistanceAndLifecycle|TestLatestGoalAndPermit|TestBoundedPathsAndCorners|TestPackageBoundaries)$' -v
+=== RUN   TestPackageBoundaries
+--- PASS: TestPackageBoundaries (0.00s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/architecture	0.013s
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/geography	0.004s [no tests to run]
+=== RUN   TestMovementDistanceAndLifecycle
+--- PASS: TestMovementDistanceAndLifecycle (0.18s)
+=== RUN   TestLatestGoalAndPermit
+--- PASS: TestLatestGoalAndPermit (0.14s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/movement	0.327s
+=== RUN   TestBoundedPathsAndCorners
+--- PASS: TestBoundedPathsAndCorners (0.01s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/pathing	0.015s
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/runtime	0.008s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/scene	0.014s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/terrain	0.006s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/territory	0.006s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planetserver	0.009s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/platform/postgres	0.004s [no tests to run]
+=== RUN   TestPlanetHandoff180
+--- PASS: TestPlanetHandoff180 (4.81s)
+=== RUN   TestPlanetTicketRecovery180
+--- PASS: TestPlanetTicketRecovery180 (3.80s)
+=== RUN   TestPlanetRestrictedRole180
+--- PASS: TestPlanetRestrictedRole180 (3.59s)
+=== RUN   TestPlanetMovement190
+--- PASS: TestPlanetMovement190 (3.04s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/server/integration	15.235s
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/universe	0.002s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/worldstore	0.006s [no tests to run]
+Exit 0. Disposable DB removed.

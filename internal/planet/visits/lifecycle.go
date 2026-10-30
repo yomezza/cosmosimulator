@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/yomezza/cosmosimulator/internal/planet/access"
+	"github.com/yomezza/cosmosimulator/internal/planet/scene"
 	"github.com/yomezza/cosmosimulator/internal/planet/scenestore"
 	"strconv"
 )
@@ -130,4 +131,45 @@ func (a *Service) sweepOne(ctx context.Context, uid int64, f scenestore.Fence) e
 		return err
 	}
 	return tx.Commit(ctx)
+}
+
+// Checkpoint saves only a server-owned position using the active epoch, control
+// generation, runtime fence AND character version. No coordinates come from HTTP.
+func (a *Service) Checkpoint(ctx context.Context, id access.Identity, w Welcome, f scenestore.Fence, s *scene.Scene, x, y int, finish bool) (int64, error) {
+	if w.Generation < 1 || w.PositionVersion < 1 || x < 0 || y < 0 || x >= 256*1024 || y >= 256*1024 || !s.Walkable(x/1024, y/1024) {
+		return 0, scene.ErrSource
+	}
+	tx, err := a.locked(ctx, id.User, f)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback(context.Background())
+	if err = check(ctx, tx, id, w, f); err != nil {
+		return 0, err
+	}
+	var valid bool
+	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM planet_visits WHERE user_id=$1 AND visit_id=$2 AND generation=$3 AND current_surface=$4 AND current_sector=$5 AND revision=$6)`, id.User, w.Visit, w.Generation, s.Key().Surface, s.Key().Sector, s.Key().Revision).Scan(&valid)
+	if err != nil {
+		return 0, err
+	}
+	if !valid {
+		return 0, ErrVisit
+	}
+	var version int64
+	err = tx.QueryRow(ctx, `UPDATE planet_characters SET x_q=$2,y_q=$3,position_version=position_version+1 WHERE user_id=$1 AND position_version=$4 AND last_surface=$5 AND last_sector=$6 AND last_revision=$7 RETURNING position_version`, id.User, x, y, w.PositionVersion, s.Key().Surface, s.Key().Sector, s.Key().Revision).Scan(&version)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, ErrReplaced
+	}
+	if err != nil {
+		return 0, err
+	}
+	if finish {
+		if err = end(ctx, tx, id.User, "return"); err != nil {
+			return 0, err
+		}
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return 0, err
+	}
+	return version, nil
 }

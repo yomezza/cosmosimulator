@@ -1,0 +1,7 @@
+0.19.0 Linux binaries; P2-5; schema marker 5.
+PASS: two independent Linux executables, shared PostgreSQL/schema; no planet bootstrap or cosmic tick mutation; gameplay_ready=true
+PASS: SIGTERM stops planet cleanly, releases lease; cosmic HTTP remains available
+PASS: after SIGKILL replacement waits for lease expiry and receives a higher fence
+PASS: independent shutdown of both processes
+PASS: process logs do not contain DATABASE_URL or inherited ADMIN_PASSWORD
+Disposable test DB removed.

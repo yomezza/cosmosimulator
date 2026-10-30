@@ -57,7 +57,9 @@ try {
   }, input.site);
   const view = page.locator("#window-planet-visit");
   try {
-    await view.locator("canvas").waitFor({ state: "visible" });
+    await view
+      .locator('canvas[data-ready="true"]')
+      .waitFor({ state: "visible" });
   } catch (e) {
     console.log("Preview status:", await view.textContent());
     console.log("Page errors:", errors);
@@ -70,8 +72,49 @@ try {
   assert.equal(
     await view
       .locator("canvas")
-      .evaluate((c) => c.getContext("2d").getImageData(512, 512, 1, 1).data[3]),
+      .evaluate(
+        (c) =>
+          c
+            .getContext("2d")
+            .getImageData(
+              Math.floor(c.width / 2),
+              Math.floor(c.height / 2),
+              1,
+              1,
+            ).data[3],
+      ),
     255,
+  );
+  const canvas = view.locator("canvas");
+  const start = await canvas.evaluate((c) => ({
+    x: Number(c.dataset.xq),
+    y: Number(c.dataset.yq),
+  }));
+  const box = await canvas.boundingBox();
+  await canvas.click({
+    position: { x: box.width / 2 + 32, y: box.height / 2 },
+  });
+  await page.waitForFunction(
+    (x) =>
+      Number(document.querySelector(".visit-canvas")?.dataset.xq) > x + 1024,
+    start.x,
+  );
+  const goalX = (Math.floor(start.x / 1024) + 2) * 1024 + 512;
+  await page.waitForFunction(
+    (x) =>
+      Math.abs(
+        Number(document.querySelector(".visit-canvas")?.dataset.xq) - x,
+      ) < 3,
+    goalX,
+  );
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.wheel(0, -250);
+  await page.waitForFunction(
+    () => Number(document.querySelector(".visit-canvas")?.dataset.zoom) > 16,
+  );
+  assert.ok(
+    Math.abs((await canvas.evaluate((c) => Number(c.dataset.xq))) - goalX) < 3,
+    "zoom changed the character position",
   );
   if (process.env.PLANET_TEST_SCREENSHOT)
     await view.screenshot({ path: process.env.PLANET_TEST_SCREENSHOT });
@@ -88,19 +131,26 @@ try {
     const { openVisit } = await import("/features/planet/visit.js");
     await openVisit();
   });
-  await view.locator("canvas").waitFor({ state: "visible" });
+  await view.locator('canvas[data-ready="true"]').waitFor({ state: "visible" });
   const second = await page.evaluate(async () => {
     const { api } = await import("/core/api.js");
     return api("planet/visit");
   });
   assert.equal(second.visit, first.visit);
+  await page.waitForFunction(
+    (x) =>
+      Math.abs(
+        Number(document.querySelector(".visit-canvas")?.dataset.xq) - x,
+      ) < 3,
+    goalX,
+  );
   await view
     .getByRole("button", { name: "Вернуться в космос", exact: true })
     .click();
   await view.getByText("Возвращение завершено", { exact: true }).waitFor();
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: browser -> cosmic proxy -> planetary WS; saved scene and sprites render, reload resumes same visit, return completes; no page errors",
+    "PASS: browser -> cosmic proxy -> planetary WS; click movement, zoom and sprites render; reload resumes same visit/position, return completes; no page errors",
   );
   await context.close();
 } finally {

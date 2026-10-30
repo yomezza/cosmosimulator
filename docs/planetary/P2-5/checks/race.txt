@@ -1,0 +1,39 @@
+PostgreSQL 17; fresh disposable _test database and fixture-owned schemas.
+go test -race ./... -count=1 -timeout=5m -run '^(TestPlanetMovement190|TestPlanetCheckpoints190|TestMovementDistanceAndLifecycle|TestLatestGoalAndPermit|TestBoundedPathsAndCorners)$' -v
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/architecture	1.012s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/geography	1.015s [no tests to run]
+=== RUN   TestMovementDistanceAndLifecycle
+--- PASS: TestMovementDistanceAndLifecycle (0.31s)
+=== RUN   TestLatestGoalAndPermit
+--- PASS: TestLatestGoalAndPermit (0.30s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/movement	1.621s
+=== RUN   TestBoundedPathsAndCorners
+--- PASS: TestBoundedPathsAndCorners (0.01s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/pathing	1.018s
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/runtime	1.010s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/scene	1.009s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/terrain	1.010s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/territory	1.008s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planetserver	1.010s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/platform/postgres	1.013s [no tests to run]
+=== RUN   TestPlanetMovement190
+--- PASS: TestPlanetMovement190 (10.06s)
+=== RUN   TestPlanetCheckpoints190
+--- PASS: TestPlanetCheckpoints190 (14.15s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/server/integration	25.239s
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/universe	1.011s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/worldstore	1.014s [no tests to run]
+Exit 0. Disposable DB removed.

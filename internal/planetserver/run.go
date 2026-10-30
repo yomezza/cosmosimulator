@@ -129,6 +129,7 @@ func (a *App) Serve(ctx context.Context, listener net.Listener, onListening func
 	case <-wsDone:
 	case <-stop.Done():
 	}
+	a.motion.Close()
 	if e := a.scenes.Close(stop); e != nil {
 		a.logger.Warn("planetary scene shutdown deadline reached")
 	}

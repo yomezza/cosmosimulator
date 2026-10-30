@@ -102,7 +102,7 @@ func TestPlanetFoundation150(t *testing.T) {
 	users := f.integer(`SELECT count(*) FROM users`)
 	first, stop := startPlanet150(t, f.db)
 	planetStatus150(t, first, "/planet/api/v1/health/live", 200, "live")
-	planetStatus150(t, first, "/planet/api/v1/health/ready", 200, `"gameplay_ready":false`)
+	planetStatus150(t, first, "/planet/api/v1/health/ready", 200, `"gameplay_ready":true`)
 	planetStatus150(t, first, "/planet/ws/v1", 401, "auth_required")
 	req, _ := http.NewRequest("GET", first+"/planet/ws/v1", nil)
 	req.Header.Set("Origin", "https://untrusted.example")

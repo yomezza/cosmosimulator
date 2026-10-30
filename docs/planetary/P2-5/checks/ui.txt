@@ -1,0 +1,14 @@
+CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium CHROMIUM_NO_SANDBOX=1 node --test tests/ui/architecture.test.mjs tests/ui/planet.test.mjs
+✔ ES module graph has no missing dependencies, implicit globals or reversed UI dependencies (420.690223ms)
+✔ planet scenes load public art lazily, reuse six textures and keep geography intact (1282.901554ms)
+✔ texture failure falls back and retries without replacing geography (1428.586203ms)
+✔ late images cannot resurrect a scene after logout (1159.378493ms)
+✔ surface cards locate shared landing infrastructure and reflect current access (1637.075997ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5917.833427
