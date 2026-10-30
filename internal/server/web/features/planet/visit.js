@@ -78,6 +78,7 @@ export async function openVisit(site) {
         leave.disabled = false;
       }
     });
+  leave.disabled = true;
   tools.append(resume, leave);
   root.replaceChildren(
     status,
@@ -91,10 +92,12 @@ export async function openVisit(site) {
   );
   Modules.open(key);
   let welcome,
-    returning = false;
+    returning = false,
+    canReturn = false;
   try {
     const state = await api("planet/visit", undefined, task.signal);
     if (!task.current()) return;
+    canReturn = state.state !== "none";
     let hello;
     if (["active", "disconnected"].includes(state.state)) {
       hello = { resume_visit: state.visit };
@@ -123,6 +126,7 @@ export async function openVisit(site) {
       leave.disabled = true;
       return;
     }
+    canReturn = true;
     const url = new URL("/planet/ws/v1", location.href);
     url.protocol = location.protocol === "https:" ? "wss:" : "ws:";
     const currentSocket = new WebSocket(url);
@@ -138,7 +142,7 @@ export async function openVisit(site) {
       hello = null;
     };
     currentSocket.onmessage = async (event) => {
-      if (!task.current()) return;
+      if (!task.current() || returning) return;
       try {
         const message = JSON.parse(event.data);
         if (message.type === "error") {
@@ -151,9 +155,9 @@ export async function openVisit(site) {
         status.textContent =
           welcome.planet + " · " + tr("Сектор") + " " + welcome.sector;
         const scene = await requestScene(welcome, task.signal);
-        if (!task.current()) return;
+        if (!task.current() || returning) return;
         await draw(canvas, scene, welcome, task);
-        if (task.current()) canvas.hidden = false;
+        if (task.current() && !returning) canvas.hidden = false;
       } catch (e) {
         if (task.current()) status.textContent = e.message;
       }
@@ -175,6 +179,7 @@ export async function openVisit(site) {
       notify(e.message, "error");
     }
   } finally {
+    if (task.current()) leave.disabled = !canReturn;
     busy = false;
   }
 }

@@ -1,29 +1,28 @@
-PostgreSQL 17; fresh disposable _test database, fixture-owned schemas.
-go test ./... -count=1 -timeout=5m -run '^TestPlanetBrowser180$' -v
-RUN_PLANET_BROWSER=1; system Chromium, no-sandbox in isolated container.
+PostgreSQL 17, owned disposable _test DB. RUN_PLANET_BROWSER=1.
+go test ./... -count=1 -timeout=5m -run ^TestPlanetBrowser180$ -v
 PASS
 ok  	github.com/yomezza/cosmosimulator/internal/architecture	0.002s [no tests to run]
 PASS
 ok  	github.com/yomezza/cosmosimulator/internal/geography	0.002s [no tests to run]
 PASS
-ok  	github.com/yomezza/cosmosimulator/internal/planet/runtime	0.004s [no tests to run]
+ok  	github.com/yomezza/cosmosimulator/internal/planet/runtime	0.007s [no tests to run]
 PASS
-ok  	github.com/yomezza/cosmosimulator/internal/planet/scene	0.002s [no tests to run]
+ok  	github.com/yomezza/cosmosimulator/internal/planet/scene	0.008s [no tests to run]
 PASS
-ok  	github.com/yomezza/cosmosimulator/internal/planet/terrain	0.002s [no tests to run]
+ok  	github.com/yomezza/cosmosimulator/internal/planet/terrain	0.008s [no tests to run]
 PASS
-ok  	github.com/yomezza/cosmosimulator/internal/planet/territory	0.003s [no tests to run]
+ok  	github.com/yomezza/cosmosimulator/internal/planet/territory	0.002s [no tests to run]
 PASS
-ok  	github.com/yomezza/cosmosimulator/internal/planetserver	0.008s [no tests to run]
+ok  	github.com/yomezza/cosmosimulator/internal/planetserver	0.005s [no tests to run]
 PASS
-ok  	github.com/yomezza/cosmosimulator/internal/platform/postgres	0.008s [no tests to run]
+ok  	github.com/yomezza/cosmosimulator/internal/platform/postgres	0.004s [no tests to run]
 === RUN   TestPlanetBrowser180
     planet_browser180_test.go:69: PASS: browser -> cosmic proxy -> planetary WS; saved scene and sprites render, reload resumes same visit, return completes; no page errors
 --- PASS: TestPlanetBrowser180 (6.63s)
 PASS
-ok  	github.com/yomezza/cosmosimulator/internal/server/integration	6.632s
+ok  	github.com/yomezza/cosmosimulator/internal/server/integration	6.631s
 PASS
 ok  	github.com/yomezza/cosmosimulator/internal/universe	0.002s [no tests to run]
 PASS
-ok  	github.com/yomezza/cosmosimulator/internal/worldstore	0.004s [no tests to run]
-Exit 0. Disposable database removed.
+ok  	github.com/yomezza/cosmosimulator/internal/worldstore	0.003s [no tests to run]
+Exit 0. Disposable DB removed.
