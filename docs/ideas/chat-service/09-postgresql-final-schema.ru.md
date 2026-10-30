@@ -30,9 +30,9 @@
 | chat_message_locator | id UUID PK, kind,sent_at,channel_id,seq,author_id,expires_at; UNIQUE(channel_id,seq). В tx 1:1 с chat_messages без FK на partition parent | PK; (channel_id,seq DESC); (expires_at,id) |
 | chat_read_receipts | PK(user_id,message_id); message_id FK locator ON DELETE CASCADE; read_at; пользователь должен иметь private ACL на момент ack | (message_id,read_at), (user_id,read_at DESC) |
 | chat_read_marks | PK(user_id,channel_id), last_seen_seq; публичные индикаторы без numeric counter | PK |
-| chat_notifications **NEW** | id UUID PK, user_id BIGINT, type TEXT, ref_id UUID NOT NULL, channel_id UUID NULL, created_at, seen_at NULL; **без текста**. Рекомендуемый dedupe UNIQUE(user_id,type,ref_id) | (user_id,seen_at,created_at DESC), UNIQUE |
-| chat_rate_state | PK(user_id,kind), last_sent_at TIMESTAMPTZ; только global/planet/sector/corporation | PK |
-| chat_rate_events | PK(user_id,operation_id), kind='private', sent_at | (user_id,sent_at DESC) |
+| chat_notifications **NEW** | id UUID PK, user_id BIGINT, type TEXT, ref_id UUID NOT NULL, channel_id UUID NULL, created_at, seen_at NULL, expires_at TIMESTAMPTZ NULL (операционный TTL по типу, например 30 дней); **без текста**. Рекомендуемый dedupe UNIQUE(user_id,type,ref_id) | (user_id,seen_at,created_at DESC), UNIQUE |
+| chat_rate_state | PK(user_id,kind), last_sent_at TIMESTAMPTZ; global/planet/sector/corporation, плюс private/report как mutex rows | PK |
+| chat_rate_events | PK(user_id,operation_id), kind TEXT CHECK(kind IN ('private','report')), sent_at; private SEND 10/10s, report 5/10min | (user_id,kind,sent_at DESC); GC после >11min |
 
 *Расширение к 04:* entities JSONB хранит только структурированные spans (entity kind, stable ID, start/end offset, validator version). Независимая пользовательская строка остаётся body. При display offsets в JS должны быть согласованы с Unicode (использовать серверно заданную UTF-8/codepoint позиционную схему либо рендеринг в Go-derived segments, не индексы JS UTF-16 по умолчанию). Для game links клиент не может выбрать произвольный href. system_data JSONB whitelist, без пользовательского текста/причин наказания для общего канала.
 
@@ -56,7 +56,7 @@
 |---|---|---|
 | chat_corporation_mutes | id UUID PK,company_id,user_id,actor_id,duration_sec,reason,starts_at,expires_at,lifted_at,action_code; append-only история, TTL <=180d после окончания | (company_id,user_id,starts_at DESC), (expires_at) |
 | chat_corporation_mute_state **NEW** | PK(company_id,user_id), current_mute_id UUID NULL, expires_at, changed_at; одна current row, состояние актуально только if now<expires_at | PK |
-| chat_operations | PK(user_id,request_id), action, payload_digest BYTEA length 32, result_code TEXT, result_json JSONB **без body**, created_at,expires_at. Один и тот же request_id нельзя переиспользовать для другого action. Retention >=187d | (expires_at) |
+| chat_operations | PK(user_id,request_id), action, payload_digest BYTEA length 32, state TEXT CHECK(state IN ('in_progress','completed')), result_code TEXT, result_json JSONB **без body**, created_at,expires_at. Один и тот же request_id нельзя переиспользовать для другого action. Retention >=187d | (expires_at) |
 | chat_outbox | id BIGSERIAL PK,event_kind,channel_id,target_user_id,reference_id,created_at,processed_at; metadata only | (id) WHERE processed_at IS NULL |
 | chat_ws_leases | PK user_id, connection_id UUID, server_instance UUID, **generation BIGINT**, expires_at,renewed_at | (expires_at) |
 | chat_company_deletion_requests | PK company_id,operation_id UUID UNIQUE,initiated_at,state; Cosmic writer, receipt после удаления master row | (state,initiated_at) |
@@ -97,6 +97,8 @@ chat_worker_lease требуется только если несколько Ch
 Global/Planet/Sector/Corp: lock chat_rate_state(user_id,kind), INSERT пустой строкой при отсутствии, затем сравнить DB timestamp - last_sent_at >=3/2/1/1 секунды. При допуске UPDATE last_sent_at; все в tx сообщения, при rollback «квота» не израсходована.
 
 Private: для одного user сериализовать quota через **chat_rate_state(user_id,'private')** как пустую mutex row, затем COUNT(*) chat_rate_events WHERE user_id=$1 AND sent_at > (clock - interval '10 seconds'); если <10, INSERT event. Зависимость от channel отсутствует. GC events только после >11 s с запасом, при гонке с запросом не удалять событие, которое ещё в окне.
+
+Reports: lock chat_rate_state(user_id,'report'), COUNT chat_rate_events(kind='report') за 600s; при <5 вставить событие в той же TX, что и chat_reports. Иначе rate_limited. После COMMIT слот не откатывается; повтор той же operation UUID не увеличивает quota.
 
 Invites: lock chat_invite_rate_locks(sender,target), COUNT chat_invite_attempts последние 24h; если <20, INSERT попытку одновременно с invitation; 24h cooldown на (recipient,conversation) либо на canonical DM pair. Никакой GET-запрос без lock не резервирует квоту.
 
