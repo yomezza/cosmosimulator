@@ -9,17 +9,20 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	planetruntime "github.com/yomezza/cosmosimulator/internal/planet/runtime"
+	"github.com/yomezza/cosmosimulator/internal/planet/scenestore"
 	"github.com/yomezza/cosmosimulator/internal/platform/httpkit"
 )
 
-const Version = "0.16.0"
-const Stage = "P2-2"
+const Version = "0.17.0"
+const Stage = "P2-3"
 
 // App wires only planetary components. New does not start goroutines or migrate.
 type App struct {
 	config      Config
 	logger      *slog.Logger
 	coordinator *planetruntime.Coordinator
+	store       *scenestore.Store
+	scenes      *planetruntime.Registry
 	stopping    atomic.Bool
 	started     atomic.Bool
 }
@@ -38,7 +41,7 @@ func New(db *pgxpool.Pool, config Config, logger *slog.Logger) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &App{config: config, logger: logger, coordinator: c}, nil
+	return &App{config: config, logger: logger, coordinator: c, store: scenestore.New(db)}, nil
 }
 
 func (a *App) Handler() http.Handler {

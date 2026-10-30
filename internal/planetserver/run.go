@@ -78,6 +78,9 @@ func (a *App) Serve(ctx context.Context, listener net.Listener, onListening func
 	defer listener.Close()
 	run, cancel := context.WithCancel(ctx)
 	defer cancel()
+	if err := a.newScenes(run); err != nil {
+		return err
+	}
 	step := func() { c, done := context.WithTimeout(run, a.config.DBTimeout); defer done(); a.coordinator.Step(c) }
 	step()
 	finished := make(chan struct{})
@@ -94,6 +97,8 @@ func (a *App) Serve(ctx context.Context, listener net.Listener, onListening func
 			}
 		}
 	}()
+	scenesFinished := make(chan struct{})
+	go func() { defer close(scenesFinished); a.maintainScenes(run) }()
 	server := &http.Server{Handler: a.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 	result := make(chan error, 1)
 	go func() { result <- server.Serve(listener) }()
@@ -115,6 +120,10 @@ func (a *App) Serve(ctx context.Context, listener net.Listener, onListening func
 		a.logger.Warn("planetary HTTP shutdown deadline reached")
 	}
 	<-finished
+	<-scenesFinished
+	if e := a.scenes.Close(stop); e != nil {
+		a.logger.Warn("planetary scene shutdown deadline reached")
+	}
 	if e := a.coordinator.Release(stop); e != nil {
 		a.logger.Warn("planetary lease release failed; lease will expire")
 	}

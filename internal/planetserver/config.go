@@ -12,19 +12,22 @@ import (
 )
 
 type Config struct {
-	DatabaseURL     string
-	Schema          string
-	Addr            string
-	AllowedOrigins  []string
-	DBTimeout       time.Duration
-	LeaseTTL        time.Duration
-	LeaseRenew      time.Duration
-	ShutdownTimeout time.Duration
-	LogFile         string
+	DatabaseURL      string
+	Schema           string
+	Addr             string
+	AllowedOrigins   []string
+	DBTimeout        time.Duration
+	LeaseTTL         time.Duration
+	LeaseRenew       time.Duration
+	ShutdownTimeout  time.Duration
+	LogFile          string
+	SceneCapacity    int
+	SceneIdleTTL     time.Duration
+	SceneLoadTimeout time.Duration
 }
 
 func DefaultConfig() Config {
-	return Config{Addr: "127.0.0.1:8081", DBTimeout: 2 * time.Second, LeaseTTL: 15 * time.Second, LeaseRenew: 5 * time.Second, ShutdownTimeout: 10 * time.Second, AllowedOrigins: []string{"http://127.0.0.1:8080", "http://localhost:8080"}}
+	return Config{Addr: "127.0.0.1:8081", DBTimeout: 2 * time.Second, LeaseTTL: 15 * time.Second, LeaseRenew: 5 * time.Second, ShutdownTimeout: 10 * time.Second, AllowedOrigins: []string{"http://127.0.0.1:8080", "http://localhost:8080"}, SceneCapacity: 32, SceneIdleTTL: 2 * time.Minute, SceneLoadTimeout: 20 * time.Second}
 }
 
 func LoadConfig(getenv func(string) string) (Config, error) {
@@ -38,11 +41,19 @@ func LoadConfig(getenv func(string) string) (Config, error) {
 	if v := getenv("PLANET_HTTP_ADDR"); v != "" {
 		c.Addr = v
 	}
+	if v := getenv("PLANET_SCENE_CAPACITY"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return c, errors.New("invalid PLANET_SCENE_CAPACITY")
+		}
+		c.SceneCapacity = n
+	}
 	for _, p := range []struct {
 		name   string
 		target *time.Duration
 	}{
 		{"PLANET_DB_TIMEOUT", &c.DBTimeout}, {"PLANET_LEASE_TTL", &c.LeaseTTL}, {"PLANET_LEASE_RENEW", &c.LeaseRenew}, {"PLANET_SHUTDOWN_TIMEOUT", &c.ShutdownTimeout},
+		{"PLANET_SCENE_IDLE_TTL", &c.SceneIdleTTL}, {"PLANET_SCENE_LOAD_TIMEOUT", &c.SceneLoadTimeout},
 	} {
 		if v := getenv(p.name); v != "" {
 			d, err := time.ParseDuration(v)
@@ -79,6 +90,9 @@ func (c Config) Validate() error {
 	}
 	if c.ShutdownTimeout < time.Second || c.ShutdownTimeout > time.Minute {
 		return errors.New("PLANET_SHUTDOWN_TIMEOUT must be 1s-1m")
+	}
+	if c.SceneCapacity < 1 || c.SceneCapacity > 1024 || c.SceneIdleTTL < time.Second || c.SceneIdleTTL > time.Hour || c.SceneLoadTimeout < time.Second || c.SceneLoadTimeout > time.Minute {
+		return errors.New("scene capacity must be 1-1024, idle TTL 1s-1h and load timeout 1s-1m")
 	}
 	if len(c.AllowedOrigins) == 0 {
 		return errors.New("at least one planetary Origin is required")

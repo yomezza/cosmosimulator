@@ -1,0 +1,25 @@
+PostgreSQL 17; newly created disposable _test DB; fixture-owned schemas.
+Command: go test -race ./internal/planet/... ./internal/server/integration -count=1 -timeout=5m -run '^(TestLocalScenes170|TestLocalSceneFencingAndSourceCAS170|TestLocalSceneRetirement170|TestRegistry.*)$' -v
+=== RUN   TestRegistrySingleFlightPinsAndRetirement
+--- PASS: TestRegistrySingleFlightPinsAndRetirement (0.24s)
+=== RUN   TestRegistryCancellationRetryAndIdle
+--- PASS: TestRegistryCancellationRetryAndIdle (0.24s)
+=== RUN   TestRegistryStopCancelsPreparation
+--- PASS: TestRegistryStopCancelsPreparation (0.00s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/runtime	1.506s
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/scene	1.017s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/terrain	1.010s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/territory	1.012s [no tests to run]
+=== RUN   TestLocalScenes170
+--- PASS: TestLocalScenes170 (12.06s)
+=== RUN   TestLocalSceneFencingAndSourceCAS170
+--- PASS: TestLocalSceneFencingAndSourceCAS170 (10.38s)
+=== RUN   TestLocalSceneRetirement170
+--- PASS: TestLocalSceneRetirement170 (14.43s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/server/integration	37.892s
+Exit 0. Disposable DB removed.

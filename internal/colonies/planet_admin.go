@@ -34,6 +34,8 @@ type SurfaceResetInfo struct {
 	Visits         int              `json:"visits"`
 	PendingRefunds int              `json:"pending_refunds"`
 	Contributions  int              `json:"contributions"`
+	LocalLocations int              `json:"local_locations"`
+	RuntimeState   string           `json:"runtime_state"`
 	Invested       map[string]int64 `json:"invested"`
 	State          string           `json:"-"`
 	Token          string           `json:"token"`
@@ -44,6 +46,9 @@ func resetInfo(ctx context.Context, q pgx.Tx, star, planet int, name string) (Su
 	v := SurfaceResetInfo{Star: star, Planet: planet, Name: name, Invested: map[string]int64{}}
 	err := q.QueryRow(ctx, `SELECT COALESCE((SELECT id FROM planet_surfaces WHERE star=$1 AND planet=$2),0),COALESCE((SELECT revision FROM planet_surface_controls WHERE star=$1 AND planet=$2),0)`, star, planet).Scan(&v.Surface, &v.Revision)
 	if err != nil {
+		return v, err
+	}
+	if err = q.QueryRow(ctx, `SELECT (SELECT count(*) FROM planet_local_locations WHERE surface=$1),COALESCE((SELECT state FROM planet_runtime_controls WHERE surface=$1),'')`, v.Surface).Scan(&v.LocalLocations, &v.RuntimeState); err != nil {
 		return v, err
 	}
 	err = q.QueryRow(ctx, `SELECT
@@ -275,6 +280,23 @@ func (a *Service) AdminPlanetSurface(w http.ResponseWriter, r *http.Request) {
 	}
 	if in.Action == "delete" && info.Surface == 0 {
 		reject("Генерация поверхности отсутствует")
+		return
+	}
+	if info.LocalLocations > 0 {
+		// Do not delete planetary-owned data from cosmic. Fence new loads first;
+		// the live planetary registry drains pins and its writer clears snapshots.
+		_, err = tx.Exec(ctx, `UPDATE planet_runtime_controls SET state='retiring' WHERE surface=$1`, info.Surface)
+		if err == nil {
+			_, err = tx.Exec(ctx, `INSERT INTO admin_log(actor,action,data) VALUES($1,'planet_surface_retire',jsonb_build_object('surface',$2::bigint,'operation',$3::text))`, u.ID, info.Surface, in.Action)
+		}
+		if err == nil {
+			err = tx.Commit(ctx)
+		}
+		if err != nil {
+			httpkit.Internal(w, err)
+			return
+		}
+		httpkit.Fail(w, 409, "Подготовка поверхности к удалению: планетарная служба освобождает локальные локации. После очистки откройте предупреждение заново и повторите операцию. Планетарная служба должна быть запущена.")
 		return
 	}
 	var next geography.PlanetSurface

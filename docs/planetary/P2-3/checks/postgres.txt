@@ -1,0 +1,57 @@
+PostgreSQL 17; newly created disposable _test DB; fixture-owned schemas.
+Command: go test ./... -count=1 -timeout=5m -run '^(TestLocalScene.*170|TestLandingBackfillAndConcurrentCompletion160|TestPlanetReset124|TestPlanetResetVisits124|TestPlanetSchema150|TestPlanetRestrictedRole150|TestRegistry.*|TestScene.*|TestPackageBoundaries)$' -v
+=== RUN   TestPackageBoundaries
+--- PASS: TestPackageBoundaries (0.00s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/architecture	0.008s
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/geography	0.005s [no tests to run]
+=== RUN   TestRegistrySingleFlightPinsAndRetirement
+--- PASS: TestRegistrySingleFlightPinsAndRetirement (0.07s)
+=== RUN   TestRegistryCancellationRetryAndIdle
+--- PASS: TestRegistryCancellationRetryAndIdle (0.07s)
+=== RUN   TestRegistryStopCancelsPreparation
+--- PASS: TestRegistryStopCancelsPreparation (0.00s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/runtime	0.142s
+=== RUN   TestSceneSnapshotAndReservedRoutes
+    scene_test.go:115: compressed scene=10268 bytes, objects=549, walkable cells=29431
+--- PASS: TestSceneSnapshotAndReservedRoutes (0.22s)
+=== RUN   TestSceneCanonicalWaterAndPairedPortals
+--- PASS: TestSceneCanonicalWaterAndPairedPortals (0.60s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/scene	0.827s
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/terrain	0.004s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/territory	0.011s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planetserver	0.011s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/platform/postgres	0.006s [no tests to run]
+=== RUN   TestLandingBackfillAndConcurrentCompletion160
+--- PASS: TestLandingBackfillAndConcurrentCompletion160 (3.02s)
+=== RUN   TestPlanetReset124
+2026/10/30 07:20:17 request failed: ERROR: test-only failed sector insert (SQLSTATE P0001)
+--- PASS: TestPlanetReset124 (4.12s)
+=== RUN   TestPlanetResetVisits124
+--- PASS: TestPlanetResetVisits124 (3.21s)
+=== RUN   TestPlanetSchema150
+--- PASS: TestPlanetSchema150 (3.11s)
+=== RUN   TestPlanetRestrictedRole150
+--- PASS: TestPlanetRestrictedRole150 (2.13s)
+=== RUN   TestLocalScenes170
+--- PASS: TestLocalScenes170 (3.17s)
+=== RUN   TestLocalSceneFencingAndSourceCAS170
+--- PASS: TestLocalSceneFencingAndSourceCAS170 (2.94s)
+=== RUN   TestLocalSceneRetirement170
+--- PASS: TestLocalSceneRetirement170 (4.03s)
+=== RUN   TestLocalSceneRestrictedRole170
+--- PASS: TestLocalSceneRestrictedRole170 (2.66s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/server/integration	28.397s
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/universe	0.002s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/worldstore	0.005s [no tests to run]
+Exit 0. Disposable DB removed.

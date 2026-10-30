@@ -28,6 +28,7 @@ func TestConfig(t *testing.T) {
 		{"PLANET_DB_TIMEOUT": "nonsense"}, {"PLANET_LEASE_TTL": "1s"}, {"PLANET_LEASE_RENEW": "20s"},
 		{"PLANET_ALLOWED_ORIGINS": "*"}, {"PLANET_ALLOWED_ORIGINS": "https://a.example/private"},
 		{"PLANET_ALLOWED_ORIGINS": "https://user:secret@a.example"}, {"PLANET_SHUTDOWN_TIMEOUT": "0s"},
+		{"PLANET_SCENE_CAPACITY": "0"}, {"PLANET_SCENE_CAPACITY": "bad"}, {"PLANET_SCENE_IDLE_TTL": "0s"}, {"PLANET_SCENE_LOAD_TIMEOUT": "2h"},
 	} {
 		_, err = load(bad)
 		if err == nil {
