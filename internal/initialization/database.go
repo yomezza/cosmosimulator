@@ -135,6 +135,13 @@ func OpenDatabase(ctx context.Context, dsn, schema string, schemas fs.ReadFileFS
 	if _, e = tx.Exec(ctx, string(upgrade144)); e != nil {
 		return nil, fmt.Errorf("upgrade 0.14.4: %w", e)
 	}
+	upgrade150, e := schemas.ReadFile("schema150.sql")
+	if e != nil {
+		return nil, e
+	}
+	if _, e = tx.Exec(ctx, string(upgrade150)); e != nil {
+		return nil, fmt.Errorf("upgrade 0.15.0: %w", e)
+	}
 	var galaxyExists bool
 	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM galaxies WHERE name='Edem')`).Scan(&galaxyExists); err != nil {
 		return nil, err

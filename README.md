@@ -1,8 +1,8 @@
-# Cosmosimulator · 0.14.4
+# Cosmosimulator · 0.15.0
 
 Лёгкая браузерная космическая экономическая песочница: Go + PostgreSQL, встроенные HTML/CSS/JavaScript и SVG. Один Windows x64 `.exe` подключается к существующей базе и обслуживает игру по HTTP. npm для запуска и сборки не нужен.
 
-[Изменения 0.14.4](release-notes/v0.14.4.md) · [Реестр игровых идей](docs/roadmap/README.md) · [72 улучшения интерфейса](docs/roadmap/ui-0.3.3.md) · [Отложенное](docs/roadmap/deferred.md) · [Отклонённое](docs/roadmap/rejected.md).
+[Изменения 0.15.0](release-notes/v0.15.0.md) · [Реестр игровых идей](docs/roadmap/README.md) · [72 улучшения интерфейса](docs/roadmap/ui-0.3.3.md) · [Отложенное](docs/roadmap/deferred.md) · [Отклонённое](docs/roadmap/rejected.md).
 
 [Разделение Go-сервера 0.14.0](docs/refactoring/server/README.ru.md) · [Рефакторинг интерфейса 0.13.0: архитектура и проверки](docs/refactoring/ui/IMPLEMENTATION-0.13.0.ru.md) · [Границы космической и будущей планетарной служб](docs/refactoring/service-boundaries.ru.md). Node/Playwright используются только для разработки; Windows-службе они не нужны.
 
@@ -25,7 +25,7 @@ $env:HTTP_ADDR = '127.0.0.1:8080'
 # Только для первоначального создания администратора:
 $env:ADMIN_USERNAME = 'operator'
 $env:ADMIN_PASSWORD = 'YOUR_PASSWORD'
-.\downloads\cosmosimulator-v0.14.4-windows-amd64.exe
+.\downloads\cosmosimulator-v0.15.0-windows-amd64.exe
 ```
 
 Откройте `http://localhost:8080`. Остановка — Ctrl+C. После создания администратора удалите `ADMIN_USERNAME` и `ADMIN_PASSWORD`; bootstrap не меняет существующие пароли и не повышает игрока до администратора. `.env.example` — справочник, `.env` автоматически не читается.
@@ -54,6 +54,14 @@ sc.exe query Cosmosimulator
 Миграции выполняются транзакционно под advisory lock. Сохраняются аккаунты, кредиты, грузы, ID кораблей и систем, исследования, брони и задания добычи. Windows-сборка проверяется кросс-компиляцией; нативный SCM в облачной Linux-среде не проверялся.
 
 В 0.8.1 создаётся постоянный секрет скрытой генерации. Системы с исследованиями, наблюдениями, квотами, кораблями или объектными заданиями сохраняют объекты и месторождения; учебные системы 1 и 5 также сохраняются. В ранее не наблюдавшихся системах обновляются скрытые планеты и месторождения, при сохранении системных номеров, имён, координат, звёзд, коридоров и станций. Секрет хранится в игровой схеме и входит в её резервную копию. Старую версию после такой миграции запускайте только с соответствующей резервной копией.
+
+## Планетарная служба · P2-1
+
+Добавлен отдельный `cosmosimulator-planet` для Windows x64. Это основа второй службы: собственный HTTP-порт, проверки live/ready, совместимость схемы, DB lease и корректная остановка. Высадка, персонажи и 2D-мультиплеер ещё не включены. Космический сервер работает самостоятельно.
+
+Сначала запустите космическую версию 0.15.0 для применения аддитивной миграции. Планетарный процесс использует существующие `DATABASE_URL`/`DB_SCHEMA`, `PLANET_HTTP_ADDR` (по умолчанию `127.0.0.1:8081`) и при необходимости `PLANET_ALLOWED_ORIGINS`/`PLANET_LOG_FILE`. Он не запускает bootstrap мира и не читает `.env` автоматически.
+
+[Запуск второй Windows-службы и настройка роли БД](docs/planetary/P2-1/README.ru.md) · [Отчёт P2-1](docs/planetary/P2-1/REPORT.ru.md) · [Согласованный план второй очереди](docs/planetary/P2-0/README.ru.md).
 
 ## Новое в 0.14.2
 
@@ -311,7 +319,7 @@ TEST_DATABASE_URL='postgres://cosmos:password@127.0.0.1:5432/cosmosimulator_test
 Без `TEST_DATABASE_URL` интеграционные тесты пропускаются. Для них нужна одноразовая база с суффиксом `_test` и создание схем. Проверяются миграция из 0.3.2, изоляция схем, авторизация/права, флот, асинхронная разведка, квоты, конкурентная торговля, склады/доставки, корпорации, портал и отсутствие повторных начислений.
 
 ```sh
-CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags='-s -w' -o downloads/cosmosimulator-v0.14.4-windows-amd64.exe ./cmd/cosmosimulator
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags='-s -w' -o downloads/cosmosimulator-v0.15.0-windows-amd64.exe ./cmd/cosmosimulator
 sha256sum downloads/*.exe > downloads/SHA256SUMS
 ```
 
