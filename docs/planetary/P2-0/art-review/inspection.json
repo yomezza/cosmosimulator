@@ -1,0 +1,141 @@
+{
+  "archive_sha256": "7ff521b968e6558482bc42ad76878f7be438e0ad0310c9a1b67729bbe26545be",
+  "files": 110,
+  "pngs": 103,
+  "modes": {
+    "RGBA": 89,
+    "RGB": 14
+  },
+  "terrain": {
+    "assets/terrain/ground_dry.png": {
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGB",
+      "opposite_edge_max_delta": 0,
+      "matches_current_png": true
+    },
+    "assets/terrain/ground_grass.png": {
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGB",
+      "opposite_edge_max_delta": 0,
+      "matches_current_png": true
+    },
+    "assets/terrain/ground_rock.png": {
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGB",
+      "opposite_edge_max_delta": 0,
+      "matches_current_png": true
+    },
+    "assets/terrain/ground_sand.png": {
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGB",
+      "opposite_edge_max_delta": 0,
+      "matches_current_png": true
+    },
+    "assets/terrain/ground_snow.png": {
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGB",
+      "opposite_edge_max_delta": 0,
+      "matches_current_png": true
+    },
+    "assets/terrain/ground_volcanic.png": {
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGB",
+      "opposite_edge_max_delta": 0,
+      "matches_current_png": true
+    }
+  },
+  "water": {
+    "assets/water/shore_wet.png": {
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGB",
+      "opposite_edge_max_delta": 0
+    },
+    "assets/water/water_deep.png": {
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGB",
+      "opposite_edge_max_delta": 0
+    },
+    "assets/water/water_ripple_overlay.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "opposite_edge_max_delta": 8
+    },
+    "assets/water/water_shallow.png": {
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGB",
+      "opposite_edge_max_delta": 0
+    }
+  },
+  "character": {
+    "atlas_size": [
+      896,
+      1024
+    ],
+    "rows": {
+      "S": {
+        "frames": 7,
+        "unique_walk_frames": 3
+      },
+      "SW": {
+        "frames": 7,
+        "unique_walk_frames": 3
+      },
+      "W": {
+        "frames": 7,
+        "unique_walk_frames": 6
+      },
+      "NW": {
+        "frames": 7,
+        "unique_walk_frames": 3
+      },
+      "N": {
+        "frames": 7,
+        "unique_walk_frames": 3
+      },
+      "NE": {
+        "frames": 7,
+        "unique_walk_frames": 3
+      },
+      "E": {
+        "frames": 7,
+        "unique_walk_frames": 6
+      },
+      "SE": {
+        "frames": 7,
+        "unique_walk_frames": 3
+      }
+    },
+    "atlas_frame_mismatches": []
+  },
+  "missing_manifest_paths": []
+}
