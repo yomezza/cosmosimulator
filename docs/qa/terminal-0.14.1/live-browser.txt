@@ -1,0 +1,94 @@
+?   	github.com/yomezza/cosmosimulator/cmd/cosmosimulator	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/account	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/administration	[no test files]
+testing: warning: no tests to run
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/architecture	0.002s [no tests to run]
+?   	github.com/yomezza/cosmosimulator/internal/benchmark	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/colonies	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/commands	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/commerce	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/commerce/catalog	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/corporations	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/events	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/fleet	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/gameplay	[no test files]
+testing: warning: no tests to run
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/geography	0.004s [no tests to run]
+?   	github.com/yomezza/cosmosimulator/internal/ideas	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/initialization	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/inventory	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/logistics	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/mining	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/navigation	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/notifications	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/planner	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/platform/httpkit	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/platform/idempotency	[no test files]
+testing: warning: no tests to run
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/platform/postgres	0.004s [no tests to run]
+?   	github.com/yomezza/cosmosimulator/internal/platform/text	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/research	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/resources	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/server	[no test files]
+=== RUN   TestTerminalBrowser
+    terminal_browser_test.go:42: OPEN ru ship
+        OPEN ru cargo
+        OPEN ru market
+        OPEN ru corporations
+        OPEN ru profile
+        OPEN ru research
+        OPEN ru studies
+        OPEN ru guide
+        OPEN ru finance
+        OPEN ru notifications
+        OPEN ru tasks
+        OPEN ru logistics
+        OPEN ru ideas
+        OPEN ru users
+        OPEN ru gameplay
+        OPEN ru galaxies
+        OPEN ru adminchanges
+        OPEN ru benchmark
+        OPEN ru adminideas
+        OPEN ru settings
+        OPEN ru galaxy
+        OPEN en ship
+        OPEN en cargo
+        OPEN en market
+        OPEN en corporations
+        OPEN en profile
+        OPEN en research
+        OPEN en studies
+        OPEN en guide
+        OPEN en finance
+        OPEN en notifications
+        OPEN en tasks
+        OPEN en logistics
+        OPEN en ideas
+        OPEN en users
+        OPEN en gameplay
+        OPEN en galaxies
+        OPEN en adminchanges
+        OPEN en benchmark
+        OPEN en adminideas
+        OPEN en settings
+        OPEN en galaxy
+        ACTION warehouse -> cargo, ship rename, colonization manager
+        ACTION refuel, buy/sell, shipyard, new-ship planner, priority/pause/resume/cancel, ideas, corporation create/finance/role, resource grant, colony settings, tick, notifications
+        REAL TERMINAL OK
+        
+--- PASS: TestTerminalBrowser (13.33s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/server/integration	13.335s
+?   	github.com/yomezza/cosmosimulator/internal/simulation	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/terminal	[no test files]
+testing: warning: no tests to run
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/universe	0.002s [no tests to run]
+?   	github.com/yomezza/cosmosimulator/internal/wallet	[no test files]
+testing: warning: no tests to run
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/worldstore	0.005s [no tests to run]

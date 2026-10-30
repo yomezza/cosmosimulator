@@ -18,7 +18,7 @@ test("M1: a late Users response must not reinsert private data after logout", as
   );
   await g.open("users");
   await requested;
-  await g.page.evaluate(() => showAuth());
+  await g.page.evaluate(() => window.__testApp.showAuth());
   const delivered = g.page.waitForResponse(
     (r) => new URL(r.url()).pathname === "/api/admin/users",
   );
@@ -40,8 +40,8 @@ test("M3: reused confirmation must show the current title", async (t) => {
   const g = await game(t);
   await g.ready();
   await g.page.evaluate(() => {
-    UI.confirm("First", "one", () => {});
-    UI.confirm("Second", "two", () => {});
+    window.__testApp.UI.confirm("First", "one", () => {});
+    window.__testApp.UI.confirm("Second", "two", () => {});
   });
   assert.equal(await g.page.locator("#title-confirm").textContent(), "Second");
 });
@@ -50,7 +50,7 @@ test("M4: an open picker must stay inside a resized viewport", async (t) => {
   const g = await game(t);
   await g.ready();
   await g.page.evaluate(() => {
-    const picker = UI.picker([[1, "one"]], 1, () => {});
+    const picker = window.__testApp.UI.picker([[1, "one"]], 1, () => {});
     picker.style.cssText = "position:fixed;left:1200px;top:100px;width:180px";
     document.body.append(picker);
     picker.click();
@@ -71,7 +71,7 @@ test("M5: button completion must preserve the callback's disabled state", async 
   await g.ready();
   const disabled = await g.page.evaluate(async () => {
     let button;
-    button = UI.button("Action", async () => {
+    button = window.__testApp.UI.button("Action", async () => {
       button.disabled = true;
     });
     document.body.append(button);
@@ -94,7 +94,7 @@ test("M2: non-JSON HTTP failure must retain its status", async (t) => {
   );
   const status = await g.page.evaluate(async () => {
     try {
-      await api("test-http-error");
+      await window.__testApp.api("test-http-error");
     } catch (e) {
       return e.status ?? null;
     }

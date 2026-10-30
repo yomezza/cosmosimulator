@@ -79,7 +79,9 @@ export function createDeliveryMarket({ field, act, command }) {
         fields,
         "Станция назначения",
         (w().stations || []).map((s) => [s.star + "|" + s.object_id, s.name]),
-        "5|station",
+        w().stations?.[0]
+          ? w().stations[0].star + "|" + w().stations[0].object_id
+          : "",
       ),
       reward = field(
         fields,
@@ -113,7 +115,7 @@ export function createDeliveryMarket({ field, act, command }) {
             hours: Number(hours.value),
           });
         },
-        !d().docked,
+        !d().docked || !w().stations?.length,
         "Стыкуйтесь со станцией",
       ),
     );

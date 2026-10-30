@@ -25,6 +25,30 @@ test("ES module graph has no missing dependencies, implicit globals or reversed 
       ranges: true,
       locations: true,
     });
+    const visit = (node) => {
+      if (!node || typeof node !== "object") return;
+      if (
+        node.type === "MemberExpression" &&
+        ["window", "globalThis", "self"].includes(node.object?.name)
+      ) {
+        const key = node.computed ? node.property.value : node.property.name;
+        if (typeof key === "string" && !allowed.has(key))
+          failures.push(`${name}: undocumented global ${key}`);
+      }
+      if (
+        node.type === "CallExpression" &&
+        node.callee.object?.name === "Object" &&
+        node.callee.property?.name === "assign" &&
+        node.arguments[1]?.properties?.some((p) => p.kind === "get")
+      ) {
+        failures.push(`${name}: Object.assign flattens live getters`);
+      }
+      for (const value of Object.values(node)) {
+        if (Array.isArray(value)) value.forEach(visit);
+        else if (value && typeof value === "object") visit(value);
+      }
+    };
+    visit(tree);
     const scope = analyze(tree, {
       ecmaVersion: 2024,
       sourceType: "module",

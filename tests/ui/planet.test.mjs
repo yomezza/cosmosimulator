@@ -37,7 +37,7 @@ test("planet scenes load public art lazily, reuse six textures and keep geograph
     g.requests.some((r) => r.method === "POST"),
     false,
   );
-  await g.page.evaluate(() => I18n.set("en"));
+  await g.page.evaluate(() => window.__testApp.I18n.set("en"));
   await g.page.waitForSelector('#planet-map[data-textures="ready"]');
   assert.equal(g.assets.filter((p) => p.includes("surface-ground-")).length, 6);
 });
@@ -58,7 +58,7 @@ test("texture failure falls back and retries without replacing geography", async
     .getByRole("button", { name: "Повторить загрузку текстур", exact: true })
     .click();
   await g.page.waitForSelector('#planet-map[data-textures="ready"]');
-  await g.page.evaluate(() => showAuth());
+  await g.page.evaluate(() => window.__testApp.showAuth());
   await g.page.waitForFunction(() => !document.querySelector(".planet-ui"));
   assert.equal(await g.page.locator("#planet-map").count(), 0);
 });
@@ -84,7 +84,7 @@ test("late images cannot resurrect a scene after logout", async (t) => {
       await openPlanet(1, 1);
     });
     await allRequested;
-    await g.page.evaluate(() => showAuth());
+    await g.page.evaluate(() => window.__testApp.showAuth());
     await g.page.waitForFunction(() => !document.querySelector(".planet-ui"));
     release();
     await Promise.all(

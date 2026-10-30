@@ -670,13 +670,21 @@ export function initPlanet() {
     if (Session.data.state?.user.role !== "admin") return;
     const session = Session.epoch,
       info = await api(`admin/planet/surface?star=${star}&planet=${planet}`);
-    if (session !== Session.epoch || !Session.signedIn) return;
+    if (
+      session !== Session.epoch ||
+      !Session.signedIn ||
+      Session.data.state?.user.role !== "admin"
+    )
+      return;
     const title =
         operation === "delete"
           ? "Удалить генерацию колонии"
           : "Перегенерировать колонию",
       key = "surface-admin",
-      root = Modules.create(key, "Управление поверхностью", 640, 720),
+      root = Modules.create(key, "Управление поверхностью", 640, 720, {
+        audience: "admin",
+        transient: true,
+      }),
       phrase = operation === "delete" ? "УДАЛИТЬ" : "ПЕРЕГЕНЕРИРОВАТЬ",
       request = Array.from(crypto.getRandomValues(new Uint32Array(4)), (v) =>
         v.toString(16),
@@ -1187,15 +1195,15 @@ export function initPlanet() {
   }
   async function settings(root) {
     const session = Session.epoch;
+    const current = () =>
+      Session.signedIn &&
+      session === Session.epoch &&
+      root.isConnected &&
+      Session.data.state.user.role === "admin";
     const data = await api("admin/planet/settings"),
       form = n("form"),
       fields = {};
-    if (
-      !Session.signedIn ||
-      session !== Session.epoch ||
-      Session.data.state.user.role !== "admin"
-    )
-      return false;
+    if (!current()) return false;
     form.onsubmit = (e) => e.preventDefault();
     form.append(
       n("h3", tr("Планетарная колонизация")),
@@ -1242,6 +1250,7 @@ export function initPlanet() {
       );
     form.append(
       btn("Сохранить настройки колонизации", async () => {
+        if (!current() || !form.reportValidity()) return;
         try {
           await api("admin/planet/settings", {
             ...Object.fromEntries(
@@ -1252,9 +1261,9 @@ export function initPlanet() {
               Object.entries(costs).map(([k, v]) => [k, Number(v.value)]),
             ),
           });
-          notify(tr("Действие выполнено"));
+          if (current()) notify(tr("Действие выполнено"));
         } catch (e) {
-          notify(e.message, "error");
+          if (current()) notify(e.message, "error");
         }
       }),
     );

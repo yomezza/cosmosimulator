@@ -21,7 +21,8 @@ export function initCombobox() {
   window.addEventListener("languagechange", refreshLabels);
   refreshPickers = refreshLabels;
   UI.picker = (options, value, change, config = {}) => {
-    const opts = options.map((o) =>
+    const normalize = (options) =>
+      options.map((o) =>
         Array.isArray(o)
           ? {
               id: String(o[0]),
@@ -30,7 +31,8 @@ export function initCombobox() {
               raw: !!config.raw,
             }
           : { ...o, id: String(o.id), source: o.label, raw: true },
-      ),
+      );
+    const opts = normalize(options),
       button = UI.button("", () => {});
     button.classList.add("picker-button");
     if (config.system) button.classList.add("system-picker");
@@ -58,6 +60,13 @@ export function initCombobox() {
     };
     update();
     pickerRegistry.set(button, { opts, update });
+    button.setOptions = (options) => {
+      current?.button === button && current.close();
+      opts.splice(0, opts.length, ...normalize(options));
+      if (!opts.some((option) => option.id === button.value))
+        button.value = opts[0]?.id || "";
+      update();
+    };
     button.setValue = (value) => {
       const next = String(value);
       if (!opts.some((option) => option.id === next)) return;

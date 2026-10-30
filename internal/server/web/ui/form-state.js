@@ -19,4 +19,7 @@ export class FormState {
   clear() {
     this.#values.clear();
   }
+  forget(...ids) {
+    for (const id of ids) this.#values.delete(`${this.scope()}|${id}`);
+  }
 }

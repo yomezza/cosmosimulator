@@ -49,7 +49,7 @@ export function initScheduler() {
           resource,
           quantity,
           site;
-        UI.choice(
+        const shipsPicker = UI.choice(
           form,
           "Корабль",
           Session.data.fleet.ships.map((s) => [s.id, shipName(s)]),
@@ -59,6 +59,17 @@ export function initScheduler() {
             return build();
           },
         );
+        host.updateShips = () => {
+          const ships = Session.data.fleet.ships,
+            signature = JSON.stringify(ships.map((s) => [s.id, shipName(s)]));
+          if (host.dataset.fleet === signature) return;
+          host.dataset.fleet = signature;
+          shipsPicker.setOptions(ships.map((s) => [s.id, shipName(s)]));
+          if (!ships.some((s) => s.id === shipID)) {
+            shipID = Number(shipsPicker.value);
+            return build();
+          }
+        };
         UI.choice(
           form,
           "Тип задачи",
@@ -275,12 +286,13 @@ export function initScheduler() {
               });
               notify(tr("Задача добавлена"));
               await refresh(true);
-              Scheduler.render(root);
+              await Scheduler.render(root);
             }),
           );
         }
         build().catch((e) => notify(e.message, "error"));
       }
+      await host.updateShips?.();
       const key = ++request,
         epoch = Session.epoch,
         result = await api("planner");
@@ -396,7 +408,7 @@ export function initScheduler() {
               button(label, async () => {
                 await api("planner", { action, id: task.id });
                 await refresh(true);
-                Scheduler.render(root);
+                await Scheduler.render(root);
               }),
             );
           card.append(tools);

@@ -426,10 +426,9 @@ export function initExpedition() {
         ),
       );
       el.textContent =
-        num(el.dataset.remaining) +
-        " / " +
-        num(el.dataset.capacity) +
-        " · " +
+        (el.dataset.remaining !== undefined && el.dataset.capacity !== undefined
+          ? num(el.dataset.remaining) + " / " + num(el.dataset.capacity) + " · "
+          : "") +
         [Math.floor(sec / 3600), Math.floor(sec / 60) % 60, sec % 60]
           .map((v) => String(v).padStart(2, "0"))
           .join(":");

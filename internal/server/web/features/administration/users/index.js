@@ -184,7 +184,12 @@ export function createAdministrationUsers({ roots, act, command }) {
         }
         return ok;
       },
-      () => editUser(u),
+      () => {
+        drafts.forget(
+          ...[name, credits, level, xp, pass].map((input) => input.id),
+        );
+        editUser(u);
+      },
     );
     role.onchange = dirty;
     form.addEventListener("input", (e) =>

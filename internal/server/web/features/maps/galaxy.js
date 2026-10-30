@@ -1476,10 +1476,12 @@ export function initGalaxy() {
       notify("Некорректная система");
       return;
     }
-    const key = ++request;
+    const key = ++request,
+      epoch = Session.epoch;
     try {
       const d = await api("system?id=" + id);
-      if (key !== request || !Session.signedIn) return;
+      if (key !== request || epoch !== Session.epoch || !Session.signedIn)
+        return;
       if (local?.star.id !== id) {
         selectedSite = null;
         camera.system = { zoom: 1, x: 0, y: 0 };
@@ -1500,7 +1502,8 @@ export function initGalaxy() {
       systemPanel();
       draw();
     } catch (error) {
-      notify(error.message);
+      if (key === request && epoch === Session.epoch && Session.signedIn)
+        notify(error.message, "error");
     }
   }
   async function load() {
@@ -1886,14 +1889,30 @@ export function initGalaxy() {
     if (galaxy && Session.data.workbench?.universe_revision > galaxy.revision) {
       if (!loading) {
         loading = true;
+        const epoch = Session.epoch,
+          source = galaxy;
         api("galaxy")
           .then((data) => {
-            if (!Session.signedIn) return;
+            if (
+              !Session.signedIn ||
+              epoch !== Session.epoch ||
+              galaxy !== source
+            )
+              return;
             world.data = data;
             window.dispatchEvent(new Event("universechange"));
           })
-          .catch((error) => notify(error.message, "error"))
-          .finally(() => (loading = false));
+          .catch((error) => {
+            if (
+              Session.signedIn &&
+              epoch === Session.epoch &&
+              galaxy === source
+            )
+              notify(error.message, "error");
+          })
+          .finally(() => {
+            if (epoch === Session.epoch) loading = false;
+          });
       }
       return;
     }

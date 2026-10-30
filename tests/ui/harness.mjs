@@ -86,29 +86,7 @@ export async function game(
       "DOMContentLoaded",
       async () => {
         const { application: app } = await import("/bootstrap.js");
-        Object.assign(window, {
-          I18n: app.I18n,
-          UI: app.UI,
-          Modules: app.Modules,
-          Game: app.Game,
-          api: app.api,
-          refresh: app.refresh,
-          showAuth: app.showAuth,
-          notify: app.notify,
-        });
-        for (const [name, key] of [
-          ["signedIn", "signedIn"],
-          ["authEpoch", "epoch"],
-          ["gameData", "data"],
-          ["lastPoll", "lastPoll"],
-        ])
-          Object.defineProperty(window, name, {
-            configurable: true,
-            get: () => app.session[key],
-            set: (value) => {
-              app.session[key] = value;
-            },
-          });
+        window.__testApp = app;
         window.__testReady = true;
       },
       { once: true },
@@ -171,7 +149,7 @@ export async function game(
   // Test-only inspection bridge. Production imports ES modules and does not
   // publish the old script globals on window.
   await page.waitForFunction(() => window.__testReady);
-  await page.evaluate(() => I18n.ready);
+  await page.evaluate(() => window.__testApp.I18n.ready);
   const ready = () =>
     page.waitForFunction(
       () =>
@@ -182,17 +160,19 @@ export async function game(
     await page.locator('#auth-form input[name="password"]').fill("a");
     await page.locator("#submit").click();
     await page.waitForFunction(
-      () => signedIn && !document.getElementById("game").hidden,
+      () =>
+        window.__testApp.session.signedIn &&
+        !document.getElementById("game").hidden,
     );
   };
   const open = async (id) => {
-    await page.evaluate((id) => Modules.open(id), id);
+    await page.evaluate((id) => window.__testApp.Modules.open(id), id);
     await page.waitForFunction(
       (id) => document.getElementById("window-" + id)?.open,
       id,
     );
   };
-  const refresh = () => page.evaluate(() => refresh(true));
+  const refresh = () => page.evaluate(() => window.__testApp.refresh(true));
   return {
     page,
     context,

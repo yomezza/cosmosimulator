@@ -22,7 +22,7 @@ try {
     path: fileURLToPath(new URL("desktop-planner.png", artifacts)),
     animations: "disabled",
   });
-  await g.page.evaluate(() => Modules.close("tasks"));
+  await g.page.evaluate(() => window.__testApp.Modules.close("tasks"));
   await g.open("ship");
   await g.page.waitForSelector(".ship-inline-model svg");
   await g.page

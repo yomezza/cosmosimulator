@@ -56,7 +56,7 @@ test("Maps is initially closed and only the player changes its saved state", asy
     () => localStorage.getItem("maps-navigation-open") === "true",
   );
   await g.refresh();
-  await g.page.evaluate(() => I18n.set("en"));
+  await g.page.evaluate(() => window.__testApp.I18n.set("en"));
   assert.equal(
     await g.page.locator("#maps-navigation").evaluate((e) => e.open),
     true,
@@ -290,7 +290,7 @@ test("picker searches, paginates, selects with keyboard and closes on Escape/out
       i + 1,
       `System ${String(i + 1).padStart(2, "0")}`,
     ]);
-    const picker = UI.picker(options, 1, (value) => {
+    const picker = window.__testApp.UI.picker(options, 1, (value) => {
       window.testPick = value;
     });
     picker.id = "test-picker";
@@ -327,7 +327,7 @@ test("context menu clamps to viewport and supports nested keyboard navigation", 
   const g = await game(t);
   await g.ready();
   await g.page.evaluate(() =>
-    UI.menu(
+    window.__testApp.UI.menu(
       [
         {
           label: "Parent",
@@ -366,14 +366,16 @@ test("RU/EN number presentation preserves unknown values and source precision", 
   await g.ready();
   const values = await g.page.evaluate(() => {
     const raw = 0.0078;
-    I18n.set("ru");
-    const ru = UI.percent(50.2),
-      unknown = UI.formatNumber(null);
-    const science = UI.formatNumber(raw, { maximumFractionDigits: 4 });
-    I18n.set("en");
+    window.__testApp.I18n.set("ru");
+    const ru = window.__testApp.UI.percent(50.2),
+      unknown = window.__testApp.UI.formatNumber(null);
+    const science = window.__testApp.UI.formatNumber(raw, {
+      maximumFractionDigits: 4,
+    });
+    window.__testApp.I18n.set("en");
     return {
       ru,
-      en: UI.percent(50.2),
+      en: window.__testApp.UI.percent(50.2),
       unknown,
       science,
       raw,
@@ -393,7 +395,7 @@ test("RU/EN number presentation preserves unknown values and source precision", 
 test("technical toast never creates a saved notification", async (t) => {
   const g = await game(t, { signedIn: true });
   await g.ready();
-  await g.page.evaluate(() => notify("Действие выполнено"));
+  await g.page.evaluate(() => window.__testApp.notify("Действие выполнено"));
   assert.match(
     await g.page.locator("#toast").textContent(),
     /Действие выполнено/,
@@ -411,8 +413,8 @@ test("player cannot open admin modules; logout clears private UI", async (t) => 
   assert.equal(await g.page.locator("#admin-menu").isVisible(), false);
   await g.open("ship");
   await g.page.waitForSelector(".ship-mining");
-  await g.page.evaluate(() => Modules.open("users"));
-  await g.page.waitForFunction(() => !Modules.isOpen("users"));
+  await g.page.evaluate(() => window.__testApp.Modules.open("users"));
+  await g.page.waitForFunction(() => !window.__testApp.Modules.isOpen("users"));
   assert.equal(g.requests.filter((r) => r.path === "admin/users").length, 0);
   await g.page.evaluate(() => document.getElementById("logout").click());
   await g.page.waitForSelector("#auth:not([hidden])");

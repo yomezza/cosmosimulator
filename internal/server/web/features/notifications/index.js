@@ -168,10 +168,10 @@ export function createNotifications({ roots, act, command }) {
         if (item.data?.star)
           detail.append(
             b("На карте", () => {
-              window.dispatchEvent(
-                new CustomEvent("galaxyselection", { detail: item.data.star }),
-              );
               Modules.open("galaxy");
+              window.dispatchEvent(
+                new CustomEvent("showstar", { detail: item.data.star }),
+              );
             }),
           );
         if (item.data?.ship)

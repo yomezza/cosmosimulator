@@ -7,6 +7,7 @@ import { loadWorld } from "../../core/world-store.js";
 import { Session } from "../../core/session.js";
 import { I18n } from "../../core/i18n.js";
 import { api } from "../../core/api.js";
+import { refresh as refreshSnapshot } from "../../core/snapshot-store.js";
 
 import { notify } from "../../ui/feedback.js";
 import { UI, Modules } from "../../ui/runtime.js";
@@ -163,17 +164,26 @@ export function initLogistics() {
     if (!Session.signedIn || !Modules.isOpen("logistics")) return;
     const id = ++request,
       epoch = Session.epoch;
-    const result = await api("logistics");
-    if (
-      id !== request ||
-      epoch !== Session.epoch ||
-      !Session.signedIn ||
-      !Modules.isOpen("logistics")
-    )
-      return;
-    data = result;
-    paintSelection();
-    if (!drag && !formOpen) draw();
+    const current = () =>
+      id === request &&
+      epoch === Session.epoch &&
+      Session.signedIn &&
+      Modules.isOpen("logistics");
+    try {
+      const result = await api("logistics");
+      if (
+        id !== request ||
+        epoch !== Session.epoch ||
+        !Session.signedIn ||
+        !Modules.isOpen("logistics")
+      )
+        return;
+      data = result;
+      paintSelection();
+      if (!drag && !formOpen) draw();
+    } catch (error) {
+      if (current() && error.name !== "AbortError") apiError(error);
+    }
   }
   function local(from, to) {
     const fromShip =
@@ -309,7 +319,7 @@ export function initLogistics() {
             notify(
               tr(mode === "direct" ? "Ресурс перемещён" : "Задача добавлена"),
             );
-            await window.refresh(true);
+            await refreshSnapshot(true);
             await refresh();
           } catch (e) {
             if (
@@ -408,6 +418,7 @@ export function initLogistics() {
     };
   }
   function dropzone(element, target, allowed = () => true) {
+    const epoch = Session.epoch;
     let timer;
     const get = () => (typeof target === "function" ? target() : target);
     element.classList.add("cargo-dropzone");
@@ -420,8 +431,11 @@ export function initLogistics() {
       element.classList.add("cargo-drop-ready");
       if (element.tagName === "DETAILS" && !element.open && !timer)
         timer = setTimeout(() => {
-          element.open = true;
-          open.add(element.dataset.station);
+          timer = null;
+          if (drag && element.isConnected && epoch === Session.epoch) {
+            element.open = true;
+            open.add(element.dataset.station);
+          }
         }, 450);
     };
     element.ondragleave = (e) => {
@@ -795,10 +809,8 @@ export function initLogistics() {
       if (caret !== null) search.setSelectionRange(caret, caret);
     }
   }
+  Object.defineProperty(Logistics, "dragging", { get: () => !!drag });
   Object.assign(Logistics, {
-    get dragging() {
-      return !!drag;
-    },
     draggable,
     selectionToolbar,
     dropzone,

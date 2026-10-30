@@ -25,7 +25,23 @@ permissions:
 jobs:
   browser:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: cosmos
+          POSTGRES_PASSWORD: test-only
+          POSTGRES_DB: cosmosimulator_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cosmos -d cosmosimulator_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://cosmos:test-only@127.0.0.1:5432/cosmosimulator_test?sslmode=disable
     defaults:
       run:
         working-directory: tests/ui
@@ -39,6 +55,14 @@ jobs:
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
       - run: npm test
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Terminal browser against real Go and PostgreSQL
+        working-directory: .
+        run: go test ./internal/server/integration -run '^TestTerminalBrowser$' -count=1 -timeout=5m -v
+        env:
+          RUN_TERMINAL_BROWSER: '1'
   server-contracts:
     runs-on: ubuntu-latest
     timeout-minutes: 20

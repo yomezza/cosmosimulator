@@ -73,7 +73,7 @@ test("closing Users invalidates a pending read", async (t) => {
   await g.page.locator("#user-search").fill("late");
   await g.page.locator("#user-search").press("Enter");
   await requested;
-  await g.page.evaluate(() => Modules.close("users"));
+  await g.page.evaluate(() => window.__testApp.Modules.close("users"));
   await reply();
   await settle(g.page);
   assert.equal(
@@ -100,7 +100,7 @@ test("a different account never receives the previous admin's late response", as
   );
   await g.open("users");
   await requested;
-  await g.page.evaluate(() => showAuth());
+  await g.page.evaluate(() => window.__testApp.showAuth());
   g.data.state.user = { id: 52, username: "second_pilot", role: "player" };
   await g.login();
   await reply();
@@ -151,9 +151,11 @@ test("transient windows release DOM nodes and global resize listeners", async (t
   await g.page.evaluate(() => {
     for (let i = 0; i < 60; i++) {
       const id = "lifecycle-" + i;
-      Modules.create(id, "Test", 400, 300, { transient: true });
-      Modules.open(id);
-      Modules.close(id);
+      window.__testApp.Modules.create(id, "Test", 400, 300, {
+        transient: true,
+      });
+      window.__testApp.Modules.open(id);
+      window.__testApp.Modules.close(id);
     }
   });
   await settle(g.page);
@@ -165,18 +167,24 @@ test("dirty temporary editors survive close but are cleared on logout", async (t
   const g = await game(t);
   await g.ready();
   await g.page.evaluate(() => {
-    const root = Modules.create("dirty-test", "Test", 400, 300, {
-      transient: true,
-    });
+    const root = window.__testApp.Modules.create(
+      "dirty-test",
+      "Test",
+      400,
+      300,
+      {
+        transient: true,
+      },
+    );
     const form = document.createElement("form");
     form.dataset.dirty = "true";
     form.textContent = "DRAFT";
     root.append(form);
-    Modules.open("dirty-test");
-    Modules.close("dirty-test");
+    window.__testApp.Modules.open("dirty-test");
+    window.__testApp.Modules.close("dirty-test");
   });
   assert.equal(await g.page.locator("#window-dirty-test").count(), 1);
-  await g.page.evaluate(() => showAuth());
+  await g.page.evaluate(() => window.__testApp.showAuth());
   assert.equal(await g.page.locator("#window-dirty-test").count(), 0);
   assert.equal(await g.page.locator("#welcome-name").textContent(), "");
   assert.equal(await g.page.locator("#credits").textContent(), "");
@@ -189,7 +197,7 @@ test("picker uses a modal's top layer and reports asynchronous callback errors",
     const modal = document.createElement("dialog");
     modal.id = "test-modal";
     document.body.append(modal);
-    const picker = UI.picker(
+    const picker = window.__testApp.UI.picker(
       [
         [1, "one"],
         [2, "two"],

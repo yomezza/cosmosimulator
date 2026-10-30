@@ -23,7 +23,7 @@ CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium npm test
 
 `CHROMIUM_NO_SANDBOX=1` нужен только в изолированной среде разработки, где Chromium иначе не запускается. По умолчанию sandbox включён. В тестах нет абсолютных путей среды Codex.
 
-## Набор 0.13.0
+## Набор 0.14.1
 
 | Файл | Число | Проверяемое поведение |
 |---|---:|---|
@@ -34,10 +34,24 @@ CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium npm test
 | `markets.test.mjs` | 6 | Вкладки и один panel, reservation payload/отсутствие второй таблицы, stale tab, raw station snapshot, порядок корпораций, keyboard/ARIA |
 | `planet.test.mjs` | 3 | Пять типов поверхности, lazy шесть PNG и cache, failure/retry, late assets после logout, неизменность географии |
 | `architecture.test.mjs` | 1 | Импорты, browser globals, направления core/UI/features, один module entry |
+| `logistics.test.mjs` | 3 | Склад → трюм без legacy globals, drag при polling, пакетный перенос ресурсов |
+| `terminal-flows.test.mjs` | 9 | Отмена форм, станция доставки, обновление флота/picker, потеря прав и поздние ответы, отсчёт квот |
 
-Итого **45 тестов**, без TODO и скрытых ожидаемых ошибок. Пять диагностических требований M0 стали обычными регрессиями; прежнего `knownDefect` wrapper нет. `npm run test:baseline` и `npm run test:regressions` запускают соответствующие поднаборы.
+Итого **57 тестов**, без TODO и скрытых ожидаемых ошибок. Пять диагностических требований M0 стали обычными регрессиями; прежнего `knownDefect` wrapper нет. `npm run test:baseline` и `npm run test:regressions` запускают соответствующие поднаборы.
 
 Fixtures синтетические. Они повторяют необходимые DTO, но не реализуют игровую экономику и серверную авторизацию. Mock 403 не доказывает защиту Go API. Реальные anonymous guards, CSP/MIME и доставку всех embedded assets проверяет `internal/server/integration/ui_contracts_test.go`. Полномочия вошедшего игрока и транзакционные инварианты проверяются в DB integration.
+
+## Настоящий терминал с Go и PostgreSQL
+
+`live-scenarios.mjs` запускается только через `TestTerminalBrowser`, не входит в `npm test`. Go-тест создаёт собственную схему и пользователя, поднимает loopback httptest server и передаёт браузеру одноразовый nonce. Сценарий проверяет nonce перед входом и отклоняет нелокальный URL.
+
+После установки зависимостей и создания **одноразовой** БД с настройкой `TEST_DATABASE_URL`, из корня:
+
+```sh
+RUN_TERMINAL_BROWSER=1 go test ./internal/server/integration -run '^TestTerminalBrowser$' -count=1 -timeout=5m -v
+```
+
+Проверяются 21 модуль на RU/EN и реальные действия: перенос, заправка, торговля, покупка корабля, планировщик, идеи, корпорация, выдача ресурсов, настройки колонизации, тик, уведомления. Без флага Go-тест явно пропускается. CI запускает его отдельно после npm test с PostgreSQL 17. Синтетический harness предоставляет только `window.__testApp` для инспекции и не создаёт старые `window.refresh`, `window.UI` и другие globals.
 
 ## Go и PostgreSQL
 

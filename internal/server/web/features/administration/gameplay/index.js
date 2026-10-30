@@ -120,29 +120,34 @@ export function createAdministrationGameplay({ roots, act, command }) {
     UI.dirty(
       form,
       () => act("admin/gameplay", values()),
-      () => renderGameplay(),
+      () => {
+        drafts.forget(...Object.values(inputs).map((input) => input.id));
+        return renderGameplay();
+      },
     );
     root.append(
       form,
-      b("Настройки колонизации", () =>
-        loadPlanet().then((p) => {
-          const r = Modules.create(
-            "colony-settings",
-            "Настройки колонизации",
-            700,
-            720,
-          );
-          r.replaceChildren();
-          p.settings(r).then((ok) => {
-            if (
-              ok &&
-              Session.signedIn &&
-              Session.data.state.user.role === "admin"
-            )
-              Modules.open("colony-settings");
-          });
-        }),
-      ),
+      b("Настройки колонизации", async () => {
+        const p = await loadPlanet();
+        if (!lease.current()) return;
+        const r = Modules.create(
+          "colony-settings",
+          "Настройки колонизации",
+          700,
+          720,
+          { audience: "admin", transient: true },
+        );
+        r.replaceChildren();
+        const ok = await p.settings(r);
+        if (
+          ok &&
+          lease.current() &&
+          r.isConnected &&
+          Session.signedIn &&
+          Session.data.state.user.role === "admin"
+        )
+          Modules.open("colony-settings");
+      }),
       b("Восстановить квоты сейчас", () =>
         UI.confirm(
           "Восстановление квот",

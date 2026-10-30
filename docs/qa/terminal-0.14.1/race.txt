@@ -1,0 +1,58 @@
+?   	github.com/yomezza/cosmosimulator/cmd/cosmosimulator	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/account	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/administration	[no test files]
+testing: warning: no tests to run
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/architecture	1.046s [no tests to run]
+?   	github.com/yomezza/cosmosimulator/internal/benchmark	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/colonies	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/commands	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/commerce	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/commerce/catalog	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/corporations	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/events	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/fleet	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/gameplay	[no test files]
+testing: warning: no tests to run
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/geography	1.074s [no tests to run]
+?   	github.com/yomezza/cosmosimulator/internal/ideas	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/initialization	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/inventory	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/logistics	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/mining	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/navigation	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/notifications	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/planner	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/platform/httpkit	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/platform/idempotency	[no test files]
+=== RUN   TestOpenDoesNotInitializeGame
+--- PASS: TestOpenDoesNotInitializeGame (0.08s)
+=== RUN   TestDatabaseConfig
+--- PASS: TestDatabaseConfig (0.00s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/platform/postgres	1.155s
+?   	github.com/yomezza/cosmosimulator/internal/platform/text	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/research	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/resources	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/server	[no test files]
+=== RUN   TestBenchmarkCompositionIsolation
+--- PASS: TestBenchmarkCompositionIsolation (23.41s)
+=== RUN   TestLastHullPurchase040
+--- PASS: TestLastHullPurchase040 (8.51s)
+=== RUN   TestConcurrentLogistics080
+--- PASS: TestConcurrentLogistics080 (7.01s)
+=== RUN   TestBatchLogistics100
+--- PASS: TestBatchLogistics100 (7.80s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/server/integration	47.767s
+?   	github.com/yomezza/cosmosimulator/internal/simulation	[no test files]
+?   	github.com/yomezza/cosmosimulator/internal/terminal	[no test files]
+testing: warning: no tests to run
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/universe	1.013s [no tests to run]
+?   	github.com/yomezza/cosmosimulator/internal/wallet	[no test files]
+=== RUN   TestColdCacheSaturatedPool
+--- PASS: TestColdCacheSaturatedPool (0.07s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/worldstore	1.090s
