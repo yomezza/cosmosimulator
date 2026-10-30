@@ -30,6 +30,7 @@
 | A19 | P2 | Поиск по lower(body) требует согласованного expression index; расплывчатое pg_trgm может не использоваться | WHERE lower(body) LIKE '%' || lower($q) || '%' + соответствующий GIN lower(body) gin_trgm_ops на каждой партиции; отдельно тесты кириллицы, латиницы и Unicode эмодзи; лицензированное pg_trgm расширение/доступность валидировать до запуска |
 | A20 | P2 | Коллекции public/private cache, фавориты и user settings могут сохранять данные чужой учётной записи после logout на том же браузере | Очистить runtime store и персональные persistent keys на logout/смене учётной записи; backend всегда фильтрует owner_id и права |
 | A21 | P2 | Пакет 16 KiB может оказаться недостаточен для допустимых сочетаний escaped Unicode и links/mentions | Разделить MAX_BODY_RUNES (256/500/2500), MAX_FRAME_BYTES (например 32 KiB), MAX_JSON_DEPTH/arrays; проверять значения независимо. 16 KiB остаётся первоначальным baseline до тестов |
+| A22 | P1 | SQL DELETE не гарантирует, что остаточные байты сразу исчезли из MVCC heap pages, WAL, backup и файловой системы | Обязателен настоящий DELETE (не soft flag), шифрование PostgreSQL storage и backups, регулярный VACUUM/ретенция; не обещать немедленное криптографическое стирание с диска. После restore применять доступный WAL/deletion manifest |
 
 ## 2. Фундаментальные правила исправленной архитектуры
 
