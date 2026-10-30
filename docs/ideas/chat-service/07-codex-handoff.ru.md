@@ -1,5 +1,7 @@
 # Chat Service — ТЗ Codex, последовательность реализации и контроль избыточности
 
+**ВНИМАНИЕ:** этот первоначальный этапный план дополнен и уточнён [12-codex-execution-brief-v1.1.ru.md](./12-codex-execution-brief-v1.1.ru.md). Финальные P0-исправления [08](./08-strict-audit-errata.ru.md), [09](./09-postgresql-final-schema.ru.md), [10](./10-state-machines-and-transactions.ru.md), тесты [11](./11-verification-matrix.ru.md).
+
 **Версия:** 1.0, 2026-10-30.
 **Важное:** это developer handoff. Исходная идея: [01](./01-idea-v1.ru.md); утверждённые дополнения: [02](./02-approved-decisions.ru.md); границы службы/аудит: [03](./03-architecture-integration.ru.md); PostgreSQL: [04](./04-postgresql-design.ru.md); алгоритмы: [05](./05-domain-logic.ru.md); контракты и тесты: [06](./06-protocol-operations-tests.ru.md).
 Изменить продуктовые решения нельзя без владельца. Код игры, исполняемый SQL и миграции в ходе этого проектирования **не менялись и не запускались**.
