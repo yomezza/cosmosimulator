@@ -117,6 +117,8 @@ export function initNavigation() {
     const b = e.target.closest("[data-open]");
     if (b) {
       Modules.open(b.dataset.open);
+      if (b.dataset.open === "galaxy")
+        window.dispatchEvent(new Event("showgalaxy"));
       if (b.closest("#profile-menu"))
         document.getElementById("profile-menu").open = false;
     }

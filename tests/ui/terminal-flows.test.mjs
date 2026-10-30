@@ -270,3 +270,70 @@ test("notification opens its system on the map before any prior map visit", asyn
     /Test Vega/,
   );
 });
+
+test("galactic navigation restores galaxy mode after visiting and closing the system map", async (t) => {
+  const g = await game(t, { signedIn: true });
+  await g.ready();
+  await g.page.locator("#maps-navigation > summary").click();
+  await g.page.locator("#current-system-map").click();
+  await g.page.waitForFunction(() =>
+    document
+      .querySelector("#map-breadcrumb")
+      ?.textContent.includes("Test Region"),
+  );
+  await g.page.locator('#sidebar [data-open="galaxy"]').click();
+  await g.page.waitForSelector("#route-to");
+  assert.ok(
+    !(await g.page.locator("#map-breadcrumb").textContent()).includes(
+      "Test Region",
+    ),
+  );
+  await g.page.locator("#current-system-map").click();
+  await g.page.waitForFunction(() =>
+    document
+      .querySelector("#map-breadcrumb")
+      ?.textContent.includes("Test Region"),
+  );
+  await g.page.evaluate(() => window.__testApp.Modules.close("galaxy"));
+  await g.page.locator('#sidebar [data-open="galaxy"]').click();
+  await g.page.waitForSelector("#route-to");
+  assert.ok(
+    !(await g.page.locator("#map-breadcrumb").textContent()).includes(
+      "Test Region",
+    ),
+  );
+});
+
+test("late system response cannot override explicit galactic navigation", async (t) => {
+  const g = await game(t, { signedIn: true });
+  await g.ready();
+  await g.open("galaxy");
+  await g.page.waitForSelector("#route-to");
+  let reply;
+  const blocked = new Promise((resolve) =>
+    g.handlers.set("system", async ({ json }) => {
+      await new Promise((r) => {
+        reply = () => {
+          r();
+          return json(g.data.system);
+        };
+        resolve();
+      });
+    }),
+  );
+  await g.page.locator("#maps-navigation > summary").click();
+  await g.page.locator("#current-system-map").click();
+  await blocked;
+  await g.page.locator('#sidebar [data-open="galaxy"]').click();
+  await reply();
+  await g.page.evaluate(
+    () =>
+      new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))),
+  );
+  await g.page.waitForSelector("#route-to");
+  assert.ok(
+    !(await g.page.locator("#map-breadcrumb").textContent()).includes(
+      "Test Region",
+    ),
+  );
+});

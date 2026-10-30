@@ -1633,14 +1633,23 @@ export function initGalaxy() {
     draw();
   }
   inspect.onclick = () => openSystem(Number(system.value));
-  back.onclick = () => {
+  function showGalaxy() {
+    panelTab = "route";
+    currentSystemRequested = false;
+    pendingStar = null;
+    pendingFind = null;
+    scenes.planet?.dismiss(false);
     request++;
     mode = "galaxy";
     back.hidden = true;
-    label.textContent = galaxyTitle();
-    routePanel();
-    draw();
-  };
+    if (galaxy) {
+      label.textContent = galaxyTitle();
+      routePanel();
+      draw();
+    }
+  }
+  back.onclick = showGalaxy;
+  window.addEventListener("showgalaxy", showGalaxy);
   reset.onclick = () => {
     camera[mode] = { zoom: 1, x: 0, y: 0 };
     draw();
