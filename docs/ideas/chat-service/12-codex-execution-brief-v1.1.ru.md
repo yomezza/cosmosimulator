@@ -90,6 +90,7 @@ Planet-owned active visit/sector/heartbeat/fence, surface retirement request/rec
 - Не выполнять HTTP из SQL-trigger, не создавать retry storms при восстановлении Planet.
 - Не писать тела сообщений в audits/reports/notifications/outbox/operation result.
 - Не утверждать, что restore backup автоматически устраняет текст модераторских удалений, совершённых после snapshot: нужен WAL до верного момента либо независимый deletion manifest; иначе ограничить восстановление и запросить административное решение.
+- SQL DELETE должен удалять **действующие** строки, а не прятать body за deleted=true; но остаточные байты MVCC/WAL не равны доступной записи. Требуется шифрование at rest и проверенная backup/WAL политика.
 
 ## 5. Состояния ошибок и graceful degradation
 
