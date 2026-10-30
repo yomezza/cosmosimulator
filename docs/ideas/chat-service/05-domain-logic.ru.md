@@ -1,5 +1,7 @@
 # Chat Service — алгоритмы бизнес-логики и конкурентности
 
+**ВНИМАНИЕ для Codex:** детальный порядок блокировок, state machines, sender idempotency и Private receipts исправлены в [10-state-machines-and-transactions.ru.md](./10-state-machines-and-transactions.ru.md). Применять 10 при расхождении.
+
 Версия проекта 1.0 (2026-10-30). Источники: [01](./01-idea-v1.ru.md), [02](./02-approved-decisions.ru.md), [03](./03-architecture-integration.ru.md), [04](./04-postgresql-design.ru.md). Это техническая спецификация, а не исполняемый код.
 
 ## 1. Серверная матрица доступа
