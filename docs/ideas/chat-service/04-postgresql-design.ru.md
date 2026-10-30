@@ -1,5 +1,7 @@
 # Chat Service — PostgreSQL: схема, индексы, партиции, процедуры
 
+**ВНИМАНИЕ для Codex:** исходный каталог таблиц версии 1.0 дополнен и частично исправлен в [09-postgresql-final-schema.ru.md](./09-postgresql-final-schema.ru.md). Считать 09 актуальной схемой (в частности ws lease generation, dm pair locks, notification inbox, mute state, operation result_json, report rate). 08 объясняет причины.
+
 Версия: проект DDL 1.0, 2026-10-30. Задача Codex: преобразовать спецификацию в **проверяемые миграции** после schema170.sql, не исполняя DDL из Chat Service при старте.
 Основы: [01](./01-idea-v1.ru.md), [02](./02-approved-decisions.ru.md), [03](./03-architecture-integration.ru.md).
 **Обязательное именование:** все новые обычные таблицы, секции, индексы, функции, триггеры и представления — с префиксом chat_. Существующие users/companies/planet_* НЕ переименовывать.
