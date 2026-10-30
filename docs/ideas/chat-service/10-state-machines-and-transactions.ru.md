@@ -131,7 +131,7 @@ Cosmic помечает surface retiring и создаёт operation_id, Planet 
 
 1. Сначала серверный ACL + scope locks по общему порядку; затем locator FOR UPDATE.
 2. SAVE: original live, viewer имеет доступ; копировать body, author/ID/time/channel/scope в chat_saved_items, без FK на source locator; можно много копий.
-3. MOD-DELETE: owner/moderator authority + обязательная reason, original live; DELETE saved WHERE source_message_id=originalID, DELETE partition row, DELETE locator (receipts cascade), обновить unread, audit metadata, outbox removal; COMMIT.
+3. MOD-DELETE: owner/moderator authority + обязательная reason, original live; сначала **вычислить затронутых непрочитавших адресатов по существующим receipts**, затем DELETE saved WHERE source_message_id=originalID, DELETE partition row, DELETE locator (receipts cascade), корректно уменьшить только их unread, audit metadata, outbox removal; COMMIT.
 4. Если locator уже исчез, MOD-DELETE не создаёт скрытый archive; report остаётся metadata only. Если жалоба после истечения/удаления source — reject с not_found.
 
 ### T07. Delete Private conversation
