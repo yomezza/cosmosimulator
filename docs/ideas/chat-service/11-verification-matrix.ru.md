@@ -129,7 +129,7 @@
 | DEL10 | partition completely expired + locator cleaned | DETACH/DROP safe; no orphan locators/receipts |
 | DEL11 | maintenance multiple processes | advisory lock elects 1 worker, repeated deletes idempotent |
 | DEL12 | missing future partition | send fails safely, health/alert flags, no silent default partition |
-| DEL13 | backup restored with messages expired in restored DB | user API blocked until startup cleanup/reconciliation; no resurfacing deleted text where identifiable |
+| DEL13 | backup restored with messages expired in restored DB | до открытия Chat API выполнить TTL cleanup/reconciliation; отдельно доказать, что поздние moderator-delete после точки бэкапа повторены по WAL/независимому deletion manifest. Если такого журнала нет, система не утверждает гарантированное отсутствие воскресших оригиналов и не открывает доступ без ручного решения восстановления |
 | DEL14 | PostgreSQL connection drops mid-send before COMMIT | no ACK of success; on retry exactly one message if commit actually occurred |
 | DEL15 | outbox event dropped while WS client disconnected | notifications/unread/history sync from DB after reconnect, no lost committed message |
 | DEL16 | ordinary remove from user after former company membership | user cannot search older corporate channel; Favorites copies still own |
