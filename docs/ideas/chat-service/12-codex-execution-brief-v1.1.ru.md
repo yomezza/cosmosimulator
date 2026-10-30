@@ -1,7 +1,7 @@
 # Chat Service — окончательный handoff Codex v1.1: порядок, трассировка, ограничения и риски
 
 Дата: 2026-10-30. Документ предназначен для разработчика (Codex), **не является поручением автоматически выполнить весь проект одним изменением**.
-Источники по приоритету: 01-idea-v1.ru.md и 02-approved-decisions.ru.md (согласованная игра), 08-strict-audit-errata.ru.md (найденные ошибки), 09-postgresql-final-schema.ru.md (исправленная БД), 10-state-machines-and-transactions.ru.md (транзакции), 11-verification-matrix.ru.md (доказательства), затем 03–07 (контекст).
+Источники по приоритету: 01-idea-v1.ru.md и 02-approved-decisions.ru.md (согласованная игра), 08-strict-audit-errata.ru.md (найденные ошибки), 09-postgresql-final-schema.ru.md (исправленная БД), 10-state-machines-and-transactions.ru.md (транзакции), 11-verification-matrix.ru.md (доказательства), затем 03–07 (контекст). **Для интеграционных тем, затронутых дополнением 13, его P0-01/P0-02 и критерии GATE01–05 имеют приоритет над старыми формулировками 08–12.** См. [13-last-mile-integration-fixes.ru.md](./13-last-mile-integration-fixes.ru.md).
 
 ## 1. Что уже известно из проверенного репозитория
 
@@ -46,6 +46,7 @@ Acceptance:
 - все новые таблицы/индексы/секции с chat_ prefix;
 - отдельная runtime роль не может читать чужие пароли, писать Cosmic/Planet или управлять чужими DDL;
 - SQL migration запускается только существующим Cosmic runner, Chat только проверяет совместимость;
+- реализовать/проверить узкие SECURITY DEFINER функции для row fences: обычный SELECT FOR SHARE требует UPDATE privileges; chat_runtime их напрямую не получает (13/P0-01, GATE05);
 - rollback/re-run migration test без потери существующих Cosmic/Planet rows.
 
 ### R1 — Global and shared message core
@@ -65,10 +66,14 @@ Stable user mentions, @all Corporation/Private including DM, notifications witho
 
 ### R4 — Corporation, game moderation, company dissolve
 
+**Перед включением Corporation выполнить 13/P0-02: Cosmic-owned chat_company_access_fences и обновления revision во всех mutators членства/ролей, без новых row-lock inversions; интеграционные GATE01–04 обязательны.**
+
 Cosmic chat.moderate allowlist and game moderator grants, corporate AccessResolver, muted state/history, audit/report access. Сначала переделать company_dissolve в barrier, затем включить corporate channel. Без double refund и утечек через admin reads.
 Не завершать пока AUTH04/06/07, MOD01–10, DEL03–06/16–18 проходят.
 
 ### R5 — spatial integration (НЕ начинать до P2-4+)
+
+**Условия 13/P0-01: доступ к Planet-owned visit под FOR SHARE — через ограниченную SECURITY DEFINER функцию с EXECUTE-only у chat_runtime, а не прямой SELECT на одной лишь read-only роли.**
 
 Planet-owned active visit/sector/heartbeat/fence, surface retirement request/receipt, spatial read/send/search and sector switching. До реализации контрактов feature off; никакие fake spatial chats.
 Не завершать пока AUTH13–16, DEL07, MSG02–03/13 и real Planet transition race не проходят.
@@ -115,7 +120,7 @@ Planet-owned active visit/sector/heartbeat/fence, surface retirement request/rec
 
 - [ ] Независимый cosmosimulator-chat.exe и same-origin reverse proxy.
 - [ ] Нет компиляционной зависимости chatserver → cosmic/planet composition root.
-- [ ] Новый DDL и compatibility marker, grants, feature flags.
+- [ ] Новый DDL и compatibility marker, grants, feature flags, включая привилегии и company fence из 13.
 - [ ] Таблицы, индексы, partition lifecycle протестированы на PostgreSQL.
 - [ ] Единый ACL engine и тот же use case для каждого разрешённого transport.
 - [ ] Правильно реализованы приглашения, conversion, owner, группы, cooldown, rate, unread.
