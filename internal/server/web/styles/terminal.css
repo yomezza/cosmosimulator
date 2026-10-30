@@ -4774,8 +4774,38 @@ button.picker-button.system-picker .picker-chevron {
   color: var(--text);
   font: 11px/1.4 system-ui;
 }
-.idea-status[data-status="approved"] { border-color: #69bd88; }
-.idea-status[data-status="rejected"] { border-color: #d76d73; }
-.idea-review { margin-top: 16px; }
+.idea-status[data-status="approved"] {
+  border-color: #69bd88;
+}
+.idea-status[data-status="rejected"] {
+  border-color: #d76d73;
+}
+.idea-review {
+  margin-top: 16px;
+}
 
-.landing-site-preview {display:block;width:112px;height:112px;object-fit:contain;margin:4px auto;background:transparent;}
+.landing-site-preview {
+  display: block;
+  width: 112px;
+  height: 112px;
+  object-fit: contain;
+  margin: 4px auto;
+  background: transparent;
+}
+
+.visit-tools {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+.visit-preview {
+  display: block;
+  width: 100%;
+  max-height: calc(100% - 130px);
+  object-fit: contain;
+  background: transparent;
+}
+.visit-preview[hidden] {
+  display: none;
+}

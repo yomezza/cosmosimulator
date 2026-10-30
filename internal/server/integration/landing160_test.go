@@ -234,7 +234,7 @@ func TestLandingAccessAndWater160(t *testing.T) {
 		}
 	}
 	f.req(c, "POST", "/api/workbench", map[string]any{"action": "role_save", "id": role, "name": "Visitor", "permissions": []string{"planetary.enter"}}, 200)
-	f.req(reader, "POST", "/api/planet/action", map[string]any{"action": "land", "id": corporateProject, "request": "allow-landing160"}, 200)
+	f.req(reader, "POST", "/api/planet/action", map[string]any{"action": "land", "id": corporateProject, "request": "allow-landing160"}, 409)
 	view = read()
 	accessible := 0
 	for _, site := range view.Sites {

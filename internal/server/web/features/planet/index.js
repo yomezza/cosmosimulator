@@ -1,3 +1,5 @@
+import { openVisit } from "./visit.js";
+
 import { terrain, texture, materials } from "./terrain.js";
 
 import { objectTag } from "../objects/presentation.js";
@@ -480,10 +482,11 @@ export function initPlanet() {
           ),
         );
         panel.append(
-          n(
-            "small",
-            tr("Высадка в 2D-режим появится после подключения персонажей."),
-            "muted",
+          btn(
+            "Высадиться",
+            () => openVisit(site.id),
+            !site.accessible,
+            site.reason,
           ),
         );
       } else if (landing?.preparing) {
@@ -1077,8 +1080,13 @@ export function initPlanet() {
     if (p.status === "complete")
       tools.append(
         btn(
-          "Высадиться",
-          () => send({ action: "land", id }).then((r) => r && landing(r, id)),
+          "Выбрать площадку",
+          () =>
+            open(data.star, data.planet).then(() => {
+              selected = p.sector;
+              card();
+              draw();
+            }),
           !!data.land_reason,
           data.land_reason,
         ),
@@ -1208,30 +1216,6 @@ export function initPlanet() {
       root.append(more);
     }
   }
-  function landing(data, id) {
-    const root = Modules.create(
-      "colony-location",
-      "Планетарная локация",
-      650,
-      500,
-    );
-    root.replaceChildren(
-      n("h2", data.planet + " · " + tr("Сектор") + " " + data.sector),
-      n("p", tr("Высадка разрешена. Колония готова к освоению.")),
-      n(
-        "p",
-        tr(
-          "Движение персонажа и подробная поверхность появятся в следующей очереди.",
-        ),
-        "muted",
-      ),
-      btn("Вернуться в космос", async () => {
-        if (await send({ action: "leave", id }))
-          Modules.close("colony-location");
-      }),
-    );
-    Modules.open("colony-location");
-  }
   async function manager(background = false) {
     const session = Session.epoch;
     const data = await api("planet/projects");
@@ -1242,7 +1226,10 @@ export function initPlanet() {
     )
       return;
     const root = Modules.create("colonies", "Колонии", 850, 650);
-    root.replaceChildren(n("h3", tr("Колонии и проекты")));
+    root.replaceChildren(
+      n("h3", tr("Колонии и проекты")),
+      btn("Продолжить высадку", () => openVisit()),
+    );
     for (const p of data.projects) {
       const card = n("section", undefined, "colony-list-item");
       card.append(

@@ -1,0 +1,3 @@
+CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium CHROMIUM_NO_SANDBOX=1 node --test tests/ui/architecture.test.mjs tests/ui/planet.test.mjs
+PASS: ES module graph; lazy surface art; texture failure/retry; logout cleanup; landing cards and permissions RU/EN.
+5 passed, 0 failed.

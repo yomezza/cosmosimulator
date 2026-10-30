@@ -64,7 +64,7 @@ func readSource(ctx context.Context, q postgres.DBTX, key scene.Key) (*source, e
 }
 
 func checkFence(ctx context.Context, q postgres.DBTX, f Fence, lock bool) error {
-	sql := `SELECT fence FROM planet_runtime_leases WHERE id=1 AND owner_id=$1 AND fence=$2 AND expires_at>clock_timestamp() AND EXISTS(SELECT 1 FROM planet_schema_state WHERE id=1 AND version=3)`
+	sql := `SELECT fence FROM planet_runtime_leases WHERE id=1 AND owner_id=$1 AND fence=$2 AND expires_at>clock_timestamp() AND EXISTS(SELECT 1 FROM planet_schema_state WHERE id=1 AND version=4)`
 	if lock {
 		sql += ` FOR SHARE`
 	}
@@ -277,9 +277,29 @@ func (r *Store) PurgeRetired(ctx context.Context, surface int64, f Fence) error 
 	if err = checkFence(ctx, tx, f, true); err != nil {
 		return err
 	}
+	_, err = tx.Exec(ctx, `UPDATE planet_characters SET last_surface=NULL,last_sector=NULL,last_revision=NULL WHERE last_surface=$1 AND EXISTS(SELECT 1 FROM planet_runtime_controls WHERE surface=$1 AND state='retiring')`, surface)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `DELETE FROM planet_handoff_uses u USING planet_handoffs h,planet_runtime_controls c WHERE u.handoff_id=h.id AND h.surface=$1 AND c.surface=h.surface AND c.state='retiring'`, surface)
+	if err != nil {
+		return err
+	}
 	_, err = tx.Exec(ctx, `DELETE FROM planet_local_locations l USING planet_runtime_controls c WHERE l.surface=$1 AND c.surface=l.surface AND c.state='retiring'`, surface)
 	if err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
+}
+
+// CheckSource uses the caller transaction for a fresh entry commit check.
+func CheckSource(ctx context.Context, q postgres.DBTX, s *scene.Scene) error {
+	src, err := readSource(ctx, q, s.Key())
+	if err != nil {
+		return err
+	}
+	if src.checksum != s.SourceChecksum() {
+		return scene.ErrSource
+	}
+	return checkSites(ctx, q, s)
 }

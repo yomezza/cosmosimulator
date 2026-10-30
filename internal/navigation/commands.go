@@ -21,6 +21,12 @@ import (
 
 func (a *Service) NavigationCommand(ctx context.Context, tx pgx.Tx, u account.User, s *fleet.Ship, g *universe.Galaxy, in commands.Command) (bool, error) {
 	switch in.Action {
+	case "route", "explore", "rescue", "portal_travel", "queue_route", "cancel_route", "resume_research":
+		if err := fleet.Available(ctx, tx, s.ID); err != nil {
+			return true, err
+		}
+	}
+	switch in.Action {
 	case "rename_ship":
 		return true, fleet.RenameShip(ctx, tx, *s, in.Name)
 	case "select_ship":

@@ -3,6 +3,7 @@ module github.com/yomezza/cosmosimulator
 go 1.26.0
 
 require (
+	github.com/coder/websocket v1.8.14
 	github.com/jackc/pgx/v5 v5.8.0
 	golang.org/x/crypto v0.48.0
 	golang.org/x/sys v0.41.0

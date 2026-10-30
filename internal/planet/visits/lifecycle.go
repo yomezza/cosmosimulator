@@ -1,0 +1,133 @@
+package visits
+
+import (
+	"context"
+	"errors"
+	"github.com/jackc/pgx/v5"
+	"github.com/yomezza/cosmosimulator/internal/planet/access"
+	"github.com/yomezza/cosmosimulator/internal/planet/scenestore"
+	"strconv"
+)
+
+func fmtInt(v int64) string { return strconv.FormatInt(v, 10) }
+func (a *Service) Check(ctx context.Context, id access.Identity, w Welcome, f scenestore.Fence) error {
+	tx, err := a.locked(ctx, id.User, f)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(context.Background())
+	return check(ctx, tx, id, w, f)
+}
+func check(ctx context.Context, tx pgx.Tx, id access.Identity, w Welcome, f scenestore.Fence) error {
+	if _, err := access.Session(ctx, tx, id.Session); err != nil {
+		return err
+	}
+	var site, ship int64
+	var valid bool
+	err := tx.QueryRow(ctx, `SELECT v.landing_site,v.ship,c.generation=v.generation AND c.reserved_ship=v.ship AND c.revoke_requested_at IS NULL FROM planet_visits v JOIN planet_transfer_controls c ON c.user_id=v.user_id WHERE v.user_id=$1 AND v.visit_id=$2 AND v.connection_epoch=$3 AND v.runtime_fence=$4 AND v.state='active'`, id.User, w.Visit, w.Epoch, f.Number).Scan(&site, &ship, &valid)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrReplaced
+	}
+	if err != nil {
+		return err
+	}
+	if !valid {
+		return ErrVisit
+	}
+	_, err = access.Landing(ctx, tx, id.User, site, ship)
+	return err
+}
+func (a *Service) Disconnect(ctx context.Context, id access.Identity, w Welcome, f scenestore.Fence) error {
+	tx, err := a.locked(ctx, id.User, f)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(context.Background())
+	_, err = tx.Exec(ctx, `UPDATE planet_visits SET state='disconnected' WHERE user_id=$1 AND visit_id=$2 AND connection_epoch=$3 AND runtime_fence=$4 AND state='active'`, id.User, w.Visit, w.Epoch, f.Number)
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+func end(ctx context.Context, tx pgx.Tx, uid int64, reason string) error {
+	_, err := tx.Exec(ctx, `UPDATE planet_visits SET state='ended',end_reason=$2,colony=NULL,ship=NULL,current_surface=NULL,current_sector=NULL,revision=NULL,landing_site=NULL,session_hash=NULL WHERE user_id=$1`, uid, reason)
+	return err
+}
+
+// Sweep terminates revoked/unauthorized visits; it never changes cosmic controls.
+func (a *Service) Sweep(ctx context.Context, f scenestore.Fence) error {
+	rows, err := a.DB.Query(ctx, `SELECT user_id FROM planet_visits WHERE state<>'ended' ORDER BY checked_at,user_id LIMIT 100`)
+	if err != nil {
+		return err
+	}
+	var users []int64
+	for rows.Next() {
+		var uid int64
+		if err = rows.Scan(&uid); err != nil {
+			break
+		}
+		users = append(users, uid)
+	}
+	if err == nil {
+		err = rows.Err()
+	}
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	for _, uid := range users {
+		if err = a.sweepOne(ctx, uid, f); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+func (a *Service) sweepOne(ctx context.Context, uid int64, f scenestore.Fence) error {
+	tx, err := a.locked(ctx, uid, f)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(context.Background())
+	var state, session string
+	var site, ship *int64
+	var valid, revoke bool
+	var previousFence int64
+	err = tx.QueryRow(ctx, `SELECT v.state,COALESCE(v.session_hash,''),v.landing_site,v.ship,COALESCE(c.generation=v.generation AND c.reserved_ship=v.ship AND c.revoke_requested_at IS NULL,false),COALESCE(c.revoke_requested_at IS NOT NULL,false),v.runtime_fence FROM planet_visits v LEFT JOIN planet_transfer_controls c ON c.user_id=v.user_id WHERE v.user_id=$1 AND v.state<>'ended'`, uid).Scan(&state, &session, &site, &ship, &valid, &revoke, &previousFence)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if state == "legacy" {
+		if revoke {
+			err = end(ctx, tx, uid, "legacy_return")
+		}
+	} else {
+		invalid := !valid || site == nil || ship == nil
+		if !invalid {
+			_, e := access.Session(ctx, tx, session)
+			if e != nil && !errors.Is(e, access.ErrAuth) {
+				return e
+			}
+			invalid = e != nil
+			_, e = access.Landing(ctx, tx, uid, *site, *ship)
+			if e != nil && !errors.Is(e, access.ErrDenied) {
+				return e
+			}
+			invalid = invalid || e != nil
+		}
+		if invalid {
+			err = end(ctx, tx, uid, "control_or_access_revoked")
+		} else if previousFence != f.Number {
+			_, err = tx.Exec(ctx, `UPDATE planet_visits SET state='disconnected' WHERE user_id=$1`, uid)
+		}
+	}
+	if err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `UPDATE planet_visits SET checked_at=clock_timestamp() WHERE user_id=$1`, uid); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}

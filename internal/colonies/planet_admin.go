@@ -58,7 +58,7 @@ func resetInfo(ctx context.Context, q pgx.Tx, star, planet int, name string) (Su
  (SELECT count(*) FROM planet_projects WHERE surface=$1 AND status='building'),
  (SELECT count(*) FROM planet_colonies WHERE surface=$1),
  (SELECT count(*) FROM planet_projects WHERE surface=$1 AND owner_company IS NOT NULL),
- (SELECT count(*) FROM planet_visits v JOIN planet_colonies c ON c.id=v.colony WHERE c.surface=$1),
+ (SELECT count(*) FROM planet_visits v JOIN planet_colonies c ON c.id=v.colony WHERE c.surface=$1 AND v.state<>'ended'),
  (SELECT count(*) FROM planet_refunds r JOIN planet_contributions c ON c.id=r.contribution JOIN planet_projects p ON p.id=c.project WHERE p.surface=$1 AND NOT r.claimed),
  (SELECT count(*) FROM planet_contributions c JOIN planet_projects p ON p.id=c.project WHERE p.surface=$1),
  md5(COALESCE((SELECT jsonb_agg((to_jsonb(p)-'progress'-'last_tick') ORDER BY p.id)::text FROM planet_projects p WHERE p.surface=$1),'')||COALESCE((SELECT jsonb_agg(to_jsonb(c) ORDER BY c.id)::text FROM planet_contributions c JOIN planet_projects p ON p.id=c.project WHERE p.surface=$1),''))`, v.Surface).Scan(&v.Sectors, &v.Projects, &v.Active, &v.Building, &v.Colonies, &v.Corporate, &v.Visits, &v.PendingRefunds, &v.Contributions, &v.State)
@@ -124,6 +124,8 @@ func eraseSurface(ctx context.Context, tx pgx.Tx, id int64) error {
 	// that otherwise return now-invalid project/surface links on retry.
 	queries := []string{
 		`UPDATE planet_runtime_controls SET state='retiring' WHERE surface=$1`,
+		`UPDATE planet_transfer_controls SET generation=generation+1,reserved_ship=NULL,active_operation=NULL,revoke_requested_at=NULL WHERE EXISTS(SELECT 1 FROM planet_handoffs h WHERE h.surface=$1 AND h.user_id=planet_transfer_controls.user_id AND h.operation=planet_transfer_controls.active_operation)`,
+		`DELETE FROM planet_handoffs WHERE surface=$1`,
 		`DELETE FROM planet_landing_sites WHERE surface=$1`,
 		`UPDATE planet_requests SET result=result||'{"surface_reset":true}'::jsonb WHERE result->>'surface'=$1::bigint::text OR result->>'project' IN (SELECT id::text FROM planet_projects WHERE surface=$1)`,
 		`DELETE FROM notifications WHERE kind IN('colony','landing_ready') AND data->>'surface'=$1::bigint::text`,

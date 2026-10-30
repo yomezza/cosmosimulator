@@ -1,0 +1,64 @@
+PostgreSQL 17; fresh disposable _test database, fixture-owned schemas.
+go test -race ./... -count=1 -timeout=5m -run '^(TestPlanet.*180)$' -v
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/architecture	1.024s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/geography	1.011s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/runtime	1.010s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/scene	1.013s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/terrain	1.015s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/territory	1.011s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planetserver	1.015s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/platform/postgres	1.010s [no tests to run]
+=== RUN   TestPlanetHandoff180
+--- PASS: TestPlanetHandoff180 (13.56s)
+=== RUN   TestPlanetTicketRecovery180
+--- PASS: TestPlanetTicketRecovery180 (11.69s)
+=== RUN   TestPlanetAccessRevocation180
+--- PASS: TestPlanetAccessRevocation180 (10.52s)
+=== RUN   TestPlanetCorporateAndAtomicActivation180
+--- PASS: TestPlanetCorporateAndAtomicActivation180 (11.03s)
+=== RUN   TestPlanetRestrictedRole180
+--- PASS: TestPlanetRestrictedRole180 (10.37s)
+=== RUN   TestPlanetBrowser180
+--- SKIP: TestPlanetBrowser180 (0.00s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/server/integration	58.198s
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/universe	1.009s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/worldstore	1.011s [no tests to run]
+Exit 0. Disposable database removed.
+
+Additional reset-scope regression: go test -race ./... -run ^TestPlanetHandoff180$ -count=1
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/architecture	1.012s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/geography	1.017s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/runtime	1.024s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/scene	1.009s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/terrain	1.012s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/territory	1.014s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planetserver	1.013s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/platform/postgres	1.016s [no tests to run]
+=== RUN   TestPlanetHandoff180
+--- PASS: TestPlanetHandoff180 (13.85s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/server/integration	14.874s
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/universe	1.015s [no tests to run]
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/worldstore	1.011s [no tests to run]
+Exit 0. Disposable database removed.

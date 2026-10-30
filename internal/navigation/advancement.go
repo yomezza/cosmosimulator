@@ -78,7 +78,7 @@ func (a *Service) AdvancePlayer(ctx context.Context, uid int64, g *universe.Gala
 			return err
 		}
 	}
-	rows, err = tx.Query(ctx, `SELECT id FROM ships s WHERE user_id=$1 AND destination IS NULL AND local_target IS NULL AND jsonb_array_length(waypoints)>0 AND NOT EXISTS(SELECT 1 FROM mining_jobs WHERE ship_id=s.id) ORDER BY id`, uid)
+	rows, err = tx.Query(ctx, `SELECT id FROM ships s WHERE user_id=$1 AND destination IS NULL AND local_target IS NULL AND jsonb_array_length(waypoints)>0 AND NOT EXISTS(SELECT 1 FROM planet_transfer_controls pc WHERE pc.reserved_ship=s.id) AND NOT EXISTS(SELECT 1 FROM mining_jobs WHERE ship_id=s.id) ORDER BY id`, uid)
 	if err != nil {
 		return err
 	}

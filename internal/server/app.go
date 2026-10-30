@@ -3,8 +3,10 @@ package server
 
 import (
 	"context"
+	"github.com/yomezza/cosmosimulator/internal/planet/transfer"
 	"net/http"
 	"net/netip"
+	"os"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -34,6 +36,7 @@ type Config struct {
 // App is the composition root, not a shared domain service. New does not run
 // migrations, seed data, register a second writer or start simulation goroutines.
 type App struct {
+	Transfer       *transfer.Service
 	DB             *pgxpool.Pool
 	Auth           *account.Service
 	World          *worldstore.Service
@@ -54,6 +57,7 @@ type App struct {
 
 func New(db *pgxpool.Pool, config Config) *App {
 	a := &App{DB: db, origin: config.Origin}
+	a.Transfer = &transfer.Service{DB: db, Enabled: os.Getenv("PLANET_ENABLED") == "true"}
 	a.Auth = &account.Service{DB: db, Secure: config.Secure, TrustedProxies: config.TrustedProxies}
 	a.World = &worldstore.Service{DB: db, Auth: a.Auth}
 	a.Commerce = &commerce.Service{DB: db, Auth: a.Auth, World: a.World}

@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/yomezza/cosmosimulator/internal/colonies"
 )
@@ -200,19 +201,26 @@ func TestPlanetResetVisits124(t *testing.T) {
 	// P2-2 separates visiting from colonization/admin role.
 	f.exec(`INSERT INTO company_roles(company_id,name,permissions) VALUES($1,'Planet reset visitor','["planetary.enter"]')`, company)
 	f.exec(`UPDATE users SET company_role=(SELECT id FROM company_roles WHERE company_id=$2 AND name='Planet reset visitor') WHERE id=$1`, uid, company)
-	f.req(c, "POST", "/api/planet/action", map[string]any{"action": "land", "id": pid, "request": "visit-land-124"}, 200)
+	// A real first-queue record, migrated as legacy, still blocks unsafe reset.
+	f.exec(`INSERT INTO planet_visits(user_id,colony,ship) SELECT $1,c.id,s.id FROM planet_colonies c JOIN ships s ON s.user_id=$1 AND s.active WHERE c.project=$2`, uid, pid)
 	info := preview124(f, c, planet)
 	if info.Visits != 1 || info.Colonies != 1 || info.Corporate != 1 || info.Blocked == "" {
 		t.Fatal("unsafe colony preview", info)
 	}
 	f.req(c, "POST", "/api/admin/planet/surface", input124(info, "regenerate", "visit-block-124"), 409)
-	f.req(c, "POST", "/api/planet/action", map[string]any{"action": "leave", "id": pid, "request": "visit-leave-124"}, 200)
+	_, stopPlanet := startPlanet150(t, f.db)
+	f.req(c, "POST", "/api/planet/return", map[string]any{"operation": "00000000-0000-4000-8000-000000000124"}, 200)
+	deadline := time.Now().Add(4 * time.Second)
+	for f.integer(`SELECT count(*) FROM planet_visits WHERE state<>'ended'`) > 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	stopPlanet()
 	info = preview124(f, c, planet)
 	f.req(c, "POST", "/api/admin/planet/surface", input124(info, "regenerate", "visit-regen-124"), 200)
 	if f.integer(`SELECT count(*) FROM companies WHERE id=$1`, company) != 1 {
 		t.Fatal("corporation destroyed")
 	}
-	if f.integer(`SELECT count(*) FROM planet_visits`)+f.integer(`SELECT count(*) FROM planet_colonies`)+f.integer(`SELECT count(*) FROM notifications WHERE kind='colony'`) != 0 {
+	if f.integer(`SELECT count(*) FROM planet_visits WHERE state<>'ended'`)+f.integer(`SELECT count(*) FROM planet_colonies`)+f.integer(`SELECT count(*) FROM notifications WHERE kind='colony'`) != 0 {
 		t.Fatal("stale colony state")
 	}
 }

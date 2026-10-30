@@ -10,6 +10,9 @@ import (
 )
 
 func Idle(ctx context.Context, tx pgx.Tx, s Ship) error {
+	if err := Available(ctx, tx, s.ID); err != nil {
+		return err
+	}
 	if s.Destination != nil || s.LocalTarget != nil {
 		return errors.New("Корабль в пути")
 	}

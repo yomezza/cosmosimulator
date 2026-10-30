@@ -70,6 +70,10 @@ func (a *Service) AdminTeleport(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if e := fleet.Available(ctx, tx, s.ID); e != nil {
+		httpkit.Fail(w, 409, e.Error())
+		return
+	}
 	if busy, e := fleet.AutomationBusy(ctx, tx, s.ID); e != nil {
 		httpkit.Internal(w, e)
 		return

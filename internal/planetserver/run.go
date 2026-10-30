@@ -111,7 +111,9 @@ func (a *App) Serve(ctx context.Context, listener net.Listener, onListening func
 	case <-ctx.Done():
 	case err = <-result:
 	}
+	a.wsMu.Lock()
 	a.stopping.Store(true)
+	a.wsMu.Unlock()
 	cancel()
 	stop, done := context.WithTimeout(context.Background(), a.config.ShutdownTimeout)
 	defer done()
@@ -121,6 +123,12 @@ func (a *App) Serve(ctx context.Context, listener net.Listener, onListening func
 	}
 	<-finished
 	<-scenesFinished
+	wsDone := make(chan struct{})
+	go func() { a.wsWG.Wait(); close(wsDone) }()
+	select {
+	case <-wsDone:
+	case <-stop.Done():
+	}
 	if e := a.scenes.Close(stop); e != nil {
 		a.logger.Warn("planetary scene shutdown deadline reached")
 	}

@@ -562,6 +562,11 @@ func (a *Service) advanceTask(ctx context.Context, id int64) error {
 	if _, err = tx.Exec(ctx, `UPDATE automation_tasks SET status='queued' WHERE ship_id=$1 AND id<>$2 AND status='running' AND carried=0 AND pending=0`, t.Ship, t.ID); err != nil {
 		return err
 	}
+	if reserved, e := fleet.Reserved(ctx, tx, s.ID); e != nil {
+		return e
+	} else if reserved {
+		return tx.Commit(ctx)
+	}
 	original := t
 	t.Status = "running"
 	nested, err := tx.Begin(ctx)

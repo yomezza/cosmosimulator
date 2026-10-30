@@ -5,24 +5,33 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"sync"
 	"sync/atomic"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	planetruntime "github.com/yomezza/cosmosimulator/internal/planet/runtime"
 	"github.com/yomezza/cosmosimulator/internal/planet/scenestore"
+	"github.com/yomezza/cosmosimulator/internal/planet/visits"
 	"github.com/yomezza/cosmosimulator/internal/platform/httpkit"
 )
 
-const Version = "0.17.0"
-const Stage = "P2-3"
+const Version = "0.18.0"
+const Stage = "P2-4"
 
 // App wires only planetary components. New does not start goroutines or migrate.
 type App struct {
+	db          *pgxpool.Pool
+	visits      *visits.Service
 	config      Config
 	logger      *slog.Logger
 	coordinator *planetruntime.Coordinator
 	store       *scenestore.Store
 	scenes      *planetruntime.Registry
+	controllers map[int64]int
+	connections int
+	wsMu        sync.Mutex
+	wsWG        sync.WaitGroup
+	runContext  context.Context
 	stopping    atomic.Bool
 	started     atomic.Bool
 }
@@ -41,7 +50,7 @@ func New(db *pgxpool.Pool, config Config, logger *slog.Logger) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &App{config: config, logger: logger, coordinator: c, store: scenestore.New(db)}, nil
+	return &App{db: db, controllers: map[int64]int{}, visits: &visits.Service{DB: db}, config: config, logger: logger, coordinator: c, store: scenestore.New(db)}, nil
 }
 
 func (a *App) Handler() http.Handler {
@@ -68,7 +77,8 @@ func (a *App) Handler() http.Handler {
 		a.health(w, 200, "ready")
 	})
 	// No ticket is accepted until the actual session/handoff implementation exists.
-	mux.HandleFunc("GET /planet/ws/v1", func(w http.ResponseWriter, r *http.Request) { a.health(w, 503, "planetary_gameplay_not_implemented") })
+	mux.HandleFunc("GET /planet/ws/v1", a.websocket)
+	mux.HandleFunc("GET /planet/api/v1/scene", a.sceneView)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -90,5 +100,5 @@ func (a *App) Handler() http.Handler {
 }
 
 func (a *App) health(w http.ResponseWriter, status int, reason string) {
-	httpkit.Reply(w, status, map[string]any{"service": "cosmosimulator-planet", "version": Version, "stage": Stage, "status": reason, "gameplay_ready": false})
+	httpkit.Reply(w, status, map[string]any{"service": "cosmosimulator-planet", "version": Version, "stage": Stage, "status": reason, "gameplay_ready": false, "landing_ready": status == 200 && reason == "ready"})
 }

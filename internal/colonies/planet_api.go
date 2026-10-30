@@ -48,6 +48,10 @@ func (a *Service) ColonyAction(w http.ResponseWriter, r *http.Request) {
 		httpkit.Fail(w, 400, "Нужен идентификатор операции")
 		return
 	}
+	if in.Action == "land" || in.Action == "leave" {
+		httpkit.Fail(w, 409, "landing_site_required")
+		return
+	}
 	ctx := r.Context()
 	if _, err := a.World.Load(ctx); err != nil {
 		httpkit.Internal(w, err)
@@ -298,40 +302,8 @@ func (a *Service) ColonyAction(w http.ResponseWriter, r *http.Request) {
 					if err == nil {
 						err = planetReceived(ctx, tx, &p)
 					}
-				case "land":
-					var visitAllowed bool
-					visitAllowed, err = projectVisitAccess(ctx, tx, u.ID, p)
-					if err != nil {
-						break
-					}
-					if !visitAllowed || p.Status != "complete" {
-						err = errors.New("Нет доступа к завершённой колонии")
-						break
-					}
-					var s fleet.Ship
-					s, err = fleet.EnsureShip(ctx, tx, u.ID)
-					if err != nil {
-						break
-					}
-					var star, planet int
-					var name string
-					err = tx.QueryRow(ctx, `SELECT star,planet,name FROM planet_surfaces WHERE id=$1`, p.Surface).Scan(&star, &planet, &name)
-					if err != nil {
-						break
-					}
-					if s.Star != star || !fleet.NearObject(s, "planet-"+strconv.Itoa(planet)) {
-						err = errors.New("Для высадки необходимо выполнить манёвр к планете")
-						break
-					}
-					var colony int64
-					err = tx.QueryRow(ctx, `SELECT id FROM planet_colonies WHERE project=$1`, p.ID).Scan(&colony)
-					if err != nil {
-						break
-					}
-					_, err = tx.Exec(ctx, `INSERT INTO planet_visits(user_id,colony,ship) VALUES($1,$2,$3) ON CONFLICT(user_id) DO UPDATE SET colony=EXCLUDED.colony,ship=EXCLUDED.ship,entered_at=now()`, u.ID, colony, s.ID)
-					response = map[string]any{"ok": true, "colony": colony, "planet": name, "sector": p.Sector, "surface": p.Surface}
-				case "leave":
-					_, err = tx.Exec(ctx, `DELETE FROM planet_visits WHERE user_id=$1`, u.ID)
+				case "land", "leave":
+					err = errors.New("Используйте посадочную площадку и новый протокол высадки")
 				default:
 					err = errors.New("Неизвестное действие")
 				}

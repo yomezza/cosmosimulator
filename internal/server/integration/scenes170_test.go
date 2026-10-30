@@ -250,9 +250,11 @@ func TestLocalSceneRestrictedRole170(t *testing.T) {
 		f.db.Exec(context.Background(), `DROP ROLE `+quoted)
 	})
 	f.exec(`GRANT USAGE ON SCHEMA ` + schema + ` TO ` + quoted)
-	f.exec(`GRANT SELECT ON planet_schema_state,planet_runtime_leases,planet_local_locations,planet_surfaces,planet_surface_controls,planet_runtime_controls,planet_colonies,planet_projects,planet_landing_sites TO ` + quoted)
+	f.exec(`GRANT SELECT ON planet_schema_state,planet_runtime_leases,planet_local_locations,planet_surfaces,planet_surface_controls,planet_runtime_controls,planet_colonies,planet_projects,planet_landing_sites,planet_characters,planet_handoffs,planet_handoff_uses TO ` + quoted)
 	f.exec(`GRANT UPDATE(owner_id,fence,expires_at) ON planet_runtime_leases TO ` + quoted)
 	f.exec(`GRANT INSERT,DELETE ON planet_local_locations TO ` + quoted)
+	f.exec(`GRANT UPDATE(last_surface,last_sector,last_revision) ON planet_characters TO ` + quoted)
+	f.exec(`GRANT DELETE ON planet_handoff_uses TO ` + quoted)
 	cfg := f.db.Config().Copy()
 	cfg.ConnConfig.RuntimeParams["role"] = role
 	limited, err := pgxpool.NewWithConfig(f.ctx, cfg)

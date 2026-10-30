@@ -112,3 +112,25 @@ func (s *Scene) ValidateLanding(p terrain.Placement) error {
 func quant(p terrain.Point) Position {
 	return Position{int(math.Round(p.X * terrain.Quantization)), int(math.Round(p.Y * terrain.Quantization))}
 }
+
+// Public contains only presentation data; source seeds/checksums stay server-side.
+type Public struct {
+	ID      string             `json:"id"`
+	Size    int                `json:"size"`
+	Cells   []byte             `json:"cells"`
+	Objects []Object           `json:"objects"`
+	Landing *terrain.Placement `json:"landing"`
+}
+
+func (s *Scene) Public() Public {
+	p := Public{ID: s.meta.ID, Size: terrain.Size, Cells: make([]byte, len(s.flags)), Objects: s.Metadata().Objects, Landing: s.Metadata().Landing}
+	for i, f := range s.flags {
+		if f&inside != 0 {
+			p.Cells[i] |= 1
+		}
+		if f&water != 0 {
+			p.Cells[i] |= 2
+		}
+	}
+	return p
+}

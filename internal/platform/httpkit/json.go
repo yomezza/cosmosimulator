@@ -30,6 +30,10 @@ func Decode(w http.ResponseWriter, r *http.Request, v any) bool {
 }
 
 func Internal(w http.ResponseWriter, err error) {
+	if strings.Contains(err.Error(), "Корабль закреплён за планетарным визитом") {
+		Fail(w, 409, "Корабль закреплён за планетарным визитом")
+		return
+	}
 	if strings.Contains(err.Error(), "Сумма превышает технический диапазон") {
 		Fail(w, 409, "Сумма превышает технический диапазон")
 		return

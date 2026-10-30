@@ -41,9 +41,10 @@ func Run(ctx context.Context) error {
 	srv := &http.Server{Addr: addr, Handler: a.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
 	run, cancelRun := context.WithCancel(ctx)
 	var workers sync.WaitGroup
-	workers.Add(2)
+	workers.Add(3)
 	go func() { defer workers.Done(); a.Simulation.Simulate(run) }()
 	go func() { defer workers.Done(); a.Colonies.RunLandingWorker(run) }()
+	go func() { defer workers.Done(); a.runTransfers(run) }()
 	defer func() { cancelRun(); workers.Wait() }()
 	go func() {
 		<-run.Done()

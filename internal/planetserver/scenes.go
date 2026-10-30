@@ -17,6 +17,7 @@ func (a *App) sceneFence() (scenestore.Fence, error) {
 	return scenestore.Fence{Owner: l.Owner, Number: l.Fence}, nil
 }
 func (a *App) newScenes(ctx context.Context) error {
+	a.runContext = ctx
 	r, err := planetruntime.NewRegistry(ctx, a.config.SceneCapacity, a.config.SceneIdleTTL, a.config.SceneLoadTimeout,
 		func(ctx context.Context, key scene.Key) (*scene.Scene, error) {
 			f, err := a.sceneFence()
@@ -54,7 +55,11 @@ func (a *App) maintainScenes(ctx context.Context) {
 				continue
 			}
 			check, cancel := context.WithTimeout(ctx, a.config.DBTimeout)
-			ids, err := a.store.Retired(check)
+			err = a.visits.Sweep(check, f)
+			var ids []int64
+			if err == nil {
+				ids, err = a.store.Retired(check)
+			}
 			if err == nil {
 				for _, id := range ids {
 					if a.scenes.DrainSurface(id) {

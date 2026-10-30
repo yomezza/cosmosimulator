@@ -220,7 +220,7 @@ func TestPlanetProjects120(t *testing.T) {
 	var planet int
 	f.db.QueryRow(f.ctx, `SELECT planet FROM planet_surfaces WHERE id=$1`, surface).Scan(&planet)
 	f.exec(`UPDATE ships SET object_id=$2,position_mode='orbit',destination=NULL,local_target=NULL WHERE user_id=$1 AND active`, uid, fmt.Sprintf("planet-%d", planet))
-	f.req(c, "POST", "/api/planet/action", map[string]any{"action": "land", "id": pid, "request": "land-120-orbit"}, 200)
+	f.req(c, "POST", "/api/planet/action", map[string]any{"action": "land", "id": pid, "request": "land-120-orbit"}, 409)
 	pid = create(2)
 	f.exec(`UPDATE planet_projects SET expires_at=now()-interval '1 second' WHERE id=$1`, pid)
 	if err := f.app.Simulation.AdvanceTick(f.ctx, true); err != nil {
