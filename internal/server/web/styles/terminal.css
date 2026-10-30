@@ -4852,3 +4852,15 @@ button.picker-button.system-picker .picker-chevron {
 .service-info dd { margin: 0; text-align: right; overflow-wrap: anywhere; max-width: 220px; }
 .service-reason { color: #d7a46b; font-size: 12px; }
 .service-checked { margin: 14px 0 0; font-size: 11px; }
+.visit-transition {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 10px 12px;
+  border: 1px solid #7d7256;
+  background: var(--panel-alt);
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+.visit-transition[hidden] { display: none; }

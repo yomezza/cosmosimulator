@@ -36,7 +36,10 @@ func check(ctx context.Context, tx pgx.Tx, id access.Identity, w Welcome, f scen
 		return ErrVisit
 	}
 	_, err = access.Landing(ctx, tx, id.User, site, ship)
-	return err
+	if err != nil {
+		return err
+	}
+	return sectorCheck(ctx, tx, id.User)
 }
 func (a *Service) Disconnect(ctx context.Context, id access.Identity, w Welcome, f scenestore.Fence) error {
 	tx, err := a.locked(ctx, id.User, f)
@@ -117,6 +120,11 @@ func (a *Service) sweepOne(ctx context.Context, uid int64, f scenestore.Fence) e
 				return e
 			}
 			invalid = invalid || e != nil
+			e = sectorCheck(ctx, tx, uid)
+			if e != nil && !errors.Is(e, access.ErrDenied) && !errors.Is(e, ErrVisit) {
+				return e
+			}
+			invalid = invalid || e != nil
 		}
 		if invalid {
 			err = end(ctx, tx, uid, "control_or_access_revoked")
@@ -172,4 +180,16 @@ func (a *Service) Checkpoint(ctx context.Context, id access.Identity, w Welcome,
 		return 0, err
 	}
 	return version, nil
+}
+
+func sectorCheck(ctx context.Context, tx pgx.Tx, uid int64) error {
+	var k scene.Key
+	if err := tx.QueryRow(ctx, `SELECT current_surface,current_sector,revision FROM planet_visits WHERE user_id=$1 AND state IN('active','disconnected')`, uid).Scan(&k.Surface, &k.Sector, &k.Revision); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrVisit
+		}
+		return err
+	}
+	_, err := access.Sector(ctx, tx, uid, k)
+	return err
 }

@@ -15,7 +15,6 @@ import (
 	"github.com/yomezza/cosmosimulator/internal/planet/visits"
 	"github.com/yomezza/cosmosimulator/internal/platform/httpkit"
 	"net/http"
-	"strconv"
 	"time"
 )
 
@@ -33,7 +32,7 @@ func message(kind string, payload any) map[string]any {
 }
 func publicError(err error) string {
 	switch {
-	case errors.Is(err, access.ErrAuth), errors.Is(err, access.ErrDenied), errors.Is(err, visits.ErrUsed), errors.Is(err, visits.ErrExpired), errors.Is(err, visits.ErrReplaced), errors.Is(err, visits.ErrVisit):
+	case errors.Is(err, visits.ErrOffer), errors.Is(err, visits.ErrOperation), errors.Is(err, access.ErrAuth), errors.Is(err, access.ErrDenied), errors.Is(err, visits.ErrUsed), errors.Is(err, visits.ErrExpired), errors.Is(err, visits.ErrReplaced), errors.Is(err, visits.ErrVisit):
 		return err.Error()
 	default:
 		return "runtime_unavailable"
@@ -179,7 +178,7 @@ func (a *App) websocket(w http.ResponseWriter, r *http.Request) {
 	}
 	finish()
 	if pinRelease != nil {
-		defer pinRelease()
+		defer func() { pinRelease() }()
 	}
 	out := &stream{c: c, ctx: r.Context()}
 	if pilot != nil {
@@ -194,7 +193,7 @@ func (a *App) websocket(w http.ResponseWriter, r *http.Request) {
 	}
 	f := activeFence
 	ended := false
-	defer a.disconnectMotion(id, welcome, f, pilot, gate, &ended)
+	defer func() { a.disconnectMotion(id, welcome, f, pilot, gate, &ended) }()
 	if send("welcome", welcome) != nil || out.snapshot(pilot) != nil {
 		return
 	}
@@ -227,6 +226,8 @@ func (a *App) websocket(w http.ResponseWriter, r *http.Request) {
 	ping := time.NewTicker(15 * time.Second)
 	defer ping.Stop()
 	var lastResync time.Time
+	transition := &crossing{}
+	defer transition.close()
 	var seq int64 = 1
 	var accepted, reported int64 = -1, -1
 	tokens, lastRefill := 20.0, time.Now()
@@ -252,6 +253,22 @@ func (a *App) websocket(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 			}
+		case loaded := <-transition.result():
+			offer := transition.offer
+			if loaded.err != nil {
+				transition.blocked = offer.Neighbor
+				transition.close()
+				pilot.Thaw()
+				if send("transition.cancelled", map[string]string{"reason": "transition_load_failed"}) != nil {
+					return
+				}
+			} else {
+				offer.pin = loaded.pin
+				offer.Ready = true
+				if send("transition.offer", offer) != nil {
+					return
+				}
+			}
 		case world := <-pilot.Presence():
 			if out.delta(pilot, world) != nil {
 				return
@@ -272,6 +289,27 @@ func (a *App) websocket(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			tokens--
+			if msg.V == 1 && msg.Visit == welcome.Visit && msg.Type == "transition.confirm" && transition.completed != nil && (msg.Epoch == welcome.Epoch || msg.Epoch == transition.previousEpoch) {
+				var command transitionCommand
+				if json.Unmarshal(msg.Payload, &command) == nil && command.Offer == transition.completedOffer && command.Operation == transition.completed.Operation {
+					check, done := context.WithTimeout(run, a.config.DBTimeout)
+					err := a.visits.Check(check, id, welcome, f)
+					done()
+					if err != nil {
+						_ = send("error", map[string]string{"code": publicError(err)})
+						return
+					}
+					if send("transition.complete", transition.completed) != nil {
+						return
+					}
+					continue
+				}
+			}
+			// Commands already queued by the browser before a completed crossing cannot
+			// move the character in its new scene or tear down the new controller.
+			if msg.V == 1 && msg.Visit == welcome.Visit && msg.Epoch == transition.previousEpoch && msg.Epoch < welcome.Epoch {
+				continue
+			}
 			if msg.V != 1 || msg.Visit != welcome.Visit || msg.Epoch != welcome.Epoch {
 				c.CloseNow()
 				return
@@ -300,10 +338,80 @@ func (a *App) websocket(w http.ResponseWriter, r *http.Request) {
 					_ = send("error", map[string]string{"code": "invalid_target"})
 					continue
 				}
+				if transition.offer != nil {
+					transition.blocked = transition.offer.Neighbor
+					transition.close()
+					pilot.Thaw()
+					if send("transition.cancelled", map[string]string{"reason": "move"}) != nil {
+						return
+					}
+				}
+				if p, ok := visits.Portal(pilot.Scene(), transition.blocked); ok && visits.Near(p, goal.X, goal.Y) {
+					transition.blocked = 0
+				}
 				if err = pilot.Move(seq, goal.X, goal.Y); err != nil {
 					if send("error", map[string]any{"code": err.Error(), "seq": seq}) != nil {
 						return
 					}
+				}
+			case "transition.cancel":
+				var input transitionCommand
+				if json.Unmarshal(msg.Payload, &input) != nil || transition.offer == nil || input.Offer != transition.offer.ID {
+					if send("error", map[string]string{"code": "offer_expired"}) != nil {
+						return
+					}
+					continue
+				}
+				transition.blocked = transition.offer.Neighbor
+				transition.close()
+				pilot.Thaw()
+				if send("transition.cancelled", map[string]string{"reason": "cancelled"}) != nil {
+					return
+				}
+			case "transition.confirm":
+				var input transitionCommand
+				decoder := json.NewDecoder(bytes.NewReader(msg.Payload))
+				decoder.DisallowUnknownFields()
+				if decoder.Decode(&input) != nil || !access.ValidUUID(input.Operation) || transition.offer == nil || input.Offer != transition.offer.ID || !transition.offer.Ready {
+					if send("error", map[string]string{"code": "offer_expired"}) != nil {
+						return
+					}
+					continue
+				}
+				commit, cancel := context.WithTimeout(run, a.config.DBTimeout)
+				replacement, next, err := a.commitCrossing(commit, id, welcome, f, pilot, transition.offer, input.Operation, gate)
+				cancel()
+				if err != nil {
+					transition.blocked = transition.offer.Neighbor
+					transition.close()
+					pilot.Thaw()
+					if send("transition.cancelled", map[string]string{"reason": publicError(err)}) != nil {
+						return
+					}
+					// A transport/commit error can have an unknown outcome. Stop this
+					// controller and resolve the committed location through resume.
+					if replacement == nil || next.Epoch != welcome.Epoch || !(errors.Is(err, access.ErrDenied) || errors.Is(err, visits.ErrOffer) || errors.Is(err, visits.ErrOperation)) {
+						return
+					}
+					continue
+				}
+				transition.previousEpoch = welcome.Epoch
+				transition.completed = &transitionComplete{input.Operation, next}
+				transition.completedOffer = input.Offer
+				pinRelease()
+				pinRelease = transition.offer.pin.Release
+				transition.offer.pin = nil
+				transition.close()
+				pilot = replacement
+				welcome = next
+				out.epoch = next.Epoch
+				accepted = -1
+				reported = -1
+				// Suppress the reciprocal edge until the arrival zone has been left.
+				transition.blocked = localScene.Key().Sector
+				localScene = pilot.Scene()
+				if send("transition.complete", transition.completed) != nil || out.snapshot(pilot) != nil {
+					return
 				}
 			case "resync":
 				var input struct {
@@ -351,6 +459,14 @@ func (a *App) websocket(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case <-tick.C:
+			if transition.offer != nil && time.Now().After(transition.offer.Expires) {
+				transition.blocked = transition.offer.Neighbor
+				transition.close()
+				pilot.Thaw()
+				if send("transition.cancelled", map[string]string{"reason": "offer_expired"}) != nil {
+					return
+				}
+			}
 			check, done := context.WithTimeout(run, a.config.DBTimeout)
 			err = a.visits.Check(check, id, welcome, f)
 			done()
@@ -359,6 +475,16 @@ func (a *App) websocket(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			pilot.Permit(time.Now().Add(2 * time.Second))
+			offered, e := a.offerTransition(run, id, pilot, transition)
+			if e != nil {
+				if send("error", map[string]string{"code": publicError(e)}) != nil {
+					return
+				}
+			} else if offered {
+				if send("transition.offer", transition.offer) != nil {
+					return
+				}
+			}
 		case <-checkpoint.C:
 			save, done := context.WithTimeout(run, a.config.DBTimeout)
 			if err = takeGate(save, gate); err == nil {
@@ -372,51 +498,4 @@ func (a *App) websocket(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-}
-
-func (a *App) sceneView(w http.ResponseWriter, r *http.Request) {
-	if a.scenes == nil || a.stopping.Load() {
-		httpkit.Fail(w, 503, "runtime_unavailable")
-		return
-	}
-	ctx, done := context.WithTimeout(r.Context(), a.config.SceneLoadTimeout)
-	defer done()
-	id, err := access.Authenticate(ctx, a.db, r)
-	if err != nil {
-		httpkit.Fail(w, 401, publicError(err))
-		return
-	}
-	v := r.URL.Query().Get("visit")
-	epoch, err := strconv.ParseInt(r.URL.Query().Get("epoch"), 10, 64)
-	if err != nil || !access.ValidUUID(v) || epoch < 1 {
-		httpkit.Fail(w, 400, "invalid_visit")
-		return
-	}
-	in, err := a.visits.Resolve(ctx, id, "", v)
-	if err != nil {
-		httpkit.Fail(w, 403, publicError(err))
-		return
-	}
-	f, err := a.sceneFence()
-	if err != nil {
-		httpkit.Fail(w, 503, "runtime_unavailable")
-		return
-	}
-	welcome := visits.Welcome{Visit: v, Epoch: epoch}
-	if err = a.visits.Check(ctx, id, welcome, f); err != nil {
-		httpkit.Fail(w, 403, publicError(err))
-		return
-	}
-	pin, err := a.scenes.Acquire(ctx, in.Key)
-	if err != nil {
-		httpkit.Fail(w, 503, "scene_unavailable")
-		return
-	}
-	defer pin.Release()
-	if err = a.visits.Check(ctx, id, welcome, f); err != nil {
-		httpkit.Fail(w, 403, publicError(err))
-		return
-	}
-	// No ticket, seed or private geology in this DTO or URL.
-	httpkit.Reply(w, 200, pin.Scene().Public())
 }

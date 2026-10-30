@@ -79,6 +79,7 @@ func (s *Scene) Metadata() Metadata {
 	}
 	return m
 }
+func (s *Scene) Portals() []Portal      { return append([]Portal(nil), s.meta.Portals...) }
 func (s *Scene) Key() Key               { return s.meta.Key }
 func (s *Scene) ID() string             { return s.meta.ID }
 func (s *Scene) SourceChecksum() string { return s.meta.SourceChecksum }

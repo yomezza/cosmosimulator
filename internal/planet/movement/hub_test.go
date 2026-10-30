@@ -152,4 +152,15 @@ func TestSectorPresenceCoalesces(t *testing.T) {
 	if len(newer.Sector().Actors) != 1 || len(stranger.Sector().Actors) != 1 {
 		t.Fatal("sector isolation failed")
 	}
+	crossing, err := h.Join(Stamp{User: 1, Epoch: 3, Actor: "public-a"}, other, x2, y2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newer.Close()
+	if len(crossing.Sector().Actors) != 2 || h.Count() != 1 {
+		t.Fatal("crossing duplicated actor across sectors")
+	}
+	if crossing.Stamp().Actor != "public-a" {
+		t.Fatal("crossing changed identity")
+	}
 }

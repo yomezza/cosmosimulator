@@ -77,6 +77,9 @@ func (a *Service) Resolve(ctx context.Context, id access.Identity, hash, resume 
 	if _, err := access.Landing(ctx, a.DB, id.User, in.Site, in.Ship); err != nil {
 		return in, err
 	}
+	if _, err := access.Sector(ctx, a.DB, id.User, in.Key); err != nil {
+		return in, err
+	}
 	return in, nil
 }
 func (a *Service) locked(ctx context.Context, uid int64, f scenestore.Fence) (pgx.Tx, error) {
@@ -86,7 +89,7 @@ func (a *Service) locked(ctx context.Context, uid int64, f scenestore.Fence) (pg
 	}
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared(784218)`); err == nil {
 		var n int64
-		err = tx.QueryRow(ctx, `SELECT fence FROM planet_runtime_leases WHERE id=1 AND owner_id=$1 AND fence=$2 AND expires_at>clock_timestamp() AND EXISTS(SELECT 1 FROM planet_schema_state WHERE id=1 AND version=6) FOR SHARE`, f.Owner, f.Number).Scan(&n)
+		err = tx.QueryRow(ctx, `SELECT fence FROM planet_runtime_leases WHERE id=1 AND owner_id=$1 AND fence=$2 AND expires_at>clock_timestamp() AND EXISTS(SELECT 1 FROM planet_schema_state WHERE id=1 AND version=7) FOR SHARE`, f.Owner, f.Number).Scan(&n)
 		if errors.Is(err, pgx.ErrNoRows) {
 			err = scenestore.ErrFence
 		}
@@ -117,8 +120,11 @@ func (a *Service) Activate(ctx context.Context, id access.Identity, in Intent, s
 	if err = scenestore.CheckSource(ctx, tx, s); err != nil {
 		return w, err
 	}
-	if site.Surface != in.Key.Surface || site.Sector != in.Key.Sector || site.Revision != in.Key.Revision || s.Key() != in.Key || !s.Walkable(site.X/1024, site.Y/1024) {
+	if site.Surface != in.Key.Surface || (in.Handoff != "" && site.Sector != in.Key.Sector) || site.Revision != in.Key.Revision || s.Key() != in.Key || (in.Handoff != "" && !s.Walkable(site.X/1024, site.Y/1024)) {
 		return w, scene.ErrSource
+	}
+	if _, err = access.Sector(ctx, tx, id.User, in.Key); err != nil {
+		return w, err
 	}
 	var valid bool
 	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM planet_transfer_controls WHERE user_id=$1 AND generation=$2 AND reserved_ship=$3 AND revoke_requested_at IS NULL)`, id.User, in.Generation, in.Ship).Scan(&valid)

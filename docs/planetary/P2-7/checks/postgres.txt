@@ -1,0 +1,12 @@
+=== RUN   TestPlanetRestrictedRole180
+--- PASS: TestPlanetRestrictedRole180 (3.75s)
+=== RUN   TestPlanetPresence200
+--- PASS: TestPlanetPresence200 (4.41s)
+=== RUN   TestPlanetTransitions210
+--- PASS: TestPlanetTransitions210 (7.14s)
+=== RUN   TestPlanetTransitionRevocation210
+--- PASS: TestPlanetTransitionRevocation210 (4.52s)
+=== RUN   TestPlanetTransitionCapacity210
+--- PASS: TestPlanetTransitionCapacity210 (4.11s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/server/integration	23.941s

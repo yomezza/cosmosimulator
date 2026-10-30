@@ -155,10 +155,49 @@ export async function openVisit(site) {
     UI.button("К персонажу", () => renderer?.centre()),
     UI.button("Весь сектор", () => renderer?.fit()),
   );
+  const transitionPanel = UI.node("div", undefined, "visit-transition");
+  transitionPanel.hidden = true;
+  let activeOffer = null,
+    appliedOperation = null,
+    viewGeneration = 0;
+  function showOffer(offer) {
+    activeOffer = offer;
+    transitionPanel.hidden = false;
+    const confirm = UI.button(
+      "Перейти в соседний сектор",
+      () => {
+        confirm.disabled = true;
+        if (!activeOffer.operation) activeOffer.operation = crypto.randomUUID();
+        send("transition.confirm", {
+          offer: offer.offer,
+          operation: activeOffer.operation,
+        });
+      },
+      !offer.ready,
+    );
+    transitionPanel.replaceChildren(
+      UI.node("strong", tr("Переход в сектор") + " " + offer.neighbor),
+      UI.node("span", tr(offer.owner), "muted"),
+      UI.node(
+        "span",
+        tr(
+          offer.ready
+            ? "Соседняя локация готова"
+            : "Подготавливаем соседнюю локацию…",
+        ),
+        "muted",
+      ),
+      confirm,
+      UI.button("Остаться", () =>
+        send("transition.cancel", { offer: offer.offer }),
+      ),
+    );
+  }
   root.replaceChildren(
     status,
     tools,
     UI.node("p", tr("ЛКМ — идти · Колесо — масштаб · ПКМ — обзор"), "muted"),
+    transitionPanel,
     viewport,
   );
   Modules.open(key);
@@ -197,6 +236,9 @@ export async function openVisit(site) {
     serverSeq = 0;
     lastState = lastPath = null;
     peers = new Map();
+    activeOffer = null;
+    transitionPanel.hidden = true;
+    viewGeneration++;
     resume.hidden = true;
     try {
       const state = await api(
@@ -241,7 +283,6 @@ export async function openVisit(site) {
       const handshake = setTimeout(() => conn.close(), 5000);
       socket = conn;
       let fatal = false,
-        sceneLoading = false,
         connectedAt = 0;
       const current = () =>
         task.current() &&
@@ -283,7 +324,11 @@ export async function openVisit(site) {
           if (
             welcome &&
             (message.visit !== welcome.visit ||
-              message.connection_epoch !== welcome.connection_epoch)
+              (message.connection_epoch !== welcome.connection_epoch &&
+                !(
+                  message.type === "transition.complete" &&
+                  message.connection_epoch > welcome.connection_epoch
+                )))
           )
             return;
           const p = message.payload;
@@ -295,26 +340,53 @@ export async function openVisit(site) {
             }
             return;
           }
-          if (message.type === "welcome") {
-            welcome = p;
+          if (message.type === "transition.offer") {
+            showOffer(p);
+            return;
+          }
+          if (message.type === "transition.cancelled") {
+            activeOffer = null;
+            transitionPanel.hidden = true;
+            if (!["move", "cancelled"].includes(p.reason))
+              notify(tr(p.reason), "warning");
+            return;
+          }
+          if (
+            message.type === "welcome" ||
+            message.type === "transition.complete"
+          ) {
+            if (message.type === "transition.complete") {
+              if (appliedOperation === p.operation) return;
+              appliedOperation = p.operation;
+              welcome = p.welcome;
+              activeOffer = null;
+              transitionPanel.hidden = true;
+              peers = new Map();
+              lastState = lastPath = null;
+            } else welcome = p;
             connectedAt = Date.now();
             resume.hidden = true;
             status.textContent =
               welcome.planet + " · " + tr("Сектор") + " " + welcome.sector;
-            if (sceneLoading) return;
-            sceneLoading = true;
+            const generation = ++viewGeneration;
+            const locationCurrent = () =>
+              current() && generation === viewGeneration;
+            renderer?.stop();
+            renderer = null;
+            canvas.dataset.ready = "false";
             const scene = await requestScene(welcome, task.signal);
-            if (!current()) return;
+            if (!locationCurrent()) return;
             canvas.hidden = false;
             const controller = await createController(canvas, scene, welcome, {
-              current,
+              current: locationCurrent,
               target: (x, y) => send("move", { x_q: x, y_q: y }),
             });
-            if (!current()) {
+            if (!locationCurrent()) {
               controller?.stop();
               return;
             }
             renderer = controller;
+            canvas.dataset.sector = String(welcome.sector);
             renderer?.actors([...peers.values()], true);
             if (lastState) renderer?.update(lastState);
             if (lastPath) renderer?.accepted(lastPath);
@@ -343,7 +415,11 @@ export async function openVisit(site) {
             for (const a of p.actors || []) peers.set(a.actor, a);
             renderer?.actors(p.actors || []);
             status.textContent = p.suspended
-              ? tr("Движение приостановлено: проверяем связь с сервером")
+              ? tr(
+                  activeOffer
+                    ? "Ожидаем подтверждения перехода"
+                    : "Движение приостановлено: проверяем связь с сервером",
+                )
               : welcome.planet +
                 " · " +
                 tr("Сектор") +
@@ -369,6 +445,9 @@ export async function openVisit(site) {
         clearTimeout(handshake);
         if (!task.current() || socket !== conn) return;
         clearInterval(monitor);
+        activeOffer = null;
+        transitionPanel.hidden = true;
+        viewGeneration++;
         renderer?.stop();
         renderer = null;
         finishLeave?.();

@@ -84,3 +84,5 @@ go vet ./...
 Chromium не заменяет Firefox/Safari, реальные планшеты и screen reader. Проверены выбранные сценарии, а не все комбинации preferences и административных мутаций. При новой функции добавляются проверки её реального риска, без тестов, повторяющих каждую строку реализации.
 
 Планетарный live-сценарий `TestPlanetBrowser180` / `planet-live.mjs` дополнен двумя реальными аккаунтами, presence/movement, принудительным WS reconnect и заменой вкладки. `services.test.mjs` проверяет окно администратора со статусами служб; `TestAdminServices200` проверяет API, доступ и соответствие runtime общей БД. Все live-тесты используют только nonce-marked сервер своего прогона и одноразовую `_test` БД.
+
+`TestPlanetTransitionsBrowser210` / `planet-transition-live.mjs` проверяет предложение/отмену/подтверждение, смену сцены, reload и возврат из соседнего сектора без собственного модуля. Это тот же guarded disposable browser runner; fixture-only приближение к ingress не является игровым API телепортации.

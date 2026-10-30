@@ -1644,5 +1644,15 @@
   "lease_lost": "The runtime lease has been lost.",
   "starting": "The service is starting.",
   "stopping": "The service is stopping.",
-  "Версия": "Version"
+  "Версия": "Version",
+  "Переход в сектор": "Crossing to sector",
+  "Перейти в соседний сектор": "Enter adjacent sector",
+  "Соседняя локация готова": "Adjacent location is ready",
+  "Подготавливаем соседнюю локацию…": "Preparing adjacent location…",
+  "Остаться": "Stay here",
+  "Личная территория": "Personal territory",
+  "transition_load_failed": "Could not prepare the adjacent location. You remain in the current sector.",
+  "transition_operation_conflict": "This transition operation has already been used.",
+  "offer_expired": "The crossing offer expired. Select the passage again.",
+  "Ожидаем подтверждения перехода": "Waiting for crossing confirmation"
 }

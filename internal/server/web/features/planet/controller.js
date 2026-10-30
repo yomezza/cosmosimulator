@@ -129,8 +129,15 @@ export async function createController(canvas, scene, w, { current, target }) {
   const down = (e) => {
     if (e.button === 0) {
       const p = world(e);
-      goal = { x: Math.floor(p.x) + 0.5, y: Math.floor(p.y) + 0.5 };
-      target(Math.floor(p.x) * 1024 + 512, Math.floor(p.y) * 1024 + 512);
+      const edge = (scene.exits || []).find(
+        (e) =>
+          Math.hypot(p.x - e.x_q / 1024, p.y - e.y_q / 1024) <
+          Math.max(2, 12 / zoom),
+      );
+      goal = edge
+        ? { x: edge.x_q / 1024, y: edge.y_q / 1024 }
+        : { x: Math.floor(p.x) + 0.5, y: Math.floor(p.y) + 0.5 };
+      target(Math.floor(goal.x) * 1024 + 512, Math.floor(goal.y) * 1024 + 512);
     } else if (e.button === 2 || e.button === 1) {
       e.preventDefault();
       drag = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y };
@@ -222,6 +229,19 @@ export async function createController(canvas, scene, w, { current, target }) {
         ctx.textAlign = "center";
         ctx.fillText(o.nickname, o.x, o.y - size * 0.67, 140 / zoom);
       }
+    }
+    for (const edge of scene.exits || []) {
+      const x = edge.x_q / 1024,
+        y = edge.y_q / 1024;
+      ctx.strokeStyle = "#e5c47f";
+      ctx.lineWidth = 1.5 / zoom;
+      ctx.beginPath();
+      ctx.arc(x, y, 2, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = "#e5c47f";
+      ctx.font = `${11 / zoom}px sans-serif`;
+      ctx.textAlign = "center";
+      ctx.fillText(I18n.t("Сектор") + " " + edge.neighbor, x, y - 3);
     }
     if (scene.landing) {
       ctx.strokeStyle = "#80f4d6";

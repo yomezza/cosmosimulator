@@ -1,0 +1,10 @@
+=== RUN   TestPlanetDatabaseRecovery200
+--- PASS: TestPlanetDatabaseRecovery200 (15.07s)
+=== RUN   TestAdminServices200
+--- PASS: TestAdminServices200 (8.86s)
+=== RUN   TestPlanetTransitions210
+--- PASS: TestPlanetTransitions210 (15.37s)
+=== RUN   TestPlanetTransitionCapacity210
+--- PASS: TestPlanetTransitionCapacity210 (13.30s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/server/integration	53.621s
