@@ -3,6 +3,8 @@ package simulation
 
 import (
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/yomezza/cosmosimulator/internal/platform/telemetry"
+	"sync/atomic"
 
 	"github.com/yomezza/cosmosimulator/internal/commerce"
 	"github.com/yomezza/cosmosimulator/internal/navigation"
@@ -12,9 +14,12 @@ import (
 
 // Service has explicit dependencies; the composition root owns their lifetime.
 type Service struct {
-	DB         *pgxpool.Pool
-	Commerce   *commerce.Service
-	Planner    *planner.Service
-	Navigation *navigation.Service
-	World      *worldstore.Service
+	TickDurations telemetry.Samples
+	TickLoopLag   telemetry.Samples
+	TickErrors    atomic.Uint64
+	DB            *pgxpool.Pool
+	Commerce      *commerce.Service
+	Planner       *planner.Service
+	Navigation    *navigation.Service
+	World         *worldstore.Service
 }

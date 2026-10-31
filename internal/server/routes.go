@@ -18,6 +18,7 @@ var Assets embed.FS
 
 func (a *App) Handler() http.Handler {
 	m := http.NewServeMux()
+	m.HandleFunc("GET /api/admin/metrics", a.metricsView)
 	target, _ := planetEndpoint()
 	m.HandleFunc("GET /api/admin/services", a.Administration.Services(administration.ServicesOptions{Version: Version, Started: a.startedAt, PlanetURL: target, PlanetEnabled: func() bool { return a.Transfer.Enabled }, ExpectedSchema: planetruntime.SchemaVersion}))
 	m.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {

@@ -35,6 +35,7 @@ type State struct {
 	Error      string          `json:"error,omitempty"`
 }
 type Hub struct {
+	metrics observations
 	mu      sync.Mutex
 	ctx     context.Context
 	cancel  context.CancelFunc
@@ -76,6 +77,7 @@ type job struct {
 	ctx           context.Context
 	generation    int64
 	start, target pathing.Point
+	queued        time.Time
 }
 
 func New(ctx context.Context, speed float64, budget int) *Hub {
@@ -195,9 +197,10 @@ func (m *Member) Move(seq int64, x, y int) error {
 	}
 	ctx, cancel := context.WithTimeout(h.ctx, 200*time.Millisecond)
 	next := m.generation + 1
-	j := job{m, ctx, next, m.pos, target}
+	j := job{m, ctx, next, m.pos, target, time.Now()}
 	select {
 	case h.jobs <- j:
+		h.metrics.queued++
 		if m.cancelPath != nil {
 			m.cancelPath()
 		}
@@ -208,6 +211,7 @@ func (m *Member) Move(seq int64, x, y int) error {
 		m.error = ""
 		return nil
 	default:
+		h.metrics.rejected++
 		cancel()
 		return ErrBusy
 	}
@@ -219,9 +223,18 @@ func (h *Hub) worker() {
 		case <-h.ctx.Done():
 			return
 		case j := <-h.jobs:
+			began := time.Now()
+			h.metrics.queue.Observe(began.Sub(j.queued))
 			path, err := pathing.Find(j.ctx, j.member.actor.scene, j.start, j.target, h.budget)
+			h.metrics.paths.Observe(time.Since(began))
 			h.mu.Lock()
 			m := j.member
+			if errors.Is(err, pathing.ErrBudget) {
+				h.metrics.budget++
+			}
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				h.metrics.canceled++
+			}
 			if !m.closed && !m.frozen && m.generation == j.generation && h.members[m.stamp.User] == m {
 				if err != nil {
 					m.error = pathing.ErrBudget.Error()
@@ -245,6 +258,7 @@ func (h *Hub) publish(m *Member, now time.Time) {
 	default:
 		select {
 		case <-m.updates:
+			m.hub.metrics.coalesced++
 		default:
 		}
 		select {
@@ -267,6 +281,7 @@ func (h *Hub) run(ctx context.Context, a *actor) {
 			dt := min(.1, max(0, now.Sub(last).Seconds()))
 			last = now
 			h.mu.Lock()
+			h.metrics.lag.Observe(time.Since(now))
 			emit++
 			for _, m := range a.members {
 				if !m.closed && !m.frozen && now.Before(m.permit) {

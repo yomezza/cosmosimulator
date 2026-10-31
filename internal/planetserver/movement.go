@@ -7,6 +7,7 @@ import (
 	"github.com/yomezza/cosmosimulator/internal/planet/movement"
 	"github.com/yomezza/cosmosimulator/internal/planet/scenestore"
 	"github.com/yomezza/cosmosimulator/internal/planet/visits"
+	"time"
 )
 
 func takeGate(ctx context.Context, gate chan struct{}) error {
@@ -24,7 +25,12 @@ func (a *App) saveMotion(ctx context.Context, id access.Identity, m *movement.Me
 		return nil
 	}
 	w := visits.Welcome{Visit: stamp.Visit, Epoch: stamp.Epoch, Generation: stamp.Generation, PositionVersion: stamp.Version}
+	began := time.Now()
 	version, err := a.visits.Checkpoint(ctx, id, w, f, m.Scene(), state.X, state.Y, finish)
+	a.checkpoints.Observe(time.Since(began))
+	if err != nil {
+		a.checkpointErrors.Add(1)
+	}
 	if err == nil {
 		m.Saved(version, state.X, state.Y)
 	}

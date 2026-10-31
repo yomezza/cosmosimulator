@@ -53,6 +53,7 @@ func (h *Hub) broadcast(a *actor, now time.Time) {
 		default:
 			select {
 			case <-m.presence:
+				h.metrics.coalesced++
 			default:
 			}
 			select {

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/yomezza/cosmosimulator/internal/planet/scene"
+	"github.com/yomezza/cosmosimulator/internal/platform/telemetry"
 )
 
 var ErrClosed = errors.New("sector registry is stopped or surface is retiring")
@@ -26,6 +27,8 @@ type entry struct {
 // Registry single-flights cold loads and pins immutable snapshots. Empty scenes
 // have no simulation goroutine. The caller drives eviction/retirement explicitly.
 type Registry struct {
+	loads           telemetry.Samples
+	hits, evicted   uint64
 	mu              sync.Mutex
 	ctx             context.Context
 	cancel          context.CancelFunc
@@ -93,6 +96,9 @@ func (r *Registry) Acquire(ctx context.Context, key scene.Key) (*Pin, error) {
 		r.wg.Add(1)
 		go r.prepare(loadCtx, key, e)
 	}
+	if e.scene != nil {
+		r.hits++
+	}
 	e.waiters++
 	r.mu.Unlock()
 	select {
@@ -141,6 +147,8 @@ func (r *Registry) Acquire(ctx context.Context, key scene.Key) (*Pin, error) {
 func (r *Registry) prepare(ctx context.Context, key scene.Key, e *entry) {
 	defer r.wg.Done()
 	defer e.cancel()
+	began := time.Now()
+	defer func() { r.loads.Observe(time.Since(began)) }()
 	var s *scene.Scene
 	var err error
 	select {
@@ -168,6 +176,7 @@ func (r *Registry) evictLocked(now time.Time) {
 		case <-e.done:
 			if e.refs == 0 && e.waiters == 0 && now.Sub(e.idle) >= r.idle {
 				delete(r.entries, key)
+				r.evicted++
 			}
 		default:
 		}

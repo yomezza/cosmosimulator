@@ -380,6 +380,12 @@ func TestPlanetRestrictedRole180(t *testing.T) {
 	if w["message_type"] != "welcome" {
 		t.Fatal("least-privilege activation", w)
 	}
+	// Metrics are optional for old restricted roles. Grant only the role column;
+	// this does not widen access to balances, password hashes or cosmic writes.
+	f.exec(`UPDATE users SET role='admin' WHERE id=$1`, uid)
+	requireLoad230(t, base, c, "GET", "/planet/api/v1/metrics", nil, 503)
+	f.exec(`GRANT SELECT(role) ON users TO ` + quoted)
+	requireLoad230(t, base, c, "GET", "/planet/api/v1/metrics", nil, 200)
 	for _, query := range []string{`SELECT password_hash FROM users LIMIT 1`, `SELECT credits FROM users LIMIT 1`, `UPDATE users SET credits=credits+1`, `UPDATE ships SET star=2`, `UPDATE planet_transfer_controls SET generation=generation+1`, `UPDATE planet_handoffs SET expires_at=now()`, `UPDATE planet_landing_sites SET enabled=false`} {
 		if _, err = limited.Exec(f.ctx, query); err == nil {
 			t.Fatal("role boundary failed", query)

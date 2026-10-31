@@ -21,10 +21,11 @@ func (a *Service) Simulate(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-t.C:
+		case scheduled := <-t.C:
 			if err := a.Activities(ctx); err != nil && ctx.Err() == nil {
 				log.Printf("activities: %v", err)
 			}
+			a.TickLoopLag.Observe(time.Since(scheduled))
 			if err := a.Tick(ctx); err != nil && ctx.Err() == nil {
 				log.Printf("simulation: %v", err)
 			}
@@ -34,7 +35,17 @@ func (a *Service) Simulate(ctx context.Context) {
 
 func (a *Service) Tick(ctx context.Context) error { return a.AdvanceTick(ctx, false) }
 
-func (a *Service) AdvanceTick(ctx context.Context, force bool, actor ...int64) error {
+func (a *Service) AdvanceTick(ctx context.Context, force bool, actor ...int64) (result error) {
+	began := time.Now()
+	advanced := false
+	defer func() {
+		if advanced {
+			a.TickDurations.Observe(time.Since(began))
+		}
+		if result != nil {
+			a.TickErrors.Add(1)
+		}
+	}()
 	tx, err := a.DB.Begin(ctx)
 	if err != nil {
 		return err
@@ -52,6 +63,7 @@ func (a *Service) AdvanceTick(ctx context.Context, force bool, actor ...int64) e
 	if err != nil {
 		return err
 	}
+	advanced = true
 	if _, err = tx.Exec(ctx, `UPDATE users SET ore=ore+1 WHERE NOT is_bot`); err != nil {
 		return err
 	}

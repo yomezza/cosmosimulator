@@ -1,0 +1,45 @@
+name: Planetary process load
+
+# Explicit, reproducible experiment on an owned PostgreSQL service. Never points
+# at a deployment and is not added to every small UI update's checks.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  load:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: cosmos
+          POSTGRES_PASSWORD: test-only
+          POSTGRES_DB: planet_load_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cosmos -d planet_load_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Two processes and 50 authenticated clients
+        run: go test ./internal/server/integration -run '^TestPlanetLoad230$' -count=1 -timeout=10m -v
+        env:
+          TEST_DATABASE_URL: postgres://cosmos:test-only@127.0.0.1:5432/planet_load_test?sslmode=disable
+          RUN_PLANET_LOAD: '1'
+          PLANET_LOAD_REPORT: ${{ runner.temp }}/planet-load.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: planetary-load-report
+          path: ${{ runner.temp }}/planet-load.json
+          if-no-files-found: warn

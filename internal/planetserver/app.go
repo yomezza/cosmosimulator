@@ -14,29 +14,33 @@ import (
 	"github.com/yomezza/cosmosimulator/internal/planet/scenestore"
 	"github.com/yomezza/cosmosimulator/internal/planet/visits"
 	"github.com/yomezza/cosmosimulator/internal/platform/httpkit"
+	"github.com/yomezza/cosmosimulator/internal/platform/telemetry"
 )
 
-const Version = "0.22.0"
-const Stage = "P2-8"
+const Version = "0.23.0"
+const Stage = "P2-9"
 
 // App wires only planetary components. New does not start goroutines or migrate.
 type App struct {
-	db          *pgxpool.Pool
-	visits      *visits.Service
-	config      Config
-	logger      *slog.Logger
-	coordinator *planetruntime.Coordinator
-	store       *scenestore.Store
-	scenes      *planetruntime.Registry
-	controllers map[int64]int
-	entryGates  map[int64]chan struct{}
-	motion      *movement.Hub
-	connections int
-	wsMu        sync.Mutex
-	wsWG        sync.WaitGroup
-	runContext  context.Context
-	stopping    atomic.Bool
-	started     atomic.Bool
+	checkpoints      telemetry.Samples
+	checkpointErrors atomic.Uint64
+	transport        transportMetrics
+	db               *pgxpool.Pool
+	visits           *visits.Service
+	config           Config
+	logger           *slog.Logger
+	coordinator      *planetruntime.Coordinator
+	store            *scenestore.Store
+	scenes           *planetruntime.Registry
+	controllers      map[int64]int
+	entryGates       map[int64]chan struct{}
+	motion           *movement.Hub
+	connections      int
+	wsMu             sync.Mutex
+	wsWG             sync.WaitGroup
+	runContext       context.Context
+	stopping         atomic.Bool
+	started          atomic.Bool
 }
 
 func New(db *pgxpool.Pool, config Config, logger *slog.Logger) (*App, error) {
@@ -82,6 +86,7 @@ func (a *App) Handler() http.Handler {
 	// Authorization and handoff are enforced before activating a controller.
 	mux.HandleFunc("GET /planet/ws/v1", a.websocket)
 	mux.HandleFunc("GET /planet/api/v1/scene", a.sceneView)
+	mux.HandleFunc("GET /planet/api/v1/metrics", a.metricsView)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")

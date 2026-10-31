@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"time"
 
+	"encoding/json"
 	"github.com/coder/websocket"
-	"github.com/coder/websocket/wsjson"
 	"github.com/yomezza/cosmosimulator/internal/planet/movement"
 )
 
@@ -18,6 +18,7 @@ type packet struct {
 // One writer with a deadline for the WHOLE batch. There is no unbounded socket
 // queue: motion and sector mailboxes each hold only the newest complete frame.
 type stream struct {
+	metrics         *transportMetrics
 	c               *websocket.Conn
 	ctx             context.Context
 	visit           string
@@ -38,8 +39,19 @@ func (s *stream) batch(messages []packet) error {
 			body["visit"] = s.visit
 			body["connection_epoch"] = s.epoch
 		}
-		if err := wsjson.Write(ctx, s.c, body); err != nil {
+		data, err := json.Marshal(body)
+		if err == nil {
+			err = s.c.Write(ctx, websocket.MessageText, data)
+		}
+		if err != nil {
+			if s.metrics != nil {
+				s.metrics.errors.Add(1)
+			}
 			return err
+		}
+		if s.metrics != nil {
+			s.metrics.packets.Add(1)
+			s.metrics.bytes.Add(uint64(len(data)))
 		}
 	}
 	return nil

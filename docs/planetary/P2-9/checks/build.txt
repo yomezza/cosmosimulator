@@ -1,0 +1,7 @@
+Go 1.27.3 linux/amd64; PostgreSQL 17.11.
+go vet ./...: PASS.
+Windows x64 cross-builds: CGO_ENABLED=0 GOOS=windows GOARCH=amd64, -buildvcs=false -trimpath -ldflags="-s -w".
+Native Windows SCM and Windows performance were not tested.
+87ebe00d89a5726f61e907ccc5d3595d097b494ab7ca84e30470461d1b19ac68  downloads/cosmosimulator-v0.23.0-windows-amd64.exe
+760cf069857e249d113a72a6fbc794710c73daa8a9097a3f6e23fb9d39ea7fe6  downloads/cosmosimulator-planet-v0.23.0-windows-amd64.exe
+downloads/SHA256SUMS: all 61 retained executables verified.

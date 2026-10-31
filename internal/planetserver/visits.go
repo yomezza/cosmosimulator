@@ -180,7 +180,7 @@ func (a *App) websocket(w http.ResponseWriter, r *http.Request) {
 	if pinRelease != nil {
 		defer func() { pinRelease() }()
 	}
-	out := &stream{c: c, ctx: r.Context()}
+	out := &stream{c: c, ctx: r.Context(), metrics: &a.transport}
 	if pilot != nil {
 		out.visit = welcome.Visit
 		out.epoch = welcome.Epoch

@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/yomezza/cosmosimulator/internal/platform/telemetry"
 )
 
 func Config(dsn, schema string) (*pgxpool.Config, string, error) {
@@ -28,6 +29,7 @@ func Config(dsn, schema string) (*pgxpool.Config, string, error) {
 	if config.ConnConfig.RuntimeParams == nil {
 		config.ConnConfig.RuntimeParams = make(map[string]string)
 	}
+	config.ConnConfig.Tracer = &telemetry.SQLQueries{}
 	config.ConnConfig.RuntimeParams["search_path"] = pgx.Identifier{schema}.Sanitize()
 	return config, schema, nil
 }

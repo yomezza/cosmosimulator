@@ -1,0 +1,5 @@
+ok  	github.com/yomezza/cosmosimulator/internal/platform/telemetry	1.640s
+ok  	github.com/yomezza/cosmosimulator/internal/planet/movement	2.937s
+ok  	github.com/yomezza/cosmosimulator/internal/planet/runtime	1.589s
+ok  	github.com/yomezza/cosmosimulator/internal/planetserver	4.045s
+ok  	github.com/yomezza/cosmosimulator/internal/platform/postgres	1.032s

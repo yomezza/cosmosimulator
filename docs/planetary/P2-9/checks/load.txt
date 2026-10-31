@@ -1,0 +1,17 @@
+=== RUN   TestPlanetLoad230
+    planet_load230_test.go:192: phase baseline: 4.00s
+    planet_load230_test.go:192: phase cold_simultaneous_landing: 1.21s
+    planet_load230_test.go:192: phase one_sector_steady_50_moves_per_second: 12.04s
+    planet_load230_test.go:192: phase one_sector_burst_250_moves_per_second: 5.05s
+    planet_load230_test.go:192: phase disconnect_idle_eviction: 2.62s
+    planet_load230_test.go:192: phase reconnect_storm: 0.51s
+    planet_load230_test.go:192: phase return_and_five_sector_landing: 1.31s
+    planet_load230_test.go:192: phase five_sectors_steady_50_moves_per_second: 12.06s
+    planet_load230_test.go:192: phase return_to_common_sector: 1.88s
+    planet_load230_test.go:192: phase walk_and_50_confirmed_transitions: 33.85s
+    planet_load230_test.go:192: phase checkpoint_before_crash: 7.11s
+    planet_load230_test.go:192: phase hard_crash_and_50_resume: 9.93s
+    planet_load230_test.go:192: phase final_return_and_eviction: 2.40s
+--- PASS: TestPlanetLoad230 (102.04s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/server/integration	102.050s
