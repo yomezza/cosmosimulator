@@ -1,0 +1,212 @@
+{
+  "pack": "docs/design/planet-colony/artpacks/cosmosimulator_planet_2d_artpack_v2.zip",
+  "pack_version": "0.2.0-preview",
+  "pack_sha256": "7ff521b968e6558482bc42ad76878f7be438e0ad0310c9a1b67729bbe26545be",
+  "original_pngs_unchanged": true,
+  "atlas": {
+    "frameSize": [
+      128,
+      128
+    ],
+    "columns": [
+      "idle",
+      "walk_0",
+      "walk_1",
+      "walk_2",
+      "walk_3",
+      "walk_4",
+      "walk_5"
+    ],
+    "directions": [
+      "S",
+      "SW",
+      "W",
+      "NW",
+      "N",
+      "NE",
+      "E",
+      "SE"
+    ],
+    "frameMs": 135,
+    "anchorPixel": [
+      64,
+      115
+    ],
+    "atlasSize": [
+      896,
+      1024
+    ],
+    "frameCount": 56,
+    "limitations": "Walk poses adapted from illustrated turnaround references; some diagonal orientations approximate, pending hand-drawn final animation."
+  },
+  "assets": [
+    {
+      "source": "assets/nature/tree_old.png",
+      "web": "/planet-art/tree_old.png",
+      "width": 512,
+      "height": 512,
+      "sha256": "f3bde0262be1c800e0b210c9199b99fe1c534fae8f621d47a0a8e693b235b488"
+    },
+    {
+      "source": "assets/nature/tree_young.png",
+      "web": "/planet-art/tree_young.png",
+      "width": 512,
+      "height": 512,
+      "sha256": "7746f499ce8f598461dc0420b877e516c90020ade49409524e8637c813a098e6"
+    },
+    {
+      "source": "assets/nature/bush_sparse.png",
+      "web": "/planet-art/bush_sparse.png",
+      "width": 512,
+      "height": 512,
+      "sha256": "385b6b066c08f8282a1f220e2711e12c0919c4b88e489831f708092c07a64e81"
+    },
+    {
+      "source": "assets/nature/grass_tuft.png",
+      "web": "/planet-art/grass_tuft.png",
+      "width": 512,
+      "height": 512,
+      "sha256": "7624a571a225677fa220257bff5604a5f6b458fcef70d8202fe436ec5885ff61"
+    },
+    {
+      "source": "assets/nature/rock_flat.png",
+      "web": "/planet-art/rock_flat.png",
+      "width": 512,
+      "height": 512,
+      "sha256": "f5ac316267929df2b849014d8f5f87e687aadd5b51da56b6047ee44f7dc921b9"
+    },
+    {
+      "source": "assets/nature/rock_large_cracked.png",
+      "web": "/planet-art/rock_large_cracked.png",
+      "width": 512,
+      "height": 512,
+      "sha256": "deecf9335604dbfb3e1a73092224aba24bdb13a7aca6de14574ee6edcbf04904"
+    },
+    {
+      "source": "assets/nature/grass_dry.png",
+      "web": "/planet-art/grass_dry.png",
+      "width": 512,
+      "height": 512,
+      "sha256": "4f621c0b9884f453cf902df366bdb63a83c6cd2f40d2260812885683cb6e017c"
+    },
+    {
+      "source": "assets/terrain/ground_grass.png",
+      "web": "/surface-ground-grass.png",
+      "width": 512,
+      "height": 512,
+      "sha256": "5432e025706430c9fb3ceeff151c07342217974e7a7bac5203c7a0af121e8e9e"
+    },
+    {
+      "source": "assets/terrain/ground_dry.png",
+      "web": "/surface-ground-dry.png",
+      "width": 512,
+      "height": 512,
+      "sha256": "9a8b12a3d1eb025bceb3ddce74239063211af1dac46be100c5dd9a9604036111"
+    },
+    {
+      "source": "assets/terrain/ground_sand.png",
+      "web": "/surface-ground-sand.png",
+      "width": 512,
+      "height": 512,
+      "sha256": "cf6da6b45ca3219a0ea9c8c2167328ddc592628893d91a089751dbaf8d13aed4"
+    },
+    {
+      "source": "assets/terrain/ground_rock.png",
+      "web": "/surface-ground-rock.png",
+      "width": 512,
+      "height": 512,
+      "sha256": "96fb1cabde9881be7cba9768c603661ddebe3414d8d1470926af2979ba99e13b"
+    },
+    {
+      "source": "assets/terrain/ground_snow.png",
+      "web": "/surface-ground-snow.png",
+      "width": 512,
+      "height": 512,
+      "sha256": "268aa88c15857b187ed2b0c0e9f83e1f02388ff6ed7079bb786de32dcd2d7797"
+    },
+    {
+      "source": "assets/terrain/ground_volcanic.png",
+      "web": "/surface-ground-volcanic.png",
+      "width": 512,
+      "height": 512,
+      "sha256": "d6e02da51a5952ff3ca7d75dc6d59eeedc381d85902830bcbdb4ae547255984a"
+    },
+    {
+      "source": "assets/water/water_deep.png",
+      "web": "/planet-art/water_deep.png",
+      "width": 512,
+      "height": 512,
+      "sha256": "63d280e8a4a8dc78e30a0832fd7ad7054f7f90099396d46feb391707390059b4"
+    },
+    {
+      "source": "assets/water/water_shallow.png",
+      "web": "/planet-art/water_shallow.png",
+      "width": 512,
+      "height": 512,
+      "sha256": "4defffab4d767caafef408a8b22658fe7b77e80fb8570154f2cdcd528357b66a"
+    },
+    {
+      "source": "assets/water/shore_wet.png",
+      "web": "/planet-art/shore_wet.png",
+      "width": 512,
+      "height": 512,
+      "sha256": "143bbeae7b71b41566be48eeb02601d7378182a0f766e81da64a1fdb05420bbf"
+    },
+    {
+      "source": "assets/water/water_ripple_overlay.png",
+      "web": "/planet-art/water_ripple_overlay.png",
+      "width": 256,
+      "height": 256,
+      "sha256": "b9832037249bd02cf21b8ef9bac56ee842518b6b18a2e2e332d7bceee8342111"
+    },
+    {
+      "source": "assets/effects/move_target.png",
+      "web": "/planet-art/move_target.png",
+      "width": 128,
+      "height": 128,
+      "sha256": "77b5c2bb14fe04848e59a9a22cd2899829b783d3228551b572a12e2af1bedefd"
+    },
+    {
+      "source": "assets/effects/move_blocked.png",
+      "web": "/planet-art/move_blocked.png",
+      "width": 128,
+      "height": 128,
+      "sha256": "c7df67af7e619194b189a7388f965f99ba0b954c68950abd7480863479af79dc"
+    },
+    {
+      "source": "assets/effects/selection_ring.png",
+      "web": "/planet-art/selection_ring.png",
+      "width": 128,
+      "height": 128,
+      "sha256": "c3c7080680f00770d9633060fd57c55cfd9dc1d11334c528e52bd98cafcade58"
+    },
+    {
+      "source": "assets/effects/sector_boundary.png",
+      "web": "/planet-art/sector_boundary.png",
+      "width": 128,
+      "height": 128,
+      "sha256": "6383bf981c6345ce0dd2555579693b3402c2f9b15fb69cc964dcb56ed96a36a1"
+    },
+    {
+      "source": "assets/effects/footstep_dust.png",
+      "web": "/planet-art/footstep_dust.png",
+      "width": 128,
+      "height": 128,
+      "sha256": "b03cf9700e7c3cb20d5e68e39c5fb08a929cd481a07f447d5d616bc00bf4fede"
+    },
+    {
+      "source": "assets/characters/colonist_8dir_atlas.png",
+      "web": "/planet-art/colonist_8dir_atlas.png",
+      "width": 896,
+      "height": 1024,
+      "sha256": "a8a1cd08f4bff9e14c6e45ba7cb2bb5a2957b72c8e0787e3d5d63276683a9743"
+    },
+    {
+      "source": "assets/landing/colony_landing_core.png",
+      "web": "/planet-landing-core.png",
+      "width": 512,
+      "height": 512,
+      "sha256": "a3ff75b32272382e09d11bfba8e3439891e58d61b55bd38ee15d04fc65debfcb"
+    }
+  ]
+}

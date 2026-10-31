@@ -22,6 +22,7 @@ type Stamp struct {
 	Visit                            string
 }
 type State struct {
+	Facing     int             `json:"facing"`
 	Remaining  int             `json:"remaining"`
 	X          int             `json:"x_q"`
 	Y          int             `json:"y_q"`
@@ -55,6 +56,7 @@ type Member struct {
 	hub             *Hub
 	actor           *actor
 	stamp           Stamp
+	facing          int
 	pos             pathing.Point
 	saved           pathing.Point
 	path            []pathing.Point
@@ -122,7 +124,7 @@ func (m *Member) Scene() *scene.Scene     { return m.actor.scene }
 func (m *Member) snapshot(now time.Time) State {
 	x, y := m.pos.Quantized()
 	moving := len(m.path) > 0 && !m.frozen && now.Before(m.permit)
-	return State{Remaining: len(m.path), X: x, Y: y, Moving: moving, Suspended: m.frozen || !now.Before(m.permit), Generation: m.generation, Seq: m.seq, Time: now.UnixMilli(), Path: append([]pathing.Point(nil), m.path...), Error: m.error}
+	return State{Facing: m.facing, Remaining: len(m.path), X: x, Y: y, Moving: moving, Suspended: m.frozen || !now.Before(m.permit), Generation: m.generation, Seq: m.seq, Time: now.UnixMilli(), Path: append([]pathing.Point(nil), m.path...), Error: m.error}
 }
 func (m *Member) Snapshot() State {
 	m.hub.mu.Lock()
@@ -297,6 +299,7 @@ func (m *Member) advance(distance float64) {
 			m.error = pathing.ErrBlocked.Error()
 			return
 		}
+		m.facing = (int(math.Round(math.Atan2(dy, dx)/(math.Pi/4))) + 14) % 8
 		m.pos = next
 		distance -= step
 		if step >= length {

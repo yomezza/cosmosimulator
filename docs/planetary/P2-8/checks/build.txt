@@ -1,0 +1,7 @@
+Windows x64 cross-build: Go 1.27.3, CGO_ENABLED=0 GOOS=windows GOARCH=amd64, -buildvcs=false -trimpath -ldflags="-s -w".
+Native Windows SCM was not run in this Linux environment.
+go vet ./internal/planet/... ./internal/planetserver/...: PASS
+Original PNG provenance: all 24 files match the preserved ZIP byte for byte.
+downloads/SHA256SUMS: all 59 historical/current executables verified.
+5b201d5e67b96908aab677d6a71b6248f067355ead5b44a97e7ca5f0270206f5  downloads/cosmosimulator-v0.22.0-windows-amd64.exe
+693897ddaf9cd8dc02f3ec7adc7b7f0f5932bfe622e7261024e6dc9c77e33265  downloads/cosmosimulator-planet-v0.22.0-windows-amd64.exe

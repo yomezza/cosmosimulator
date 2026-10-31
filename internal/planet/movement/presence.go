@@ -10,6 +10,7 @@ import (
 // PublicActor deliberately excludes account IDs, visits, sessions and paths.
 // The slice in Sector is immutable after publication, shared by subscribers.
 type PublicActor struct {
+	Facing    int    `json:"facing"`
 	ID        string `json:"actor"`
 	Nickname  string `json:"nickname"`
 	Sprite    string `json:"sprite"`
@@ -36,7 +37,7 @@ func (h *Hub) sector(a *actor, now time.Time) Sector {
 	v := Sector{Key: a.scene.Key(), Sequence: a.sequence, Time: now.UnixMilli(), Actors: make([]PublicActor, 0, len(a.members))}
 	for _, m := range a.members {
 		x, y := m.pos.Quantized()
-		v.Actors = append(v.Actors, PublicActor{ID: m.stamp.Actor, Nickname: m.stamp.Nickname, Sprite: "colonist", X: x, Y: y, Moving: len(m.path) > 0 && !m.frozen && now.Before(m.permit), Suspended: m.frozen || !now.Before(m.permit), Time: v.Time})
+		v.Actors = append(v.Actors, PublicActor{Facing: m.facing, ID: m.stamp.Actor, Nickname: m.stamp.Nickname, Sprite: "colonist", X: x, Y: y, Moving: len(m.path) > 0 && !m.frozen && now.Before(m.permit), Suspended: m.frozen || !now.Before(m.permit), Time: v.Time})
 	}
 	sort.Slice(v.Actors, func(i, j int) bool { return v.Actors[i].ID < v.Actors[j].ID })
 	return v

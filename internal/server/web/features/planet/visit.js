@@ -48,6 +48,11 @@ export async function openVisit(site) {
   busy = true;
   stop();
   const task = scope.begin();
+  const button = (label, ...args) => {
+    const b = UI.button(label, ...args);
+    if (label.length > 1) b.dataset.i18n = label;
+    return b;
+  };
   const root = Modules.create(key, "Планетарная локация", 1000, 760);
   const status = UI.node("p", tr("Подключение к планетарной службе")),
     tools = UI.node("div", undefined, "visit-tools"),
@@ -56,7 +61,17 @@ export async function openVisit(site) {
   canvas.className = "visit-canvas";
   canvas.hidden = true;
   const viewport = UI.node("div", undefined, "visit-viewport");
-  viewport.append(canvas);
+  const objectInfo = UI.node("div", undefined, "visit-object-info");
+  objectInfo.hidden = true;
+  viewport.append(canvas, objectInfo);
+  const artWarning = UI.node("div", undefined, "visit-art-warning");
+  artWarning.hidden = true;
+  const artWarningText = UI.node("span", tr("Часть графики недоступна"));
+  artWarningText.dataset.i18n = "Часть графики недоступна";
+  artWarning.append(
+    artWarningText,
+    button("Повторить графику", () => connect()),
+  );
   root.classList.add("visit-content");
   let welcome,
     returning = false,
@@ -83,14 +98,14 @@ export async function openVisit(site) {
         payload,
       }),
     );
-    return true;
+    return commandSeq;
   };
-  const resume = UI.button("Продолжить высадку", () => {
+  const resume = button("Продолжить высадку", () => {
     attempts = 0;
     recoveryStart = 0;
     return connect();
   });
-  const leave = UI.button("Вернуться в космос", async () => {
+  const leave = button("Вернуться в космос", async () => {
     leave.disabled = true;
     returning = true;
     clearTimeout(retryTimer);
@@ -150,20 +165,21 @@ export async function openVisit(site) {
   tools.append(
     resume,
     leave,
-    UI.button("−", () => renderer?.zoom(1 / 1.2)),
-    UI.button("+", () => renderer?.zoom(1.2)),
-    UI.button("К персонажу", () => renderer?.centre()),
-    UI.button("Весь сектор", () => renderer?.fit()),
+    button("−", () => renderer?.zoom(1 / 1.2)),
+    button("+", () => renderer?.zoom(1.2)),
+    button("К персонажу", () => renderer?.centre()),
+    button("Весь сектор", () => renderer?.fit()),
   );
   const transitionPanel = UI.node("div", undefined, "visit-transition");
   transitionPanel.hidden = true;
   let activeOffer = null,
     appliedOperation = null,
-    viewGeneration = 0;
+    viewGeneration = 0,
+    locationAbort;
   function showOffer(offer) {
     activeOffer = offer;
     transitionPanel.hidden = false;
-    const confirm = UI.button(
+    const confirm = button(
       "Перейти в соседний сектор",
       () => {
         confirm.disabled = true;
@@ -188,7 +204,7 @@ export async function openVisit(site) {
         "muted",
       ),
       confirm,
-      UI.button("Остаться", () =>
+      button("Остаться", () =>
         send("transition.cancel", { offer: offer.offer }),
       ),
     );
@@ -198,6 +214,7 @@ export async function openVisit(site) {
     tools,
     UI.node("p", tr("ЛКМ — идти · Колесо — масштаб · ПКМ — обзор"), "muted"),
     transitionPanel,
+    artWarning,
     viewport,
   );
   Modules.open(key);
@@ -239,6 +256,7 @@ export async function openVisit(site) {
     activeOffer = null;
     transitionPanel.hidden = true;
     viewGeneration++;
+    locationAbort?.abort();
     resume.hidden = true;
     try {
       const state = await api(
@@ -334,6 +352,7 @@ export async function openVisit(site) {
           const p = message.payload;
           if (message.type === "error") {
             status.textContent = tr(p.code);
+            renderer?.error(p.code, p.seq);
             if (terminalErrors.has(p.code)) {
               fatal = true;
               conn.close();
@@ -368,18 +387,35 @@ export async function openVisit(site) {
             resume.hidden = true;
             status.textContent =
               welcome.planet + " · " + tr("Сектор") + " " + welcome.sector;
+            locationAbort?.abort();
+            locationAbort = new AbortController();
+            const graphicsSignal = AbortSignal.any([
+              task.signal,
+              locationAbort.signal,
+            ]);
             const generation = ++viewGeneration;
             const locationCurrent = () =>
               current() && generation === viewGeneration;
             renderer?.stop();
             renderer = null;
             canvas.dataset.ready = "false";
-            const scene = await requestScene(welcome, task.signal);
+            const scene = await requestScene(welcome, graphicsSignal);
             if (!locationCurrent()) return;
             canvas.hidden = false;
             const controller = await createController(canvas, scene, welcome, {
               current: locationCurrent,
               target: (x, y) => send("move", { x_q: x, y_q: y }),
+              signal: graphicsSignal,
+              assets: (missing) => {
+                if (locationCurrent()) artWarning.hidden = !missing.length;
+              },
+              onHover: (info) => {
+                if (!locationCurrent()) return;
+                objectInfo.hidden = !info;
+                objectInfo.textContent = info
+                  ? info.name + " · " + info.text
+                  : "";
+              },
             });
             if (!locationCurrent()) {
               controller?.stop();
@@ -448,6 +484,7 @@ export async function openVisit(site) {
         activeOffer = null;
         transitionPanel.hidden = true;
         viewGeneration++;
+        locationAbort?.abort();
         renderer?.stop();
         renderer = null;
         finishLeave?.();

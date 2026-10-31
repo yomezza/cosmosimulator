@@ -164,3 +164,18 @@ func TestSectorPresenceCoalesces(t *testing.T) {
 		t.Fatal("crossing changed identity")
 	}
 }
+
+func TestAuthoritativeFacing220(t *testing.T) {
+	s, x, y := scenery(t)
+	start := pathing.FromQ(x, y)
+	for _, c := range []struct {
+		dx, dy float64
+		facing int
+	}{{0, 1, 0}, {-1, 1, 1}, {-1, 0, 2}, {-1, -1, 3}, {0, -1, 4}, {1, -1, 5}, {1, 0, 6}, {1, 1, 7}} {
+		m := &Member{actor: &actor{scene: s}, pos: start, path: []pathing.Point{{X: start.X + c.dx, Y: start.Y + c.dy}}}
+		m.advance(.1)
+		if m.facing != c.facing {
+			t.Fatalf("direction %v,%v => %d, expected %d", c.dx, c.dy, m.facing, c.facing)
+		}
+	}
+}

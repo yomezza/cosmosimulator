@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/yomezza/cosmosimulator/internal/planet/access"
 	"github.com/yomezza/cosmosimulator/internal/planet/scene"
+	"github.com/yomezza/cosmosimulator/internal/planet/scenestore"
 	"github.com/yomezza/cosmosimulator/internal/planet/visits"
 	"github.com/yomezza/cosmosimulator/internal/platform/httpkit"
 	"net/http"
@@ -82,8 +83,18 @@ func (a *App) sceneView(w http.ResponseWriter, r *http.Request) {
 		httpkit.Fail(w, 403, publicError(err))
 		return
 	}
+	materials, err := a.store.Materials(ctx, pin.Scene())
+	if err != nil {
+		httpkit.Fail(w, 503, "scene_unavailable")
+		return
+	}
+	if err = a.visits.Check(ctx, id, welcome, f); err != nil {
+		httpkit.Fail(w, 403, publicError(err))
+		return
+	}
 	httpkit.Reply(w, 200, struct {
 		scene.Public
-		Exits []map[string]any `json:"exits"`
-	}{public, exits})
+		Exits     []map[string]any           `json:"exits"`
+		Materials []scenestore.MaterialPoint `json:"materials"`
+	}{public, exits, materials})
 }

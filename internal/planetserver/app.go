@@ -16,8 +16,8 @@ import (
 	"github.com/yomezza/cosmosimulator/internal/platform/httpkit"
 )
 
-const Version = "0.21.0"
-const Stage = "P2-7"
+const Version = "0.22.0"
+const Stage = "P2-8"
 
 // App wires only planetary components. New does not start goroutines or migrate.
 type App struct {

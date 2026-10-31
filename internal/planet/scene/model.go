@@ -3,6 +3,7 @@
 package scene
 
 import (
+	"encoding/binary"
 	"errors"
 	"math"
 
@@ -116,15 +117,21 @@ func quant(p terrain.Point) Position {
 
 // Public contains only presentation data; source seeds/checksums stay server-side.
 type Public struct {
-	ID      string             `json:"id"`
-	Size    int                `json:"size"`
-	Cells   []byte             `json:"cells"`
-	Objects []Object           `json:"objects"`
-	Landing *terrain.Placement `json:"landing"`
+	Origin  geography.SurfacePoint `json:"origin"`
+	Biome   string                 `json:"biome"`
+	Heights []byte                 `json:"heights"`
+	ID      string                 `json:"id"`
+	Size    int                    `json:"size"`
+	Cells   []byte                 `json:"cells"`
+	Objects []Object               `json:"objects"`
+	Landing *terrain.Placement     `json:"landing"`
 }
 
 func (s *Scene) Public() Public {
-	p := Public{ID: s.meta.ID, Size: terrain.Size, Cells: make([]byte, len(s.flags)), Objects: s.Metadata().Objects, Landing: s.Metadata().Landing}
+	p := Public{Origin: geography.SurfacePoint{X: s.meta.Center.X - 1, Y: s.meta.Center.Y - 1}, Biome: s.meta.Biome, Heights: make([]byte, len(s.heights)*2), ID: s.meta.ID, Size: terrain.Size, Cells: make([]byte, len(s.flags)), Objects: s.Metadata().Objects, Landing: s.Metadata().Landing}
+	for i, h := range s.heights {
+		binary.LittleEndian.PutUint16(p.Heights[i*2:], h)
+	}
 	for i, f := range s.flags {
 		if f&inside != 0 {
 			p.Cells[i] |= 1

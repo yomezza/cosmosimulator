@@ -4864,3 +4864,12 @@ button.picker-button.system-picker .picker-chevron {
   font-size: 12px;
 }
 .visit-transition[hidden] { display: none; }
+.visit-viewport { background: #111c1b; border-color: var(--border); }
+.visit-object-info {
+  position: absolute; bottom: 10px; left: 10px; right: 10px;
+  width: fit-content; max-width: calc(100% - 20px); pointer-events: none;
+  padding: 6px 10px; border: 1px solid #53685d; border-radius: 5px;
+  background: #12201dea; color: #d9e5dc; font-size: 11px;
+}
+.visit-art-warning { display: flex; align-items: center; gap: 12px; color: #dfbc81; padding: 4px 0 10px; font-size: 12px; }
+.visit-art-warning[hidden],.visit-object-info[hidden] { display: none; }

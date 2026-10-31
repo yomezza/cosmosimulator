@@ -1,0 +1,25 @@
+=== RUN   TestMovementDistanceAndLifecycle
+--- PASS: TestMovementDistanceAndLifecycle (0.74s)
+=== RUN   TestLatestGoalAndPermit
+--- PASS: TestLatestGoalAndPermit (0.62s)
+=== RUN   TestSectorPresenceCoalesces
+--- PASS: TestSectorPresenceCoalesces (1.41s)
+=== RUN   TestAuthoritativeFacing220
+--- PASS: TestAuthoritativeFacing220 (0.27s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/movement	4.061s
+=== RUN   TestSceneSnapshotAndReservedRoutes
+    scene_test.go:116: compressed scene=10268 bytes, objects=549, walkable cells=29431
+--- PASS: TestSceneSnapshotAndReservedRoutes (2.10s)
+=== RUN   TestSceneCanonicalWaterAndPairedPortals
+--- PASS: TestSceneCanonicalWaterAndPairedPortals (1.83s)
+=== RUN   TestPublicAppearance220
+--- PASS: TestPublicAppearance220 (0.46s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planet/scene	5.457s
+=== RUN   TestConfig
+--- PASS: TestConfig (0.00s)
+=== RUN   TestSlowStreamDeadline
+--- PASS: TestSlowStreamDeadline (3.01s)
+PASS
+ok  	github.com/yomezza/cosmosimulator/internal/planetserver	4.029s

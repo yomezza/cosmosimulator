@@ -115,6 +115,13 @@ try {
     () => document.querySelector(".visit-canvas")?.dataset.actors === "2",
   );
   const canvas = view.locator("canvas");
+  assert.equal(await canvas.getAttribute("data-art"), "ready");
+  assert.equal(await canvas.getAttribute("data-ground"), "textured");
+  assert.equal(await canvas.getAttribute("data-landing"), "true");
+  assert.equal(
+    artRequests.filter((p) => p.endsWith("colonist_8dir_atlas.png")).length,
+    1,
+  );
   const start = await canvas.evaluate((c) => ({
     x: Number(c.dataset.xq),
     y: Number(c.dataset.yq),
@@ -136,6 +143,7 @@ try {
       ) < 3,
     goalX,
   );
+  assert.equal(await canvas.getAttribute("data-facing"), "6");
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.wheel(0, -250);
   await page.waitForFunction(

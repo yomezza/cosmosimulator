@@ -1,17 +1,15 @@
 import { I18n } from "../../core/i18n.js";
-const specs = {
-  tree_old: [225, 0.5, 0.82],
-  tree_young: [160, 0.5, 0.82],
-  bush_sparse: [88, 0.5, 0.8],
-  grass_tuft: [57, 0.5, 0.87],
-  rock_flat: [98, 0.5, 0.7],
-  rock_large_cracked: [168, 0.5, 0.78],
-  grass_dry: [63, 0.5, 0.78],
-  colonist: [104, 0.5, 0.86],
-};
+import { acquireArt, drawSprite } from "./scene-art.js";
+import { makeGround, groundKeys } from "./scene-ground.js";
+import { createVisual, createSceneSprites } from "./scene-actors.js";
 // This controller only interpolates server positions. Camera scale never changes
 // physical speed, and pointer input sends a selected cell, never a new position.
-export async function createController(canvas, scene, w, { current, target }) {
+export async function createController(
+  canvas,
+  scene,
+  w,
+  { current, target, signal, assets, onHover },
+) {
   const peers = new Map();
   const interpolate = (previous, latest, now) => {
     const expected = latest.time + Math.max(0, now - latest.received) - 100;
@@ -30,48 +28,44 @@ export async function createController(canvas, scene, w, { current, target }) {
     y: a.y_q / 1024,
     time: a.server_time,
     received: performance.now(),
+    facing: a.facing || 0,
+    moving: !!a.moving,
   });
   const colour = (id) => {
     let hash = 0;
     for (const c of id) hash = (hash * 31 + c.charCodeAt(0)) >>> 0;
     return `hsl(${hash % 360} 65% 75%)`;
   };
-  const images = new Map();
-  await Promise.all(
+  const art = await acquireArt(
     [
       ...new Set(
         scene.objects.map((o) => o.asset.split("/").pop().replace(".png", "")),
       ),
-      "colonist",
-    ].map(async (name) => {
-      if (!specs[name]) return;
-      const img = new Image();
-      img.src = "/planet-art/" + name + ".png";
-      try {
-        await img.decode();
-        images.set(name, img);
-      } catch {}
-    }),
+      ...groundKeys(scene),
+      "atlas",
+      ...(scene.landing ? ["landing"] : []),
+      "water_deep",
+      "water_shallow",
+      "shore_wet",
+      "water_ripple_overlay",
+      "move_target",
+      "move_blocked",
+      "selection_ring",
+      "sector_boundary",
+      "footstep_dust",
+    ],
+    signal,
   );
-  if (!current()) return null;
-  const terrain = document.createElement("canvas");
-  terrain.width = 1024;
-  terrain.height = 1024;
-  const ground = terrain.getContext("2d"),
-    cells = Uint8Array.from(atob(scene.cells), (c) => c.charCodeAt(0));
-  for (let y = 0; y < 256; y++)
-    for (let x = 0; x < 256; x++) {
-      const f = cells[y * 256 + x];
-      if (!(f & 1)) continue;
-      ground.fillStyle = f & 2 ? "#24586c" : "#3b5041";
-      ground.fillRect(x * 4, y * 4, 4, 4);
-    }
-  const ctx = canvas.getContext("2d"),
-    objects = scene.objects.map((o) => ({
-      name: o.asset.split("/").pop().replace(".png", ""),
-      x: o.position.X / 1024,
-      y: o.position.Y / 1024,
-    }));
+  if (!current()) {
+    art.release();
+    return null;
+  }
+  assets?.(art.missing);
+  const ground = makeGround(scene, art),
+    sprites = createSceneSprites(scene, art),
+    selfVisual = createVisual();
+  const ctx = canvas.getContext("2d");
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)");
   let zoom = 16,
     width = 1,
     height = 1,
@@ -81,12 +75,17 @@ export async function createController(canvas, scene, w, { current, target }) {
     follow = true,
     drag,
     route = [],
-    goal = null;
+    goal = null,
+    goalSeq = 0,
+    goalBlocked = false,
+    goalTime = 0;
   let latest = {
       x: w.x_q / 1024,
       y: w.y_q / 1024,
       time: w.server_time || Date.now(),
       received: performance.now(),
+      moving: false,
+      facing: 0,
     },
     previous = latest,
     cam = { x: latest.x, y: latest.y },
@@ -137,7 +136,12 @@ export async function createController(canvas, scene, w, { current, target }) {
       goal = edge
         ? { x: edge.x_q / 1024, y: edge.y_q / 1024 }
         : { x: Math.floor(p.x) + 0.5, y: Math.floor(p.y) + 0.5 };
-      target(Math.floor(goal.x) * 1024 + 512, Math.floor(goal.y) * 1024 + 512);
+      goalSeq = target(
+        Math.floor(goal.x) * 1024 + 512,
+        Math.floor(goal.y) * 1024 + 512,
+      );
+      goalTime = performance.now();
+      goalBlocked = false;
     } else if (e.button === 2 || e.button === 1) {
       e.preventDefault();
       drag = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y };
@@ -146,6 +150,7 @@ export async function createController(canvas, scene, w, { current, target }) {
     }
   };
   const move = (e) => {
+    if (!drag) onHover?.(sprites.hit(world(e)));
     if (drag)
       cam = {
         x: drag.cx - (e.clientX - drag.x) / zoom,
@@ -156,12 +161,16 @@ export async function createController(canvas, scene, w, { current, target }) {
     drag = null;
   };
   const context = (e) => e.preventDefault();
+  const out = () => onHover?.(null);
   canvas.addEventListener("wheel", wheel, { passive: false });
   canvas.addEventListener("pointerdown", down);
   canvas.addEventListener("pointermove", move);
   canvas.addEventListener("pointerup", up);
   canvas.addEventListener("pointercancel", up);
   canvas.addEventListener("contextmenu", context);
+  canvas.addEventListener("pointerleave", out);
+  canvas.dataset.label =
+    "Поверхность сектора: ЛКМ — идти, колесо — масштаб, ПКМ — обзор";
   canvas.setAttribute(
     "aria-label",
     I18n.t("Поверхность сектора: ЛКМ — идти, колесо — масштаб, ПКМ — обзор"),
@@ -181,7 +190,18 @@ export async function createController(canvas, scene, w, { current, target }) {
     ctx.clearRect(0, 0, width, height);
     ctx.translate(width / 2 - cam.x * zoom, height / 2 - cam.y * zoom);
     ctx.scale(zoom, zoom);
-    ctx.drawImage(terrain, 0, 0, 256, 256);
+    const view = {
+      cx: cam.x,
+      cy: cam.y,
+      x: cam.x - width / zoom / 2,
+      y: cam.y - height / zoom / 2,
+      worldW: width / zoom,
+      worldH: height / zoom,
+      width,
+      height,
+      zoom,
+    };
+    ground.draw(ctx, view, now, !reduced.matches && zoom >= 4);
     if (route.length) {
       ctx.strokeStyle = "#d9b970";
       ctx.lineWidth = 1.2 / zoom;
@@ -192,83 +212,62 @@ export async function createController(canvas, scene, w, { current, target }) {
       ctx.stroke();
       ctx.setLineDash([]);
     }
-    const visible = objects.filter(
-      (o) =>
-        Math.abs(o.x - cam.x) < width / zoom / 2 + 20 &&
-        Math.abs(o.y - cam.y) < height / zoom / 2 + 20,
-    );
-    for (const [id, p] of peers) {
-      const location = interpolate(p.previous, p.latest, now);
-      if (
-        Math.abs(location.x - cam.x) < width / zoom / 2 + 10 &&
-        Math.abs(location.y - cam.y) < height / zoom / 2 + 10
-      )
-        visible.push({
-          name: "colonist",
-          ...location,
-          nickname: p.nickname,
-          colour: colour(id),
-        });
-    }
-    visible.push({ name: "colonist", ...player });
-    visible.sort((a, b) => a.y - b.y);
-    for (const o of visible) {
-      const img = images.get(o.name),
-        s = specs[o.name];
-      if (!img || !s) continue;
-      const size = s[0] / 16;
-      ctx.drawImage(img, o.x - size * s[1], o.y - size * s[2], size, size);
-      if (o.nickname) {
-        ctx.strokeStyle = o.colour;
-        ctx.lineWidth = 1.3 / zoom;
-        ctx.beginPath();
-        ctx.arc(o.x, o.y, 0.8, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.fillStyle = o.colour;
-        ctx.font = `${11 / zoom}px sans-serif`;
-        ctx.textAlign = "center";
-        ctx.fillText(o.nickname, o.x, o.y - size * 0.67, 140 / zoom);
-      }
-    }
+    const people = [{ ...player, visual: selfVisual, latest }];
+    for (const [id, p] of peers)
+      people.push({
+        ...interpolate(p.previous, p.latest, now),
+        visual: p.visual,
+        latest: p.latest,
+        nickname: p.nickname,
+        colour: colour(id),
+      });
+    const frame = sprites.draw(ctx, view, people, now, reduced.matches);
     for (const edge of scene.exits || []) {
       const x = edge.x_q / 1024,
         y = edge.y_q / 1024;
-      ctx.strokeStyle = "#e5c47f";
-      ctx.lineWidth = 1.5 / zoom;
-      ctx.beginPath();
-      ctx.arc(x, y, 2, 0, Math.PI * 2);
-      ctx.stroke();
+      if (!drawSprite(ctx, art, "sector_boundary", x, y, 0.8)) {
+        ctx.strokeStyle = "#d6bd85";
+        ctx.lineWidth = 1 / zoom;
+        ctx.strokeRect(x - 1, y - 1, 2, 2);
+      }
       ctx.fillStyle = "#e5c47f";
       ctx.font = `${11 / zoom}px sans-serif`;
       ctx.textAlign = "center";
       ctx.fillText(I18n.t("Сектор") + " " + edge.neighbor, x, y - 3);
     }
-    if (scene.landing) {
-      ctx.strokeStyle = "#80f4d6";
-      ctx.lineWidth = 0.8 / zoom;
-      ctx.beginPath();
-      ctx.ellipse(
-        scene.landing.X / 1024,
-        scene.landing.Y / 1024,
-        117 / 16,
-        66 / 16,
-        0,
-        0,
-        Math.PI * 2,
-      );
-      ctx.stroke();
-    }
-    ctx.strokeStyle = "#a4f4dc";
-    ctx.lineWidth = 1.4 / zoom;
-    ctx.beginPath();
-    ctx.arc(player.x, player.y, 0.8, 0, Math.PI * 2);
-    ctx.stroke();
     if (goal) {
-      ctx.strokeStyle = "#f0ce86";
-      ctx.beginPath();
-      ctx.arc(goal.x, goal.y, 0.6, 0, Math.PI * 2);
-      ctx.stroke();
+      const age = now - goalTime;
+      if (
+        (goalBlocked && age > 1400) ||
+        (!latest.moving &&
+          age > 1200 &&
+          Math.hypot(player.x - goal.x, player.y - goal.y) < 0.5)
+      )
+        goal = null;
+      else {
+        if (
+          !drawSprite(
+            ctx,
+            art,
+            goalBlocked ? "move_blocked" : "move_target",
+            goal.x,
+            goal.y,
+            reduced.matches ? 1 : 0.8 + Math.sin(now * 0.005) * 0.15,
+          )
+        ) {
+          ctx.strokeStyle = goalBlocked ? "#db9490" : "#dfc892";
+          ctx.lineWidth = 1.3 / zoom;
+          ctx.beginPath();
+          ctx.arc(goal.x, goal.y, 0.7, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
     }
+    canvas.dataset.animation = String(frame?.col || 0);
+    canvas.dataset.facing = String(frame?.facing || 0);
+    canvas.dataset.art = art.missing.length ? "partial" : "ready";
+    canvas.dataset.ground = "textured";
+    canvas.dataset.landing = String(!!scene.landing);
     canvas.dataset.ready = "true";
     canvas.dataset.xq = String(Math.round(player.x * 1024));
     canvas.dataset.yq = String(Math.round(player.y * 1024));
@@ -298,6 +297,7 @@ export async function createController(canvas, scene, w, { current, target }) {
         peers.set(a.actor, {
           nickname: a.nickname,
           previous: old?.latest || latest,
+          visual: old?.visual || createVisual(),
           latest,
         });
       }
@@ -320,13 +320,35 @@ export async function createController(canvas, scene, w, { current, target }) {
         y: state.y_q / 1024,
         time: state.server_time,
         received: performance.now(),
+        moving: !!state.moving,
+        facing: state.facing || 0,
       };
       if (Number.isInteger(state.remaining))
         route = state.remaining ? route.slice(-state.remaining) : [];
     },
+    error(code, seq) {
+      if (
+        goal &&
+        (!seq || seq === goalSeq) &&
+        [
+          "target_blocked",
+          "target_unreachable",
+          "path_budget_exceeded",
+          "invalid_target",
+        ].includes(code)
+      ) {
+        goalBlocked = true;
+        goalTime = performance.now();
+        route = [];
+      }
+    },
     accepted(state) {
       route = state.path || [];
-      if (route.length) goal = route.at(-1);
+      if (route.length) {
+        goal = route.at(-1);
+        goalBlocked = false;
+        goalTime = performance.now();
+      }
     },
     zoom(factor) {
       setZoom(zoom * factor);
@@ -352,9 +374,12 @@ export async function createController(canvas, scene, w, { current, target }) {
       canvas.removeEventListener("pointerup", up);
       canvas.removeEventListener("pointercancel", up);
       canvas.removeEventListener("contextmenu", context);
+      canvas.removeEventListener("pointerleave", out);
       peers.clear();
-      images.clear();
-      terrain.width = terrain.height = 0;
+      sprites.stop();
+      ground.stop();
+      art.release();
+      onHover?.(null);
     },
   };
 }

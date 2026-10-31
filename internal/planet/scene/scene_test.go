@@ -3,6 +3,7 @@ package scene
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"math"
 	"reflect"
@@ -156,5 +157,34 @@ func TestSceneCanonicalWaterAndPairedPortals(t *testing.T) {
 	cancel()
 	if _, err := Generate(ctx, Key{7, 1, 3}, g, strings.Repeat("a", 64)); !errors.Is(err, context.Canceled) {
 		t.Fatal("generation ignores cancellation", err)
+	}
+}
+
+func TestPublicAppearance220(t *testing.T) {
+	s := makeScene(t, flat(), 1)
+	packed, hash, err := Encode(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := s.Public()
+	if len(p.Heights) != 256*256*2 || len(p.Cells) != 256*256 || p.Biome != "Леса и равнины" || p.Origin.X != 1 || p.Origin.Y != 1 {
+		t.Fatal("incomplete saved presentation")
+	}
+	for y := 0; y < 256; y++ {
+		for x := 0; x < 256; x++ {
+			i := y*256 + x
+			if binary.LittleEndian.Uint16(p.Heights[i*2:]) != s.Height(x, y) {
+				t.Fatal("height not from stored scene")
+			}
+			if p.Cells[i]&^byte(3) != 0 {
+				t.Fatal("private collision bits leaked")
+			}
+		}
+	}
+	p.Heights[0] ^= 255
+	p.Cells[0] ^= 255
+	next, nextHash, err := Encode(s)
+	if err != nil || hash != nextHash || !bytes.Equal(packed, next) {
+		t.Fatal("presentation mutated immutable geometry")
 	}
 }

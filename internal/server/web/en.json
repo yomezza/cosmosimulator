@@ -1654,5 +1654,16 @@
   "transition_load_failed": "Could not prepare the adjacent location. You remain in the current sector.",
   "transition_operation_conflict": "This transition operation has already been used.",
   "offer_expired": "The crossing offer expired. Select the passage again.",
-  "Ожидаем подтверждения перехода": "Waiting for crossing confirmation"
+  "Ожидаем подтверждения перехода": "Waiting for crossing confirmation",
+  "Часть графики недоступна": "Some scene graphics are unavailable",
+  "Повторить графику": "Retry graphics",
+  "Старое дерево": "Mature tree",
+  "Молодое дерево": "Young tree",
+  "Кустарник": "Shrub",
+  "Трава": "Grass",
+  "Сухая трава": "Dry grass",
+  "Камень": "Rock",
+  "Скальная глыба": "Cracked boulder",
+  "Площадка высадки и возврата к кораблю": "Landing and return-to-ship platform",
+  "Природный объект · препятствия учитывает сервер": "Natural object · the server handles obstacles"
 }

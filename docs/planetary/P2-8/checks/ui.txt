@@ -1,0 +1,11 @@
+✔ ES module graph has no missing dependencies, implicit globals or reversed UI dependencies (738.927241ms)
+✔ local art uses saved masks, global texture UV, one atlas and server-facing walking (5536.681705ms)
+✔ missing atlas degrades explicitly, releases leases and retries without stale renderer (1954.477314ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8940.965473

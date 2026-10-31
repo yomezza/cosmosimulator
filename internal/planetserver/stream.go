@@ -61,7 +61,7 @@ func actorSet(v movement.Sector) map[string]movement.PublicActor {
 	return out
 }
 func samePose(a, b movement.PublicActor) bool {
-	return a.X == b.X && a.Y == b.Y && a.Moving == b.Moving && a.Suspended == b.Suspended && a.Nickname == b.Nickname
+	return a.Facing == b.Facing && a.X == b.X && a.Y == b.Y && a.Moving == b.Moving && a.Suspended == b.Suspended && a.Nickname == b.Nickname
 }
 func (s *stream) delta(m *movement.Member, v movement.Sector) error {
 	if v.Sequence <= s.sectorSequence {
